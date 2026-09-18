@@ -1,5 +1,12 @@
 # Spice Maker
 
+> **This build accepts the IBM Bob API only.** The provider row is absent from the SETUP
+> page (which says so), the key row reads `BOB API KEY`, the window title ends in
+> `· IBM Bob only`, and a config naming any other provider falls back to Bob. The general
+> build — every vendor in `agent_providers.CATALOG` — is
+> [`spice-maker`](https://github.com/BasamAhmed640/spice-maker).
+
+
 **Give it a datasheet and a part number; agents author an LTspice model; real simulator
 runs judge it against the datasheet's own rows; you get a `.lib`, a symbol and a card
 saying exactly what was tested.** That is the product. Everything below the fold is
