@@ -224,29 +224,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     model_build.add_argument(
         "--backend",
-        default="api",
-        choices=["api", "bob", "scripted", "fixture"],
-        help="which agent authors the model (api = an API key stored in SETUP, "
-        "bob = IBM Bob Shell, scripted/fixture = the bundled offline template)",
+        default="bob",
+        choices=["bob", "scripted", "fixture"],
+        help="which agent authors the model (bob = the IBM Bob CLI, "
+        "scripted/fixture = the bundled offline template)",
     )
     model_build.add_argument("--team-id", default=None, help="Bob team id for a general API key")
     model_build.add_argument(
         "--provider",
         default=None,
-        help="agent provider id for --backend api (default: the configured provider, "
-        "else this build's default)",
-    )
-    model_build.add_argument(
-        "--model",
-        default=None,
-        help="model id for --backend api (default: the provider's documented model)",
-    )
-    model_build.add_argument(
-        "--max-tokens",
-        type=int,
-        default=None,
-        help="output-token budget for one --backend api turn (default: the config file's "
-        "agent_max_tokens, else 32768 - reasoning models spend part of it before writing)",
+        help="agent provider id (default: the configured provider, else this build's own)",
     )
     model_build.add_argument(
         "--allow-remote", action="store_true", help="permit sending the datasheet to the provider"
@@ -381,7 +368,7 @@ def _credentials_section() -> dict:
     so ``doctor`` cannot contradict a build that then succeeds.
     """
     try:
-        api = importlib.import_module("boardmodeler.authoring.api_backend")
+        from boardmodeler.authoring import backends as api
     except ImportError as exc:  # pragma: no cover - only before the module lands
         return {"available": None, "reason": "credentials_module_unavailable", "detail": str(exc)}
     return {
@@ -852,8 +839,7 @@ def _publish_model_files(
 
 
 def _cmd_model_build(args: argparse.Namespace) -> int:
-    from boardmodeler.authoring.api_backend import build_api_backend
-    from boardmodeler.authoring.backends import BobShellBackend
+    from boardmodeler.authoring.backends import build_agent_backend
     from boardmodeler.authoring.card import write_deliverables
     from boardmodeler.authoring.loop import BuildRequest, build_model, prepare_workdir
     from boardmodeler.authoring.spec import load_tps54320_spec
@@ -947,13 +933,9 @@ def _cmd_model_build(args: argparse.Namespace) -> int:
 
     workdir = out_dir / "build"
     prepare_workdir(spec=spec, subckt=subckt, workdir=workdir)
-    backend_name = str(args.backend or "api").strip().lower()
-    if backend_name == "api":
-        backend = build_api_backend(
-            provider_id=args.provider, model=args.model, max_tokens=args.max_tokens
-        )
-    elif backend_name == "bob":
-        backend = BobShellBackend(team_id=args.team_id)
+    backend_name = str(args.backend or "bob").strip().lower()
+    if backend_name in ("api", "bob"):
+        backend = build_agent_backend(provider_id=args.provider, team_id=args.team_id)
     else:
         return emit(
             {
@@ -962,7 +944,7 @@ def _cmd_model_build(args: argparse.Namespace) -> int:
                 "status": "BLOCKED",
                 "detail": (
                     f"{backend_name}_backend_unavailable: the offline author writes the bundled "
-                    "template only on the --datasheet path; use --backend api or --backend bob here"
+                    "template only on the --datasheet path; use --backend bob here"
                 ),
                 "history": [],
                 "probes": [],
@@ -1072,8 +1054,6 @@ def _cmd_model_build_from_datasheet(args: argparse.Namespace, *, subckt: str, em
         out_dir=args.out,
         backend_name=args.backend,
         provider=args.provider,
-        agent_model=args.model,
-        agent_max_tokens=args.max_tokens,
         team_id=args.team_id,
         max_iterations=args.iterations,
         timeout_s=args.timeout,

@@ -37,10 +37,10 @@ uv run boardmodeler model install --out build/tps54320 --user-lib --apply
   test in `tests/gui/test_window_contract.py`).
 * The agent is reached with an **API key, never a login** (D-015). Which providers a build
   accepts is `agent_providers.CATALOG` and nothing else: the setup page, the backend factory
-  and `doctor` all read it, and a one-entry catalog *is* the Bob-only build (no provider row,
-  `BOB API KEY` label). Add a provider by adding an entry — never by naming it in a window,
-  a CLI default or an availability message. Endpoints and default model ids come from the
-  vendor's own documentation (D-005) and carry its URL in the entry.
+  and `doctor` all read it, and this repository's catalog holds the IBM Bob entry (no provider
+  row on SETUP, `BOB API KEY` label). Add a provider by adding an entry — never by naming it
+  in a window, a CLI default or an availability message. Endpoints and default model ids come
+  from the vendor's own documentation (D-005) and carry its URL in the entry.
 * The board/circuit layers (`schematic/`, `pipeline/demo.py`, `ui/main_window.py`,
   `reporting/html.py`) belong to the earlier spec. They are dormant: the model path must not
   import them, and they are reached only by explicit flags.

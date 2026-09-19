@@ -56,7 +56,7 @@ class _Request:
     subckt: str
     datasheet: Path
     out_dir: Path
-    backend_name: str = "api"
+    backend_name: str = "bob"
     team_id: str | None = None
     max_iterations: int = 3
     timeout_s: float = 120.0
@@ -132,7 +132,7 @@ def test_datasheet_mode_reports_rows_and_exits_zero(
     assert code == 0
     assert calls and calls[0].part == "TPS54320-Q1"
     assert calls[0].subckt == "TPS54320_Q1", "the subcircuit name must be SPICE-legal"
-    assert calls[0].backend_name == "api", "the API-key provider is the default author"
+    assert calls[0].backend_name == "bob", "the catalog's own provider is the default author"
     assert "extract" in output and "judge" in output
     assert "REQ_1" in output and "vin_uvlo_rise=4.21 V" in output
 
@@ -328,18 +328,13 @@ def test_the_agent_provider_model_and_budget_reach_the_request(
     tmp_path: Path, datasheet: Path, monkeypatch, capsys
 ) -> None:
     from boardmodeler import agent_providers
-    from boardmodeler.authoring import api_backend
 
     calls: list[_Request] = []
     _install_fake_engine(monkeypatch, _Result("PASS", "", "TPS54320", tmp_path, (), {}), calls)
 
-    # A provider this build accepts (it can reach a backend instead of refusing the id)
-    # and a model id of the caller's own: both are forwarded, not validated or replaced.
-    entry = next(
-        (p for p in agent_providers.CATALOG if p.wire in api_backend.HTTP_WIRES),
-        agent_providers.default_provider(),
-    )
-    override = "cli-model-override"
+    # A provider this build accepts reaches a backend instead of being refused, and the
+    # id is forwarded exactly as written — never substituted for the default.
+    entry = agent_providers.default_provider()
 
     code = cli.main(
         [
@@ -352,20 +347,14 @@ def test_the_agent_provider_model_and_budget_reach_the_request(
             "--out",
             str(tmp_path),
             "--backend",
-            "api",
+            "bob",
             "--provider",
             entry.id,
-            "--model",
-            override,
-            "--max-tokens",
-            "4096",
             "--json",
         ]
     )
     capsys.readouterr()
 
     assert code == 0
-    assert calls[-1].backend_name == "api"
+    assert calls[-1].backend_name == "bob"
     assert calls[-1].provider == entry.id
-    assert calls[-1].agent_model == override
-    assert calls[-1].agent_max_tokens == 4096

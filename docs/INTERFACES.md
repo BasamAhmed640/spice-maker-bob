@@ -270,9 +270,9 @@ boardmodeler doctor [--json] [--no-smoke] [--smoke-workdir DIR]
 boardmodeler setup [--json]                      # one page of persistent settings
 boardmodeler ui [--project DIR] [--installer]    # model maker (--installer: setup page)
 boardmodeler model build --part PN --out DIR [--datasheet PDF | --requirements F --bindings F]
-    [--subckt NAME] [--backend api|bob|scripted|fixture] [--provider ID] [--model ID]
-    [--max-tokens N] [--team-id ID] [--allow-remote] [--no-reinforce] [--iterations N]
-    [--timeout S] [--json] [--strict]           # api: the SETUP key; bob: Bob Shell; no login
+    [--subckt NAME] [--backend bob|scripted|fixture] [--provider ID] [--team-id ID]
+    [--allow-remote] [--no-reinforce] [--iterations N]
+    [--timeout S] [--json] [--strict]           # bob: the Bob CLI; scripted: the bundled template
 boardmodeler model test --out DIR [--timeout S] [--json] [--strict]
 boardmodeler model install --out DIR [--into DIR | --user-lib] [--apply] [--json]
 boardmodeler run tests --project DIR [--scope S] [--test ID] [--list-tests] [--json] [--out F]

@@ -78,13 +78,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from boardmodeler.authoring.api_backend import DEFAULT_TIMEOUT_S as DEFAULT_API_TIMEOUT_S
-from boardmodeler.authoring.api_backend import build_api_backend
 from boardmodeler.authoring.backends import (
     AuthorBackend,
-    BobShellBackend,
     ScriptedBackend,
     UnavailableBackend,
+    build_agent_backend,
 )
 from boardmodeler.authoring.card import write_deliverables, write_symbol_for
 from boardmodeler.authoring.harness import HarnessReport
@@ -898,24 +896,20 @@ def build_backend(request: MakeModelRequest) -> AuthorBackend:
     own scripted backend.
     """
     name = str(request.backend_name or "").strip().lower()
-    if name in ("", "api"):
-        # ``turn_timeout_s`` bounds one agent invocation; the API backend applies
-        # it as that turn's total budget, retries included.
-        limit = float(request.turn_timeout_s) if request.turn_timeout_s else DEFAULT_API_TIMEOUT_S
-        return build_api_backend(
+    if name in ("", "api", "bob"):
+        # The catalog's own provider, reached the documented way: the Bob CLI, with the
+        # key in the child environment. An id this build does not accept is refused by
+        # name inside the factory, never swapped for the provider it does accept.
+        return build_agent_backend(
             provider_id=request.provider,
-            model=request.agent_model,
-            max_tokens=request.agent_max_tokens,
             team_id=request.team_id,
-            timeout_s=limit,
+            timeout_s=request.turn_timeout_s,
         )
-    if name == "bob":
-        return BobShellBackend(team_id=request.team_id, timeout_s=request.turn_timeout_s)
     if name in ("scripted", "fixture"):
         return _bundled_author(request)
     return UnavailableBackend(
         name or "unknown",
-        f"{name or 'unknown'}_backend_unavailable: unknown backend name; use 'api', 'bob', "
+        f"{name or 'unknown'}_backend_unavailable: unknown backend name; use 'bob', "
         "'scripted' or 'fixture'",
     )
 

@@ -781,73 +781,36 @@ def test_the_bob_backend_receives_the_turn_timeout(tmp_path: Path) -> None:
     assert unlimited.timeout_s is None
 
 
-def test_the_default_api_backend_still_honours_a_bob_team_id(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """``--backend api`` (the default) must not silently drop ``--team-id`` for Bob."""
-    from boardmodeler.authoring import api_backend as api_module
+def test_the_default_agent_backend_still_honours_a_bob_team_id(tmp_path: Path) -> None:
+    """``--backend api`` (an accepted alias) must not silently drop ``--team-id`` for Bob."""
     from boardmodeler.authoring.backends import BobShellBackend
-    from boardmodeler.config import AppConfig
-
-    monkeypatch.setattr(api_module, "load_config", lambda path=None: AppConfig())
 
     backend = engine.build_backend(
-        make_request(tmp_path, backend_name="api", provider="bob", team_id="team-api")
+        make_request(tmp_path, backend_name="bob", provider="bob", team_id="team-api")
     )
 
     assert isinstance(backend, BobShellBackend)
     assert backend.team_id == "team-api"
 
 
-def test_the_api_backend_is_built_from_the_catalog_entry_and_the_config(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from boardmodeler.agent_providers import CATALOG, ids
-    from boardmodeler.authoring import api_backend as api_module
-    from boardmodeler.authoring.api_backend import ApiKeyBackend
-    from boardmodeler.config import AppConfig
+def test_the_agent_backend_is_built_from_the_catalog_entry(tmp_path: Path) -> None:
+    """The provider the catalog holds is the backend this build builds: the Bob CLI."""
+    from boardmodeler.agent_providers import default_provider
+    from boardmodeler.authoring.backends import BobShellBackend
 
-    monkeypatch.setattr(api_module, "load_config", lambda path=None: AppConfig())
-    entry = next((provider for provider in CATALOG if provider.wire in api_module.HTTP_WIRES), None)
-    if entry is None:
-        # No entry in this build speaks an HTTP wire, so no request can build an
-        # ApiKeyBackend from one: the honest outcome is the refusal that names the catalog.
-        refused = engine.build_backend(
-            make_request(tmp_path, backend_name="api", provider="not-in-this-build")
-        )
-        usable, reason = refused.availability()
-        assert usable is False
-        assert reason.startswith("api_provider_unavailable:")
-        assert all(f"'{name}'" in reason for name in ids())
-        return
-
-    override = "make-model-override"
-    request = make_request(
-        tmp_path,
-        backend_name="api",
-        provider=entry.id,
-        agent_model=override,
-        agent_max_tokens=1024,
-    )
+    entry = default_provider()
+    request = make_request(tmp_path, backend_name="bob", provider=entry.id, turn_timeout_s=42.0)
 
     backend = engine.build_backend(request)
 
-    assert isinstance(backend, ApiKeyBackend)
-    assert backend.name == entry.id and backend.provider.id == entry.id
-    assert backend.model == override
-    assert backend.max_output_tokens == 1024
+    assert isinstance(backend, BobShellBackend)
+    assert backend.name == "bob_shell" and backend.timeout_s == 42.0
 
 
-def test_an_unknown_agent_provider_is_blocked_rather_than_substituted(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_an_unknown_agent_provider_is_blocked_rather_than_substituted(tmp_path: Path) -> None:
     from boardmodeler.agent_providers import ids
-    from boardmodeler.authoring import api_backend as api_module
-    from boardmodeler.config import AppConfig
 
-    monkeypatch.setattr(api_module, "load_config", lambda path=None: AppConfig())
-
-    backend = engine.build_backend(make_request(tmp_path, backend_name="api", provider="magic"))
+    backend = engine.build_backend(make_request(tmp_path, backend_name="bob", provider="magic"))
 
     usable, reason = backend.availability()
     assert usable is False

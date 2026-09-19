@@ -84,12 +84,8 @@ class MakeModelWorker(QThread):
 
 
 def _window_title() -> str:
-    """The build's own name: a restricted catalog says whose build this is (D-015)."""
-    from boardmodeler import agent_providers
-
-    only = agent_providers.only_provider()
-    suffix = f" · {only.label} only" if only is not None else ""
-    return f"Spice Maker — IC model maker{suffix}"
+    """The window's own name."""
+    return "Spice Maker — IC model maker"
 
 
 def _configured_provider() -> object:
@@ -107,7 +103,7 @@ def _configured_provider() -> object:
 def _configured_provider_id() -> str:
     """The provider id exactly as the config names it: the request carries it unsubstituted.
 
-    ``build_api_backend`` refuses an id this build does not accept with
+    ``build_agent_backend`` refuses an id this build does not accept with
     ``api_provider_unavailable: ...``, so passing the raw value is what makes the
     engine's own refusal reachable instead of another provider running with the
     wrong key.
@@ -120,9 +116,9 @@ def _configured_provider_id() -> str:
 def _agent_availability() -> tuple[bool, str]:
     """Can the agent run at all? Checked before a long run instead of after it fails."""
     try:
-        from boardmodeler.authoring.api_backend import build_api_backend
+        from boardmodeler.authoring.backends import build_agent_backend
 
-        return build_api_backend(_configured_provider_id() or None).availability()
+        return build_agent_backend(provider_id=_configured_provider_id() or None).availability()
     except Exception as exc:  # pragma: no cover - import/config problems are reported
         return False, f"the agent backend could not be loaded: {exc}"
 
@@ -339,7 +335,7 @@ class ModelMakerWindow(QMainWindow):
             self.setup_hint.setText("no agent key — press SETUP")
             if provider is None:
                 advice = (
-                    "Press SETUP and choose one of the providers this build accepts, or fix "
+                    "Press SETUP and store the IBM Bob API key this build uses, or fix "
                     "the provider name in the config file."
                 )
             else:
@@ -363,8 +359,8 @@ class ModelMakerWindow(QMainWindow):
             subckt=subckt,
             datasheet=datasheet,
             out_dir=out_dir,
-            backend_name="api",
-            # The configured id as written, so ``build_api_backend`` refuses a provider
+            backend_name="bob",
+            # The configured id as written, so ``build_agent_backend`` refuses a provider
             # this build lacks instead of another provider answering with the wrong key.
             provider=provider.id if provider is not None else _configured_provider_id(),
         )

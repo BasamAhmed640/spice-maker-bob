@@ -1,12 +1,5 @@
 # Spice Maker
 
-> **This build accepts the IBM Bob API only.** The provider row is absent from the SETUP
-> page (which says so), the key row reads `BOB API KEY`, the window title ends in
-> `· IBM Bob only`, and a config naming any other provider falls back to Bob. The general
-> build — every vendor in `agent_providers.CATALOG` — is
-> [`spice-maker`](https://github.com/BasamAhmed640/spice-maker).
-
-
 **Give it a datasheet and a part number; agents author an LTspice model; real simulator
 runs judge it against the datasheet's own rows; you get a `.lib`, a symbol and a card
 saying exactly what was tested.** That is the product. Everything below the fold is
@@ -26,12 +19,10 @@ uv run boardmodeler model install --out build/tps54320 --user-lib --apply
 
 **Before the first run:** open **SETUP** in the window and paste an agent API key — that is
 the whole authentication story; there is no login anywhere in this application. **IBM Bob** is
-the default provider and needs Bob Shell installed
+the provider this build uses and needs Bob Shell installed
 (`powershell -c "irm -Uri https://bob.ibm.com/download/bobshell.ps1 | iex"`, Node ≥ 24) plus a key from
 bob.ibm.com → API keys with **Scope = Inference** (an *Inference* key needs no team id; a
-*general* key does). The same row also takes a plain vendor key from OpenAI, Anthropic, Google,
-DeepSeek, OpenRouter, xAI, Groq, Mistral or OpenCode Zen / Go, and those run over HTTP with no
-CLI and no extra install. Every key goes to the Windows credential store — never to a config file, a project
+*general* key does). The key goes to the Windows credential store — never to a config file, a project
 directory, a manifest or a log line. Setup is one page and holds only what persists: the LTspice
 path (with a smoke test), the agent provider and key, the model id when the provider takes one,
 the folder finished models go to, the read-only LTspice user library path, and the
@@ -53,15 +44,16 @@ LTspice is discovered by the app (or pointed at in SETUP) and smoke-tested there
 `doctor` says plainly when it is missing. Build the installer yourself with
 `installer\build.ps1 -Version <x.y.z>`; see `installer/README.md`.
 
-## Two builds of one product
+## The agent provider
 
-The agent provider list is data (`src/boardmodeler/agent_providers.py`), so a restricted
-build is one tuple, not a fork of the code (D-015):
+The agent provider list is data (`src/boardmodeler/agent_providers.py`), and this build
+ships the IBM Bob entry:
 
-|Build|Accepts|Use it for|
-|---|---|---|
-|`spice-maker` (this repository)|Bob **and** every vendor key in the catalog|Trying providers, comparing models, day-to-day work|
-|`spice-maker-bob`|The IBM Bob API only|The Bob-native workflow: no provider row on SETUP, `BOB API KEY` only|
+|What|How it behaves|
+|---|---|
+|Catalog|one entry, IBM Bob — the SETUP page shows no provider row and asks for `BOB API KEY`|
+|A config naming any other provider|falls back to Bob (`doctor` reports it; nothing is silently substituted at build time)|
+|How Bob is reached|the Bob CLI, `bob run --format json --max-turns N <prompt>`, with the key in the child's environment only|
 
 What each piece guarantees:
 

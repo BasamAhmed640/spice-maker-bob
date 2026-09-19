@@ -197,10 +197,10 @@ def test_choosing_a_provider_points_the_key_row_at_its_own_credential(
     assert SECRET not in isolated_config.read_text(encoding="utf-8")
 
 
-def test_a_single_provider_catalog_keeps_the_bob_only_page(
+def test_a_single_provider_catalog_keeps_the_bob_page(
     qtbot, isolated_config: Path, monkeypatch
 ) -> None:
-    """The Bob-only build is one catalog entry away: no provider row, Bob's own label."""
+    """One catalog entry: no provider row, Bob's own key label, and a plain window title."""
     from boardmodeler import agent_providers
 
     bob = agent_providers.by_id("bob")
@@ -218,7 +218,7 @@ def test_a_single_provider_catalog_keeps_the_bob_only_page(
     assert page.key_label.text() == "BOB API KEY"
     assert page.model_edit.isVisible() is False
     assert page.restricted_note is not None
-    assert "IBM Bob API only" in page.restricted_note.text()
+    assert page.restricted_note.text() == "IBM Bob is the provider this build uses."
     assert page.height() == page.sizeHint().height()
     assert page.width() == page.sizeHint().width()
 
@@ -226,7 +226,7 @@ def test_a_single_provider_catalog_keeps_the_bob_only_page(
 
     window = ModelMakerWindow()
     qtbot.addWidget(window)
-    assert window.windowTitle().endswith("· IBM Bob only")
+    assert window.windowTitle() == "Spice Maker — IC model maker"
 
 
 def test_an_unknown_provider_in_the_config_is_reported_never_replaced(

@@ -29,13 +29,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from boardmodeler.security.credentials import env_var_name, get_credential, redact
+from boardmodeler.agent_providers import AgentProvider
+from boardmodeler.security.credentials import (
+    Credential,
+    SecretSource,
+    env_var_name,
+    get_credential,
+    redact,
+)
 from boardmodeler.security.subprocess_guard import GuardedProcess, check_argv
 
 __all__ = [
     "BOB_API_KEY_ENV",
     "BOB_CREDENTIALS_UNAVAILABLE",
     "BOB_NOT_INSTALLED",
+    "DEFAULT_TIMEOUT_S",
     "AuthorBackend",
     "AuthorRequest",
     "AuthorResult",
@@ -43,10 +51,20 @@ __all__ = [
     "ProcessRunner",
     "ScriptedBackend",
     "UnavailableBackend",
+    "build_agent_backend",
+    "credential_for",
+    "env_sources",
     "parse_result_object",
     "run_bob_shell",
     "stdout_tail",
 ]
+
+DEFAULT_TIMEOUT_S = 600.0
+"""One agent turn may take this long.
+
+The authoring loop hands this to the backend when neither the caller nor the settings
+name a limit; a build that hung would otherwise never return.
+"""
 
 BOB_EXECUTABLE = "bob"
 BOB_API_KEY_ENV = "BOB_API_KEY"
@@ -536,3 +554,76 @@ class UnavailableBackend:
     ) -> AuthorResult:
         del request, cancel, timeout_s
         return AuthorResult(ok=False, detail=self.reason, usage={}, stdout_tail="", session_id=None)
+
+
+def build_agent_backend(
+    *,
+    provider_id: str | None = None,
+    team_id: str | None = None,
+    timeout_s: float | None = None,
+) -> AuthorBackend:
+    """The agent backend for this build's catalog: the provider it accepts.
+
+    ``provider_id`` is the id exactly as configured; one this build does not accept is
+    refused **by name** (``api_provider_unavailable: ...``) rather than substituted, so a
+    hand-edited config can only ever produce an honest block. The catalog is the single
+    source of which providers exist: an entry whose transport this build has no backend
+    for is refused too, never coerced onto another one.
+    """
+    from boardmodeler import agent_providers
+
+    provider = (
+        agent_providers.by_id(provider_id) if provider_id else agent_providers.default_provider()
+    )
+    if provider is None:
+        accepted = ", ".join(repr(name) for name in agent_providers.ids())
+        return UnavailableBackend(
+            str(provider_id),
+            f"api_provider_unavailable: {provider_id!r} is not a provider this build accepts; "
+            f"this build accepts {accepted}",
+        )
+    if provider.wire == "bob-shell":
+        return BobShellBackend(team_id=team_id, timeout_s=timeout_s)
+    return UnavailableBackend(
+        provider.id,
+        f"wire_unsupported: {provider.wire!r} has no backend in this build; "
+        "this build reaches its provider through the Bob CLI",
+    )
+
+
+def env_sources(provider: AgentProvider) -> tuple[str, ...]:
+    """Every environment variable a key for ``provider`` may come from, in order.
+
+    The first entry is the ``BOARDMODELER_<NAME>_API_KEY`` fallback the shared
+    credential helper reads; the rest are the vendor's own variables declared by
+    the catalog. :func:`credential_for` and the missing-key reason both read this
+    one tuple, so a message can never advertise a variable nothing reads.
+    """
+    return (env_var_name(provider.credential), *provider.env_aliases)
+
+
+def credential_for(
+    provider: AgentProvider, lookup: Callable[[str], Credential] | None = None
+) -> Credential:
+    """The key for ``provider``: keyring, ``BOARDMODELER_<NAME>_API_KEY``, then aliases.
+
+    ``lookup`` is the repo helper (:func:`boardmodeler.security.credentials.get_credential`
+    by default, and the injectable seam tests use); the catalog's own environment
+    variables are read here, in order, and the matching variable is named in the
+    returned ``detail``. Public because ``doctor`` must report the *same*
+    resolution the backend performs — a doctor that contradicts a working build is
+    worse than no doctor. Nothing here ever puts a value into a returned text.
+    """
+    credential = (lookup or get_credential)(provider.credential)
+    if credential.value:
+        return credential
+    for variable in env_sources(provider)[1:]:
+        value = os.environ.get(variable)
+        if value:
+            return Credential(
+                name=provider.credential,
+                value=value,
+                source=SecretSource.ENV,
+                detail=f"environment variable {variable}",
+            )
+    return credential

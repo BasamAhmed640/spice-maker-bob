@@ -549,18 +549,18 @@ forbidden-label test in `tests/ui/test_setup_dialog.py`).
   key."}}`, a bogus Bearer key → `Invalid API key`, and the same bogus key in `x-api-key` → `Missing API
   key`, so the scheme is Bearer. Only the models Zen serves from `/chat/completions` are reachable
   through this wire; its `/responses` and `/messages` models are not, and the MODEL row in SETUP is
-  where that choice lives. This is the "OpenCode Go option" the owner asked the general build to carry;
-  the Bob-only build has one catalog entry and therefore no such option.
+  where that choice lives. This is the "OpenCode Go option" the owner asked the full-catalog build to
+  carry.
 * **`model build --provider` names the *agent* provider.** It named the extraction provider before.
   Extraction keeps D-011's own walk over `ProviderConfig.provider_order`, and `--requirements` /
   `--bindings` now reach the datasheet path's request too, so a supplied extraction is honoured there
   instead of silently re-extracting with the fixture provider.
 * **A reasoning-first model cannot finish an authoring turn, and the tool says so.** Against the real
-  23.8 kB prompt, DeepSeek's two models spend the entire output budget on `reasoning_content` and return
-  an empty `content` (observed three times, at 12 288 and 32 768 tokens, 57–303 s). The backend reports
-  `response_empty … finish_reason='length'` with the truncation named, and the budget is settable
-  (`--max-tokens`, `agent_max_tokens`, default 32 768) — an honest stop instead of a silent retry loop.
-  Bob and the other vendors are unaffected; this is a property of those two models, not of the contract.
+  23.8 kB prompt, DeepSeek's two models spent the entire output budget on `reasoning_content` and returned
+  an empty `content` (observed three times, at 12 288 and 32 768 tokens, 57–303 s). The transport then
+  reported `response_empty … finish_reason='length'` with the truncation named — an honest stop instead of
+  a silent retry loop. This is a property of those models, not of the contract, and it is history here:
+  the HTTP agent transport itself is gone from this tree (third addendum below).
 * **The installer is the application and nothing else.** A Velopack one-click setup with the animated
   pepper splash, Start Menu and desktop shortcuts, and `Update.exe --uninstall --silent`; it carries no
   LTspice, Bob Shell or Python payload (SHA-256 of all 16 606 files under the two raw LTspice trees is
@@ -571,4 +571,29 @@ forbidden-label test in `tests/ui/test_setup_dialog.py`).
   extra); using the native reader" — the native reader is authoritative anyway (D-002).
 * **Bob stays native.** Bob Shell with `BOB_API_KEY` is the documented consumer of an Inference-scope
   key; the application defaults to that provider, opens no browser, never logs in, and never substitutes
-  a vendor when Bob is unavailable. The Bob-only build is the same code with a one-entry catalog.
+  vendor when Bob is unavailable. This tree is the same code with a one-entry catalog.
+
+**Addendum, same day (third pass).** The owner asked this tree to stop presenting itself as the
+restricted build: the README header no longer announces an IBM-Bob-only build, no docstring or
+comment calls it one, the window title is plain *Spice Maker — IC model maker* again, and the
+SETUP page states the provider it uses (`IBM Bob is the provider this build uses.`) rather than
+the restriction. Nothing functional moved: the catalog still holds the one Bob entry, and that
+catalog is the only place a provider's key label, credential name and environment fallback are
+declared — a sweep of the whole tree finds no other vendor's key variable (`BOB_API_KEY` and the
+generic `BOARDMODELER_<NAME>_API_KEY` pattern only), so no other vendor's key handling exists here.
+
+**Addendum, same day (fourth pass) — the other vendors' agent transport is deleted, not just unused.**
+The owner asked again, in plainer terms: this tree should be Bob-specific and should not carry other
+providers' API-key handling at all. So the HTTP agent transport (`authoring/api_backend.py`: the
+`openai`/`anthropic`/`google` wires, their request shapes, their key resolution and the reply parsers —
+787 lines plus 1 074 lines of tests) is **removed**, and with it the CLI surface that only existed for it
+(`model build --backend api`, `--model`, `--max-tokens`; the backend name is `bob`). What is left is one
+agent path and one seam: `authoring/backends.build_agent_backend` resolves the catalog's provider to the
+Bob Shell backend, refuses an id this build does not accept **by name**, and refuses a catalog entry whose
+transport has no backend (`wire_unsupported`) instead of coercing it. `credential_for`/`env_sources` moved
+into the same module, so `doctor` reports exactly the resolution the backend performs. This reverses the
+rejection recorded above: that rejection weighed a *fork's* maintenance, and the owner's requirement that
+the tree contain no other vendor's key handling outweighs it. What is *not* removed is the extraction
+transport in `providers/http_inference.py` and `providers/bob.py`: Bob Direct itself speaks the
+OpenAI-compatible chat-completions shape for datasheet extraction, so that code is Bob's own path, not
+another vendor's.
