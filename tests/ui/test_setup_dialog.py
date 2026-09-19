@@ -249,3 +249,34 @@ def test_an_unknown_provider_in_the_config_is_reported_never_replaced(
     described = describe_settings(config)
     assert described["agent_provider"] == "not-a-provider", "the configured id is kept as written"
     assert described["agent_provider_accepted"] is False
+
+
+def test_a_config_naming_another_provider_is_repairable_from_setup(
+    qtbot, isolated_config: Path
+) -> None:
+    """One provider, and a config that names a provider this build lacks.
+
+    SAVE must not substitute it on its own, so the page offers the provider it has; one
+    click plus SAVE is what writes it — otherwise such a config would be unrepairable
+    from the application, since there is no provider row to pick from.
+    """
+    from boardmodeler import agent_providers
+    from boardmodeler.config import load_config, save_config
+    from boardmodeler.ui.setup_dialog import SetupDialog
+
+    config = load_config()
+    config.agent_provider = "another-build-provider"
+    save_config(config)
+    assert load_config().agent_provider == "another-build-provider"
+
+    page = SetupDialog()
+    qtbot.addWidget(page)
+
+    assert page.provider_combo is None, "one catalog entry means no provider row"
+    assert page.use_note is not None, "the page offers the provider this build uses"
+    assert agent_providers.only_provider().id == agent_providers.default_provider().id
+
+    page.use_note.click()
+    page._save()
+
+    assert load_config().agent_provider == agent_providers.default_provider().id
