@@ -49,10 +49,8 @@ ever recorded without an observed simulator artifact.
 
 The owner asked for three more things on top of the model maker: rename the repository to
 *Spice Maker*, ship it as a one-click installer carrying the pepper mark, and make the agent
-take **raw API keys — Bob's by default, plus the mainstream vendors — with no login
-anywhere**. Then two repositories from one codebase, one restricted to the IBM Bob API, and
-"make sure OpenCode Go is an option for the testing one". Nothing was added outside the
-model package: the product is still the IC model, and the harness still owns every verdict.
+take an **agent API key with no login anywhere**. Nothing was added outside the model
+package: the product is still the IC model, and the harness still owns every verdict.
 
 |What|Observed|
 |---|---|
@@ -284,14 +282,14 @@ process death, and by raising `LtspiceLockTimeout` instead of running unlocked.
 another process, and a **killed** holder does not block the next run (the regression
 test for this defect).
 
-### De-branding and the Bob-only transport (2026-09-18, third pass)
+### De-branding and the Bob-specific transport (2026-09-18, third pass)
 
-The owner asked this tree to stop presenting itself as the restricted build, and to carry no
-other provider's API-key handling at all.
+The owner asked this tree to stop presenting itself as a trimmed build, and to carry no other
+provider's API-key handling at all.
 
 |What|Observed|
 |---|---|
-|Wording|the README header no longer announces an IBM-Bob-only build, no docstring or comment calls it one (`agent_providers`, `setup_dialog`, `model_maker`), the window title is plain `Spice Maker — IC model maker`, and SETUP says `IBM Bob is the provider this build uses.`|
+|Wording|the README header no longer announces a restricted build, no docstring or comment calls it one (`agent_providers`, `setup_dialog`, `model_maker`), the window title is plain `Spice Maker — IC model maker`, and SETUP says `IBM Bob is the provider this build uses.`|
 |Other providers' keys|the HTTP agent transport is **deleted**, not merely unused: `authoring/api_backend.py` (the `openai`/`anthropic`/`google` wires, their request shapes, their key resolution and their reply parsers — 787 lines) and its two test files (1 074 lines) are gone. `agent_providers.WIRES` holds `bob-shell` alone and the module documents only that transport|
 |One seam|`authoring/backends.build_agent_backend` resolves the catalog's provider to `BobShellBackend`, refuses an id this build does not accept **by name** (`api_provider_unavailable: … this build accepts 'bob'`) and refuses an entry whose transport has no backend (`wire_unsupported`); `credential_for`/`env_sources` moved there, so `doctor` reports exactly the resolution the backend performs|
 |CLI|`model build --backend bob|scripted|fixture` (`--model` and `--max-tokens` are gone with the transport they served; the resolver still accepts the old `api` name), and the request no longer carries a model id or a token budget|

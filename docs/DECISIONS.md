@@ -505,8 +505,7 @@ single-entry build behaves that way in-process, so the promise is tested, not as
 
 **Decision — keys, not logins.** Every provider is reached with a raw API key stored in the
 OS keyring under `provider:<name>:api_key` (the repo's existing credential helper), with
-`BOARDMODELER_<NAME>_API_KEY` and the vendor's own variable (e.g. `OPENAI_API_KEY`) as
-environment fallbacks. Nothing in this path opens a browser, and no key is ever written to
+`BOARDMODELER_<NAME>_API_KEY` and the vendor's own variable as environment fallbacks. Nothing in this path opens a browser, and no key is ever written to
 a config file, a project directory, a manifest or a log line.
 
 * **Bob** keeps its documented route: the Bob CLI (Bob Shell), whose own docs state that
@@ -533,7 +532,7 @@ unchanged on purpose: renaming them would orphan the API key and settings an exi
 install already has, and that is a worse outcome than an internal name that lags the
 brand. `docs/STATUS.md` records the state of each surface.
 
-**Rejected.** (a) Deleting the non-Bob provider code in the restricted build — it doubles
+**Rejected.** (a) Deleting the non-Bob provider code here — it doubles
 the maintenance of a fork whose whole difference is one tuple, and the tests covering the
 HTTP wires would not exist there to catch a regression in the shared code. (b) Shipping the
 reverse-engineered Bob inference endpoint as a default — unverifiable from this machine and
@@ -573,11 +572,10 @@ forbidden-label test in `tests/ui/test_setup_dialog.py`).
   key; the application defaults to that provider, opens no browser, never logs in, and never substitutes
   vendor when Bob is unavailable. This tree is the same code with a one-entry catalog.
 
-**Addendum, same day (third pass).** The owner asked this tree to stop presenting itself as the
-restricted build: the README header no longer announces an IBM-Bob-only build, no docstring or
-comment calls it one, the window title is plain *Spice Maker — IC model maker* again, and the
-SETUP page states the provider it uses (`IBM Bob is the provider this build uses.`) rather than
-the restriction. Nothing functional moved: the catalog still holds the one Bob entry, and that
+**Addendum, same day (third pass).** The owner asked this tree to stop presenting itself as a
+trimmed build: the README header no longer announces a restriction, no docstring or comment calls
+it one, the window title is plain *Spice Maker — IC model maker* again, and the SETUP page states
+the provider it uses (`IBM Bob is the provider this build uses.`) rather than what it refuses. Nothing functional moved: the catalog still holds the one Bob entry, and that
 catalog is the only place a provider's key label, credential name and environment fallback are
 declared — a sweep of the whole tree finds no other vendor's key variable (`BOB_API_KEY` and the
 generic `BOARDMODELER_<NAME>_API_KEY` pattern only), so no other vendor's key handling exists here.
