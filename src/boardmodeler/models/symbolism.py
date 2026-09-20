@@ -9,7 +9,8 @@ trusting the generator.
 
 The emitted shape follows the bundled vendor symbols (e.g. ``LT8609S.asy``):
 ``SYMATTR Prefix X``, ``SYMATTR SpiceModel <file>``, ``SYMATTR Value2 <subckt>``,
-pins on the body edge with a 16-unit stub, and one ``PINATTR`` pair per pin.
+pins with visible leads, and one ``PINATTR`` pair per pin. Geometry is computed
+locally; a language model is never responsible for the published layout.
 """
 
 from __future__ import annotations
@@ -37,9 +38,11 @@ SYMBOL_CODE_ORDER_MISMATCH = "SYM002_spice_order_not_a_bijection"
 SYMBOL_CODE_SPICEMODEL = "SYM003_spicemodel_attribute_missing"
 
 _GRID = 16
-_PIN_STUB = 16
-_PIN_SIZE = 8
-_DEFAULT_BODY_WIDTH = 96
+_PIN_STUB = 32
+_LABEL_INSET = 8
+_ROW_PITCH = 48
+_BODY_PADDING = 32
+_DEFAULT_BODY_WIDTH = 192
 
 #: Names that belong on the left of the body (control/supply inputs).
 _LEFT_HINTS = (
@@ -87,14 +90,9 @@ def _side_for(name: str, direction: str | None) -> str:
     return "left" if any(hint in lowered for hint in _LEFT_HINTS) else "right"
 
 
-def symbol_pins(
+def _columns(
     ports: Sequence[str], directions: Mapping[str, str] | None = None
-) -> list[SymbolPin]:
-    """Deterministically lay out pins: inputs on the left, outputs on the right.
-
-    SpiceOrder is assigned from the port's position in ``ports`` (1-based), which
-    is what LTspice matches against the instance's node list.
-    """
+) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
     directions = dict(directions or {})
     left = [
         (index, name)
@@ -107,25 +105,53 @@ def symbol_pins(
         if _side_for(name, directions.get(name)) == "right"
     ]
 
-    body_height = max(len(left), len(right), 1) * 2 * _GRID
+    # Keep supply pins together after the signals. Layout never changes SpiceOrder.
+    def group(pin: tuple[int, str]) -> tuple[int, int]:
+        index, name = pin
+        supply = directions.get(name) in ("power", "ground") or name.upper() in {
+            "VCC",
+            "VDD",
+            "VSS",
+            "VEE",
+            "GND",
+            "AGND",
+            "DGND",
+            "V+",
+            "V-",
+        }
+        return int(supply), index
+
+    return sorted(left, key=group), sorted(right, key=group)
+
+
+def symbol_pins(
+    ports: Sequence[str], directions: Mapping[str, str] | None = None
+) -> list[SymbolPin]:
+    """Place pins on a grid; their electrical order stays the declaration order."""
+    left, right = _columns(ports, directions)
+    rows = max(len(left), len(right), 1)
+    top = -((rows - 1) * _ROW_PITCH // 2 // _GRID) * _GRID
+    width = body_width(ports, directions)
     pins: list[SymbolPin] = []
     for column, side in ((left, "left"), (right, "right")):
         for row, (index, name) in enumerate(column):
-            y = int(body_height / 2 - _GRID - row * 2 * _GRID)
-            x = (
-                -(body_width(ports) // 2) - _PIN_STUB
-                if side == "left"
-                else body_width(ports) // 2 + _PIN_STUB
-            )
+            y = top + row * _ROW_PITCH
+            x = -(width // 2 + _PIN_STUB) if side == "left" else width // 2 + _PIN_STUB
             pins.append(SymbolPin(name=name, side=side, order=index + 1, x=x, y=y))
     pins.sort(key=lambda pin: pin.order)
     return pins
 
 
-def body_width(ports: Sequence[str]) -> int:
-    """Body width from the longest pin name (kept on the 16-unit grid)."""
-    longest = max((len(name) for name in ports), default=8)
-    return max(_DEFAULT_BODY_WIDTH, longest * 8)
+def body_width(ports: Sequence[str], directions: Mapping[str, str] | None = None) -> int:
+    """Reserve room for both opposing labels, with a central gap and grid edges.
+
+    Font size 2 pin labels get a conservative 16 units per character. The final
+    PIN number is an offset from the connection point, not a font size.
+    """
+    columns = _columns(ports, directions)
+    text_width = sum(max((len(name) for _, name in column), default=0) for column in columns)
+    needed = max(_DEFAULT_BODY_WIDTH, text_width * 16 + 64)
+    return ((needed + 2 * _GRID - 1) // (2 * _GRID)) * (2 * _GRID)
 
 
 def symbol_text(
@@ -142,15 +168,16 @@ def symbol_text(
     ``ports`` order is the subcircuit's declaration order; the generated
     ``SpiceOrder`` values follow it exactly.
     """
-    width = body_width(ports)
+    width = body_width(ports, directions)
     pins = symbol_pins(ports, directions)
-    height = max((abs(pin.y) for pin in pins), default=_GRID * 2) + _GRID * 2
+    top = min((pin.y for pin in pins), default=0) - _BODY_PADDING
+    bottom = max((pin.y for pin in pins), default=0) + _BODY_PADDING
     lines = [
         "Version 4",
         "SymbolType CELL",
-        f"RECTANGLE Normal {-width // 2} {-height // 2} {width // 2} {height // 2}",
-        f"WINDOW 0 0 {-height // 2 - 24} Center 2",
-        f"WINDOW 3 0 {height // 2 + 24} Center 2",
+        f"RECTANGLE Normal {-width // 2} {top} {width // 2} {bottom}",
+        f"WINDOW 0 0 {top - 32} Center 2",
+        f"WINDOW 3 0 {bottom + 32} Center 2",
         "SYMATTR Prefix X",
         f"SYMATTR Value {model_name or name}",
         f"SYMATTR SpiceModel {model_file}",
@@ -159,8 +186,10 @@ def symbol_text(
     if description:
         lines.append(f"SYMATTR Description {description}")
     for pin in pins:
-        orientation = {"left": "LEFT", "right": "RIGHT", "top": "TOP", "bottom": "BOTTOM"}[pin.side]
-        lines.append(f"PIN {pin.x} {pin.y} {orientation} {_PIN_SIZE}")
+        edge = -width // 2 if pin.side == "left" else width // 2
+        lines.append(f"LINE Normal {pin.x} {pin.y} {edge} {pin.y}")
+        orientation = pin.side.upper()
+        lines.append(f"PIN {pin.x} {pin.y} {orientation} {_PIN_STUB + _LABEL_INSET}")
         lines.append(f"PINATTR PinName {pin.name}")
         lines.append(f"PINATTR SpiceOrder {pin.order}")
     return "\n".join(lines) + "\n"
@@ -235,6 +264,17 @@ def validate_symbol(
                     f"observed {sorted(orders)} for {len(expected)} ports"
                 ),
                 detail={"orders": ",".join(str(o) for o in sorted(orders))},
+            )
+        )
+    elif sorted(pairs, key=lambda pair: pair[1]) != [
+        (name, index + 1) for index, name in enumerate(expected)
+    ]:
+        findings.append(
+            Finding(
+                code="SYM004_spice_order_is_not_the_subcircuit_port_order",
+                status=Status.FAIL,
+                message="Each pin's SpiceOrder must match that pin's position in the .subckt",
+                detail={"expected": ",".join(expected)},
             )
         )
     if model_file is not None:

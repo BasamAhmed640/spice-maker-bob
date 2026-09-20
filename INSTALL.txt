@@ -1,4 +1,4 @@
-Spice Maker Bob 1.1.5 for Windows x64
+Spice Maker Bob 1.1.6 for Windows x64
 
 Extract this zip, then double-click Install.exe. The pepper animation plays during setup.
 Python is included. Open SETUP once to select LTspice and save your API key.

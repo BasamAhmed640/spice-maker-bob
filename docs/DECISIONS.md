@@ -66,3 +66,13 @@ model accuracy or exposing private reasoning.
 ## LM358 qualification (1.1.5)
 
 Use a hash-bound reviewed extraction profile for the exact supplied LM358 datasheet, preserving explicit coverage gaps and rechecking citations. Qualify both the instruments and the generated model in LTspice; typical comparisons prevent idealized zero-offset/bias candidates passing maximum limits alone. Add native complex AC decoding and use it consistently when revalidating cached reports. See LM358_VALIDATION.md for scope.
+
+
+## 2026-09-20 — application-owned symbol layout
+
+Every authored model is published with the deterministic rectangle renderer, including
+cache hits and command-line publication. Agent drawings are not used for the final
+symbol. Datasheet pin directions guide placement; physical package pin numbers never
+replace `.subckt` positions. Validation checks each pin's actual order, as well as the
+set and bijection. The agent is asked to write only the electrical model, saving the
+symbol output tokens. See STANDARD_SYMBOLS.md.

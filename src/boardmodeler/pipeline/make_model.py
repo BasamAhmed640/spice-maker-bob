@@ -108,7 +108,7 @@ from boardmodeler.documents.store import DocumentStore, DocumentStoreError
 from boardmodeler.domain.enums import RequirementOrigin, Status
 from boardmodeler.domain.records import DocumentRecord, Requirement
 from boardmodeler.models.library import ModelStoreError, subckt_ports
-from boardmodeler.models.symbolism import symbol_pin_orders, symbol_text, validate_symbol
+from boardmodeler.models.symbolism import symbol_text
 from boardmodeler.providers.agent import AgentExtractionProvider
 from boardmodeler.providers.base import ProviderError
 from boardmodeler.providers.registry import select_provider
@@ -1285,19 +1285,6 @@ def _page_lookup(record: DocumentRecord, store: DocumentStore):
     return lookup
 
 
-def _order_matches_ports(asy_text: str, ports: Sequence[str]) -> bool:
-    """Whether each pin's ``SpiceOrder`` is its position in the subcircuit's port list.
-
-    :func:`~boardmodeler.models.symbolism.validate_symbol` checks the pin-name set
-    and that the ``SpiceOrder`` values are a bijection, but not *which* pin holds
-    *which* order. LTspice passes the subcircuit nodes in ``SpiceOrder`` order, so
-    a permuted symbol silently wires the wrong pins; it is regenerated instead.
-    """
-    pairs = sorted(symbol_pin_orders(asy_text), key=lambda pair: pair[1])
-    expected = [(port, index + 1) for index, port in enumerate(ports)]
-    return pairs == expected
-
-
 def _required_text(characteristic: object) -> str:
     """The human limit text for one row, e.g. ``min 4 / max 4.5 V``."""
     unit = getattr(characteristic, "unit", "") or ""
@@ -1962,24 +1949,14 @@ class _Run:
     def _publish_symbol(self, ports: Sequence[str], lib_name: str) -> tuple[Path, str]:
         subckt = self.request.subckt
         target = self.out_dir / f"{subckt}.asy"
-        source = self.workdir / "model" / f"{subckt}.asy"
-        if source.is_file():
-            text = source.read_text(encoding="utf-8", errors="replace")
-            findings = [
-                finding.code for finding in validate_symbol(text, ports=ports, model_file=lib_name)
-            ]
-            if not findings and not _order_matches_ports(text, ports):
-                findings.append("SYM004_spice_order_is_not_the_subcircuit_port_order")
-            if not findings:
-                self._write_text(target, text)
-                return target, "the agent's symbol was validated and kept"
-            note = (
-                "the agent's symbol was rejected ("
-                + "; ".join(findings)
-                + ") and regenerated from the model's declared ports"
-            )
-        else:
-            note = "the agent wrote no symbol; one was generated from the model's declared ports"
+        # Appearance is always application-owned, including cached builds. Pin-map
+        # directions affect placement only; the .subckt defines electrical order.
+        directions = {
+            str(pin["name"]): str(pin["direction"])
+            for pin in self.pin_map
+            if pin.get("name") in ports and pin.get("direction")
+        }
+        note = "standard symbol regenerated locally from the model's declared ports"
         write_symbol_for(
             out_path=target,
             name=subckt,
@@ -1987,6 +1964,7 @@ class _Run:
             model_file=lib_name,
             model_name=subckt,
             description=f"{subckt} authored model",
+            directions=directions,
         )
         return target, note
 

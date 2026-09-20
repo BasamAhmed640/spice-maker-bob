@@ -836,16 +836,12 @@ def _publish_model_files(
     """Copy the agent's model into the output directory, and guarantee a valid symbol."""
     from boardmodeler.authoring.card import write_symbol_for
     from boardmodeler.models.library import subckt_ports
-    from boardmodeler.models.symbolism import validate_symbol
 
     notes: list[str] = []
     source_lib = None
-    source_asy = None
     for directory in (workdir / "model", workdir):
         if source_lib is None and (directory / f"{subckt}.lib").is_file():
             source_lib = directory / f"{subckt}.lib"
-        if source_asy is None and (directory / f"{subckt}.asy").is_file():
-            source_asy = directory / f"{subckt}.asy"
     if source_lib is None:
         raise FileNotFoundError(f"the agent left no {subckt}.lib in {workdir}")
 
@@ -857,17 +853,6 @@ def _publish_model_files(
     lib_target.write_text(lib_text, encoding="utf-8", newline="\n")
 
     asy_target = out_dir / f"{subckt}.asy"
-    if source_asy is not None:
-        asy_text = source_asy.read_text(encoding="utf-8", errors="replace")
-        findings = validate_symbol(asy_text, ports=ports, model_file=lib_target.name)
-        if not findings:
-            asy_target.write_text(asy_text, encoding="utf-8", newline="\n")
-            return lib_target, asy_target, notes
-        notes.append(
-            "the agent's symbol was rejected ("
-            + "; ".join(f"{f.code}" for f in findings)
-            + "); generated one instead"
-        )
     write_symbol_for(
         out_path=asy_target,
         name=subckt,
@@ -877,7 +862,7 @@ def _publish_model_files(
         description=f"{subckt} generated model",
     )
     if not notes:
-        notes.append("symbol generated from the model's declared ports")
+        notes.append("standard symbol generated locally from the model's declared ports")
     return lib_target, asy_target, notes
 
 

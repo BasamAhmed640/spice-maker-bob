@@ -275,10 +275,16 @@ def write_symbol_for(
     model_file: str,
     model_name: str,
     description: str | None = None,
+    directions: Mapping[str, str] | None = None,
 ) -> Path:
     """Write a symbol whose ``SpiceOrder`` bijection is validated before it is kept."""
     text = symbol_text(
-        name, list(ports), model_file=model_file, model_name=model_name, description=description
+        name,
+        list(ports),
+        model_file=model_file,
+        model_name=model_name,
+        description=description,
+        directions=directions,
     )
     findings = validate_symbol(text, ports=list(ports), model_file=model_file)
     if findings:

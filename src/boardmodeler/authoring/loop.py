@@ -88,7 +88,7 @@ model is judged against. It is frozen for the whole build:
 - the harness owns the limits and tolerances. Relaxing a target here is not
   possible by construction.
 
-Write the model to `../model/<subckt>.lib` (and `../model/<subckt>.asy`).
+Write the model to `../model/<subckt>.lib`. The application generates the symbol.
 """
 
 
@@ -186,11 +186,11 @@ def build_prompt(spec: SpecSet, subckt: str, harness_summary: str = "") -> str:
         "waveforms against the datasheet characteristics below. The harness decides PASS and",
         "FAIL — you never do, and nothing you report is taken as evidence.",
         "",
-        f"## Deliverables (exactly two files, under {MODEL_DIRNAME}/)",
+        f"## Deliverable (one model file, under {MODEL_DIRNAME}/)",
         f"1. `{MODEL_DIRNAME}/{subckt}.lib` — a single self-contained `.subckt {subckt} ...` block:",
         "   no `.include`, no absolute paths, no other external files.",
-        f"2. `{MODEL_DIRNAME}/{subckt}.asy` — an LTspice symbol for it, with `PINATTR SpiceOrder`",
-        "   entries matching your `.subckt` port order one-to-one.",
+        f"The application generates `{MODEL_DIRNAME}/{subckt}.asy` locally, with `PINATTR SpiceOrder`",
+        "entries matching your `.subckt` port order. Do not spend tokens drawing a symbol.",
         "Anything else you write is ignored by the harness.",
         "",
         f"## The `{subckt}` ports you MUST declare",
@@ -213,12 +213,12 @@ def build_prompt(spec: SpecSet, subckt: str, harness_summary: str = "") -> str:
         lines.append(
             "order your model wants: the `.subckt` port list is what counts, and the symbol's"
         )
-        lines.append("`PINATTR SpiceOrder` entries must match it one-to-one.")
+        lines.append("`PINATTR SpiceOrder` entries will be generated to match it one-to-one.")
     else:
         lines.append(
             "  (the probe registry did not report a port list here — declare every port your"
         )
-        lines.append("  model needs and keep the symbol's SpiceOrder consistent with the .subckt)")
+        lines.append("  model needs; the application will preserve that order in its symbol)")
     lines.extend(
         [
             "",
@@ -265,7 +265,7 @@ def build_prompt(spec: SpecSet, subckt: str, harness_summary: str = "") -> str:
             "    uv run boardmodeler model test --out <this working directory>",
             "",
             "## Rules",
-            f"1. Write only `{MODEL_DIRNAME}/{subckt}.lib` and `{MODEL_DIRNAME}/{subckt}.asy`.",
+            f"1. Write only `{MODEL_DIRNAME}/{subckt}.lib`; the application draws the symbol.",
             f"2. Never edit `{SPEC_DIRNAME}/`; the build aborts if it changes.",
             "3. Do not relax, reinterpret or delete a target, a limit or a requirement.",
             "4. Keep the model self-contained: the harness includes your file by absolute path.",

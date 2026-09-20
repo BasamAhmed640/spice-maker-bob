@@ -1,5 +1,8 @@
 # Spice Maker Bob
 
+IC symbols now use a consistent local layout with verified model pin order. See
+[standard symbols](docs/STANDARD_SYMBOLS.md).
+
 LM358 now has reviewed datasheet extraction and real dual-amplifier checks. See
 [measured coverage and limitations](docs/LM358_VALIDATION.md).
 
