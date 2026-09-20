@@ -837,7 +837,11 @@ class PipelineController:
         )
         baseline.requirement_baseline_hash = content_hash
         baseline.test_hash = test_hash
-        project.write_baseline(baseline)
+        # A repeated run freezes the same baseline, including its original stamp.
+        # Rewriting an unchanged baseline made repair-preservation checks depend
+        # on whether both runs happened within the same wall-clock second.
+        if existing is None or revision:
+            project.write_baseline(baseline)
         state.baseline_version = version
         state.requirements = {requirement.req_id: requirement for requirement in requirements}
 

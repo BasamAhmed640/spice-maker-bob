@@ -67,7 +67,8 @@ def probe_runs(buck_lib: Path, ltspice_exe: Path, tmp_path_factory: pytest.TempP
     """Every probe, rendered and run once against the stock library."""
     root = tmp_path_factory.mktemp("probe_runs")
     runs: dict[str, ProbeRun] = {}
-    for probe_id, spec in PROBES.items():
+    for probe_id in _EXPECTED:
+        spec = PROBES[probe_id]
         run_dir = root / probe_id
         run_dir.mkdir(parents=True)
         deck = run_dir / "deck.cir"

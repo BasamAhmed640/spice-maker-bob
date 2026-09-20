@@ -197,6 +197,7 @@ def _engine_module(calls: list[object]) -> ModuleType:
         out_dir: Path
         backend_name: str
         provider: str | None = None
+        allow_remote: bool = False
 
     def make_model(request: object, progress: object = None, cancel: object = None) -> _Result:
         calls.append(request)

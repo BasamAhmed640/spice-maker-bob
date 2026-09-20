@@ -78,11 +78,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from boardmodeler.authoring.api_backend import DEFAULT_TIMEOUT_S as DEFAULT_API_TIMEOUT_S
+from boardmodeler.authoring.api_backend import build_api_backend
 from boardmodeler.authoring.backends import (
     AuthorBackend,
+    BobShellBackend,
     ScriptedBackend,
     UnavailableBackend,
-    build_agent_backend,
 )
 from boardmodeler.authoring.card import write_deliverables, write_symbol_for
 from boardmodeler.authoring.harness import HarnessReport
@@ -104,6 +106,7 @@ from boardmodeler.domain.enums import RequirementOrigin, Status
 from boardmodeler.domain.records import DocumentRecord, Requirement
 from boardmodeler.models.library import ModelStoreError, subckt_ports
 from boardmodeler.models.symbolism import symbol_pin_orders, symbol_text, validate_symbol
+from boardmodeler.providers.agent import AgentExtractionProvider
 from boardmodeler.providers.base import ProviderError
 from boardmodeler.providers.registry import select_provider
 from boardmodeler.requirements.model import validate_requirements
@@ -169,6 +172,9 @@ _JUDGE_UNITS: dict[str, str] = {
     "i_vin_a": "A",
     "pg_leak_a": "A",
     "t_ss_s": "s",
+    "io_voltage_v": "V",
+    "io_current_a": "A",
+    "io_time_s": "s",
 }
 
 
@@ -226,7 +232,7 @@ class MakeModelRequest:
     #: Budget for the supporting-material search only. ``None`` leaves it unbounded; the
     #: author loop is never bounded by this (``max_iterations``/``turn_timeout_s`` stay
     #: ``None``), so the search cannot weaken a tested claim.
-    reinforce_timeout_s: float | None = 300.0
+    reinforce_timeout_s: float | None = 45.0
 
 
 @dataclass(frozen=True)
@@ -485,6 +491,24 @@ _OPERATING_RANGE = (
     "supply split",
     "control supply",
     "pvpin",
+)
+
+_IO_RULES = (
+    _Rule(
+        "paired delays",
+        None,
+        all_of=("tplh", "tphl"),
+        reason="split rising and falling propagation delay into separate requirements",
+    ),
+    _Rule("power-off leakage", "io_power_off_leakage", any_of=("ioff", "power-off leakage")),
+    _Rule("disabled output leakage", "io_leakage", any_of=("ioz", "three-state output leakage")),
+    _Rule("input leakage", "io_input_leakage", any_of=("input leakage current",)),
+    _Rule("output high", "io_voh", any_of=("voh", "high-level output voltage")),
+    _Rule("output low", "io_vol", any_of=("vol", "low-level output voltage")),
+    _Rule("rising propagation", "io_delay_rise", any_of=("tplh", "low-to-high propagation delay")),
+    _Rule("falling propagation", "io_delay_fall", any_of=("tphl", "high-to-low propagation delay")),
+    _Rule("output rise", "io_rise_time", any_of=("output rise time",)),
+    _Rule("output fall", "io_fall_time", any_of=("output fall time",)),
 )
 
 _RULES: tuple[_Rule, ...] = (
@@ -829,6 +853,14 @@ def bind_requirements(
     """
     blocked = dict(unverified or {})
     entries: list[dict[str, Any]] = []
+    io_context = any(
+        re.search(
+            r"\b(?:voh|vol|tplh|tphl|ioz|ioff|logic buffer|level shifter)\b",
+            _search_text(row),
+            re.IGNORECASE,
+        )
+        for row in requirements
+    )
     for requirement in requirements:
         req_id = requirement.req_id
         if req_id in blocked:
@@ -854,7 +886,7 @@ def bind_requirements(
             continue
         text = _search_text(requirement)
         decline: str | None = None
-        for rule in _RULES:
+        for rule in (*_IO_RULES, *_RULES) if io_context else _RULES:
             if not _rule_matches(rule, text):
                 continue
             if rule.probe is None:
@@ -864,7 +896,13 @@ def bind_requirements(
             if mismatch is not None:
                 decline = f"{rule.name}: {mismatch}"
                 break
-            entries.append({"req_id": req_id, "probe": rule.probe, "params": {}})
+            from boardmodeler.authoring.conditions import operating_params
+
+            params, problem = operating_params(requirement, PROBES[rule.probe])
+            if problem:
+                decline = problem
+                break
+            entries.append({"req_id": req_id, "probe": rule.probe, "params": params})
             break
         else:
             decline = (
@@ -896,20 +934,24 @@ def build_backend(request: MakeModelRequest) -> AuthorBackend:
     own scripted backend.
     """
     name = str(request.backend_name or "").strip().lower()
-    if name in ("", "api", "bob"):
-        # The catalog's own provider, reached the documented way: the Bob CLI, with the
-        # key in the child environment. An id this build does not accept is refused by
-        # name inside the factory, never swapped for the provider it does accept.
-        return build_agent_backend(
+    if name in ("", "api"):
+        # ``turn_timeout_s`` bounds one agent invocation; the API backend applies
+        # it as that turn's total budget, retries included.
+        limit = float(request.turn_timeout_s) if request.turn_timeout_s else DEFAULT_API_TIMEOUT_S
+        return build_api_backend(
             provider_id=request.provider,
+            model=request.agent_model,
+            max_tokens=request.agent_max_tokens,
             team_id=request.team_id,
-            timeout_s=request.turn_timeout_s,
+            timeout_s=limit,
         )
+    if name == "bob":
+        return BobShellBackend(team_id=request.team_id, timeout_s=request.turn_timeout_s)
     if name in ("scripted", "fixture"):
         return _bundled_author(request)
     return UnavailableBackend(
         name or "unknown",
-        f"{name or 'unknown'}_backend_unavailable: unknown backend name; use 'bob', "
+        f"{name or 'unknown'}_backend_unavailable: unknown backend name; use 'api', 'bob', "
         "'scripted' or 'fixture'",
     )
 
@@ -1161,6 +1203,7 @@ class _Run:
         self.supplied: list[Requirement] = []
         self.declared: dict[str, Any] = {}
         self.requirements: list[Requirement] = []
+        self.pin_map: tuple[dict[str, Any], ...] = ()
         self.unverified: dict[str, str] = {}
         self.spec: SpecSet | None = None
         self.outcome: BuildOutcome | None = None
@@ -1283,15 +1326,16 @@ class _Run:
 
         config = load_config()
         try:
-            selection = select_provider(
-                config,
-                # The extraction provider is the persisted configuration's own
-                # choice: ``request.provider`` names the *agent* provider now, and
-                # D-011's walk over ``provider_order`` is how extraction decides.
-                requested=None,
-                allow_bob_shell=False,
-                fixture_dir=self.cache_dir,
-            )
+            if self.request.backend_name in ("fixture", "scripted"):
+                extraction_provider = select_provider(
+                    config,
+                    requested="fixture",
+                    allow_bob_shell=False,
+                    fixture_dir=self.cache_dir,
+                ).provider
+            else:
+                self.backend = build_backend(self.request)
+                extraction_provider = AgentExtractionProvider(self.backend)
         except ProviderError as exc:
             raise _Stop(
                 "extract",
@@ -1312,12 +1356,22 @@ class _Run:
                 f"workspace_unusable: {self.workdir} could not be prepared: {exc}",
             ) from exc
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        policy = config.data_policy
+        # --allow-remote / the disclosed GUI GO action authorizes this chosen file,
+        # without falsely declaring an unclassified document to be public.
+        if self.request.allow_remote:
+            policy = policy.model_copy(
+                update={
+                    "deny_unknown_classification": False,
+                    "permitted_classifications": [*policy.permitted_classifications, "unknown"],
+                }
+            )
         try:
             result = extract_requirements(
                 project,
-                provider=selection.provider,
+                provider=extraction_provider,
                 cache_dir=self.cache_dir,
-                policy=config.data_policy,
+                policy=policy,
                 allow_remote=True if self.request.allow_remote else None,
                 cancel=cancel,
             )
@@ -1330,6 +1384,7 @@ class _Run:
                 f"provider_error: {type(exc).__name__}: {exc}",
             ) from exc
         self.requirements = apply_review(result.requirements, result.review)
+        self.pin_map = tuple(pin.model_dump(mode="json") for pin in result.pins)
         errors = [issue for issue in result.issues if issue.severity == "error"]
         if errors:
             raise _Stop(
@@ -1374,9 +1429,7 @@ class _Run:
         against its own page text (``trusted=False`` is the extraction path, where
         the review already ran; the check is deterministic, so it is re-run here
         where the store resolves the path). Without it, a supplied extraction
-        result is taken at its own ``citation_verified`` word — it *is* the
-        extraction result the caller chose to supply — and the stage detail says
-        so.
+        result cannot verify its own citations; the document must be available.
         """
         documents = self._documents()
         if documents:
@@ -1393,17 +1446,6 @@ class _Run:
                 )
                 for req_id, verified in checks.items()
                 if not verified
-            }
-            return
-        if trusted:
-            self.unverified = {
-                requirement.req_id: (
-                    "the supplied extraction result marks this citation unverified and there is "
-                    "no registered document to check it against"
-                )
-                for requirement in self.requirements
-                if requirement.origin is RequirementOrigin.DOCUMENT
-                and not requirement.citation_verified
             }
             return
         self.unverified = {
@@ -1514,6 +1556,7 @@ class _Run:
                     json.loads(requirement.model_dump_json(by_alias=True))
                     for requirement in self.requirements
                 ],
+                "pin_map": list(self.pin_map),
             },
         )
         return path
@@ -1531,14 +1574,9 @@ class _Run:
 
     def author(self, cancel: threading.Event | None) -> None:
         self.log.emit("author", "running", f"checking the {self.request.backend_name!r} backend")
-        backend = build_backend(self.request)
+        backend = self.backend or build_backend(self.request)
         self.backend = backend
         self.backend_name = backend.name
-        usable, reason = backend.availability()
-        if not usable:
-            self.log.emit("author", "failed", reason)
-            self.status, self.detail = Status.BLOCKED.value, reason
-            return
         install = locate()
         if install is None:
             self.log.emit("author", "failed", LTSPICE_MISSING)
@@ -1548,7 +1586,18 @@ class _Run:
             self.status, self.detail = Status.UNKNOWN.value, "spec_missing: no specification"
             return
         prepare_workdir(spec=self.spec, subckt=self.request.subckt, workdir=self.workdir)
-        self._gather_supporting_material(cancel)
+        from boardmodeler.authoring.validation_cache import read_report, validation_key
+
+        path = model_file(self.workdir, self.request.subckt)
+        key = validation_key(path, self.spec, install.path, self.request.timeout_s)
+        cached = read_report(self.workdir / "validation-cache", key, self.spec, path)
+        if cached is None or not cached.passed():
+            usable, reason = backend.availability()
+            if not usable:
+                self.log.emit("author", "failed", reason)
+                self.status, self.detail = Status.BLOCKED.value, reason
+                return
+            self._gather_supporting_material(cancel)
         self.log.emit(
             "judge",
             "running",
@@ -1565,6 +1614,11 @@ class _Run:
             stall_patience=self.request.stall_patience,
             turn_timeout_s=self.request.turn_timeout_s,
             timeout_s=self.request.timeout_s,
+            supporting_context="\n".join(
+                f"{source.url} (SHA256 {source.sha256}): {source.excerpt}"
+                for source in (self.reinforcement.sources if self.reinforcement else ())
+                if source.retrieved and source.sha256 and source.excerpt
+            ),
         )
         if not _BUILD_LOCK.acquire(blocking=False):
             reason = (
@@ -1588,7 +1642,9 @@ class _Run:
             f"{outcome.iterations} turn(s); {outcome.detail}",
             {"turns": int(outcome.iterations)},
         )
-        if self.turns == 0:
+        if self.turns == 0 and outcome.report.passed():
+            self.log.emit("judge", "ok", "reused matching, hash-verified simulator evidence")
+        elif self.turns == 0:
             self.log.emit("judge", "skipped", f"no harness turn ran: {outcome.detail}")
 
     def _gather_supporting_material(self, cancel: threading.Event | None) -> None:

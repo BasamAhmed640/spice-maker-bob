@@ -15,13 +15,13 @@ One-time setup:
 
 ```powershell
 uv sync --extra packaging            # pyinstaller + pillow + velopack into .venv
-dotnet tool install -g vpk           # needs the .NET SDK; keep vpk on velopack's version
+dotnet tool install -g vpk --version 1.2.0           # needs the .NET SDK; keep vpk on velopack's version
 ```
 
 Then, from the repository root:
 
 ```powershell
-.\installer\build.ps1 -Version 1.0.0
+.\installer\build.ps1 -Version 1.1.0
 ```
 
 The script renders the splash/icon from `render_assets.py`, freezes the app from
@@ -72,3 +72,14 @@ native reader is authoritative in any case (D-002).
 
 Nothing here is code-signed (no certificate on the build machine), so Windows SmartScreen
 warns on first run.
+
+
+## Easy download
+
+The build also emits `<PackId>-<Version>-Windows-x64.zip`, containing **Install.exe**,
+**Read me.txt** and **SHA256SUMS.txt**. Install.exe is the unmodified Velopack setup bundle,
+so it retains the animated pepper splash. Python is included in the frozen app. There
+is no Python installation step for end users. LTspice and Bob Shell remain separate.
+The Bob edition selects package ID SpiceMakerBob and the title Spice Maker Bob from
+build_flavor.BOB_ONLY; the general edition uses SpiceMaker. Builds are unsigned.
+The Windows download GitHub workflow provides a reproducible build entry point.

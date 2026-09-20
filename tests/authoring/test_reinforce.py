@@ -424,7 +424,7 @@ def test_query_agent_backend_defaults_to_the_configured_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Without an injected backend the search runs on the configured provider."""
-    from boardmodeler.authoring import backends as api_module
+    from boardmodeler.authoring import api_backend as api_module
     from boardmodeler.authoring.backends import AuthorRequest, AuthorResult
 
     seen: dict[str, object] = {}
@@ -450,7 +450,7 @@ def test_query_agent_backend_defaults_to_the_configured_provider(
         seen["timeout_s"] = timeout_s
         return _FakeBackend()
 
-    monkeypatch.setattr(api_module, "build_agent_backend", factory)
+    monkeypatch.setattr(api_module, "build_api_backend", factory)
 
     reply, note = reinforce_module.query_agent_backend("find sources", tmp_path, timeout_s=12.5)
 

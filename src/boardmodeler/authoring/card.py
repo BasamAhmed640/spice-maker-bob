@@ -123,6 +123,10 @@ def render_card(
         "produced the measured value shown; rows that could not be judged are `UNKNOWN` with "
         "the reason, and datasheet rows no probe can reach are `NOT_APPLICABLE` with the "
         "reason. Nothing else about this part is claimed.",
+        "PASS applies only at the operating points recorded in harness-report.json. "
+        "A nominal sample inside a datasheet range does not validate the whole range. "
+        "No temperature, process distribution, protocol, or high-speed channel qualification "
+        "is inferred from these behavioral probes.",
         "",
         f"**Totals:** {counts.get('PASS', 0)} pass · {counts.get('FAIL', 0)} fail · "
         f"{counts.get('UNKNOWN', 0)} unknown · {len(uncovered)} rows not testable by "

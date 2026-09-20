@@ -106,6 +106,7 @@ _PORT_NETS: dict[str, str] = {
 }
 
 _BASE_DEFAULTS: dict[str, float] = {
+    "temp_c": 25.0,
     "vout_nom": 3.3,
     "vin_dc": 12.0,
     "en_high": 2.0,
@@ -333,6 +334,7 @@ def _deck(
         *extras,
         "",
         ".options plotwinsize=0",
+        f".temp {_fmt(params['temp_c'])}",
         f".tran 0 {_fmt(params['tstop_s'])} 0 {_fmt(params['tmax_s'])}",
         ".save " + " ".join(sorted(set(save))),
         ".end",
@@ -1094,3 +1096,12 @@ _register(
         measurer=_measure_quiescent_current,
     )
 )
+
+
+def _register_io_probes() -> None:
+    from boardmodeler.authoring.io_probes import register
+
+    register(PROBES)
+
+
+_register_io_probes()

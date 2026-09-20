@@ -82,6 +82,7 @@ class Recorder:
         timeout_s: float,
         env,
         cancel: threading.Event | None = None,
+        input_text: str | None = None,
     ) -> GuardedProcess:
         self.calls.append(
             {
@@ -90,9 +91,28 @@ class Recorder:
                 "timeout_s": timeout_s,
                 "env": dict(env),
                 "cancel": cancel,
+                "input_text": input_text,
             }
         )
         return self.result
+
+
+def test_text_reply_uses_last_message_and_author_resume_is_explicit(tmp_path, keyed):
+    from dataclasses import replace
+
+    payload = json.loads(payload_line())
+    payload["last_message"] = '{"answer": "extracted"}'
+    runner = Recorder(completed(json.dumps(payload)))
+    backend = BobShellBackend(runner=runner)
+    text_result = backend.author(
+        replace(request(tmp_path), expect_text=True, session_id="must-not-resume")
+    )
+    assert json.loads(text_result.stdout_tail) == {"answer": "extracted"}
+    assert "--resume" not in runner.calls[0]["argv"]
+    backend.author(replace(request(tmp_path), session_id="task-42"))
+    argv = runner.calls[1]["argv"]
+    assert argv[argv.index("--resume") + 1] == "task-42"
+    assert runner.calls[1]["input_text"] == PROMPT
 
 
 def completed(stdout: str = "", *, returncode: int = 0, timed_out: bool = False, stderr: str = ""):
@@ -156,9 +176,11 @@ def test_argv_matches_the_documented_bob_run_shape(
         "json",
         "--max-turns",
         "5",
-        PROMPT,
+        "--disable-mcp",
+        "--disable-subagents",
     ]
     assert recorder.calls[0]["cwd"] == tmp_path
+    assert recorder.calls[0]["input_text"] == PROMPT
     assert recorder.calls[0]["timeout_s"] == TIMEOUT_S
     assert recorder.calls[0]["env"]["BOB_API_KEY"] == SENTINEL_KEY
     assert SENTINEL_KEY not in " ".join(recorder.calls[0]["argv"])
@@ -183,7 +205,8 @@ def test_team_id_is_added_only_when_configured(
         "5",
         "--team-id",
         "team-7",
-        PROMPT,
+        "--disable-mcp",
+        "--disable-subagents",
     ]
 
 
@@ -304,7 +327,7 @@ def test_cancellation_while_running_reports_cancelled(
     bob_env: Credential, keyed: str, tmp_path: Path
 ) -> None:
     class Cancelling(Recorder):
-        def __call__(self, argv, *, cwd, timeout_s, env, cancel=None):
+        def __call__(self, argv, *, cwd, timeout_s, env, cancel=None, input_text=None):
             assert cancel is not None
             cancel.set()
             return completed(payload_line())
@@ -404,7 +427,7 @@ def test_a_raising_runner_cannot_leak_the_key(
     bob_env: Credential, keyed: str, tmp_path: Path
 ) -> None:
     class Exploding(Recorder):
-        def __call__(self, argv, *, cwd, timeout_s, env, cancel=None):
+        def __call__(self, argv, *, cwd, timeout_s, env, cancel=None, input_text=None):
             raise OSError(f"cannot start launcher using {SENTINEL_KEY}")
 
     backend = BobShellBackend(env={"PATH": "x"}, runner=Exploding(completed()), timeout_s=TIMEOUT_S)

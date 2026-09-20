@@ -120,6 +120,7 @@ class Characteristic:
     probe: str | None
     probe_params: dict[str, float]
     not_testable_reason: str | None
+    conditions: tuple[dict[str, Any], ...] = ()
 
     @property
     def has_limits(self) -> bool:
@@ -142,16 +143,17 @@ class Characteristic:
             "char_id": self.char_id,
             "statement": self.statement,
             "unit": self.unit,
-            "min_value": self.min_value,
-            "max_value": self.max_value,
-            "typ_value": self.typ_value,
-            "target": self.target,
+            "min_value": _opt_float(self.min_value),
+            "max_value": _opt_float(self.max_value),
+            "typ_value": _opt_float(self.typ_value),
+            "target": _opt_float(self.target),
             "source_page": self.source_page,
             "excerpt": self.excerpt,
             "req_class": self.req_class,
             "probe": self.probe,
-            "probe_params": dict(sorted(self.probe_params.items())),
+            "probe_params": {key: float(value) for key, value in sorted(self.probe_params.items())},
             "not_testable_reason": self.not_testable_reason,
+            "conditions": list(self.conditions),
         }
 
     @classmethod
@@ -175,11 +177,19 @@ class Characteristic:
                 if payload.get("not_testable_reason") is None
                 else str(payload["not_testable_reason"])
             ),
+            conditions=tuple(payload.get("conditions") or ()),
         )
 
 
 def _opt_float(value: Any) -> float | None:
     return None if value is None else float(value)
+
+
+def _conditions(requirement: dict) -> tuple[dict[str, Any], ...]:
+    return tuple(
+        {key: value for key, value in condition.items() if key != "schema_version"}
+        for condition in requirement.get("conditions") or ()
+    )
 
 
 @dataclass(frozen=True)
@@ -196,6 +206,7 @@ class SpecSet:
     subckt: str
     doc_id: str
     characteristics: tuple[Characteristic, ...]
+    pin_map: tuple[dict[str, Any], ...] = ()
 
     def payload(self) -> dict[str, Any]:
         return {
@@ -203,6 +214,7 @@ class SpecSet:
             "subckt": self.subckt,
             "doc_id": self.doc_id,
             "characteristics": [char.payload() for char in self.characteristics],
+            "pin_map": list(self.pin_map),
         }
 
     def digest(self) -> str:
@@ -223,6 +235,7 @@ class SpecSet:
             characteristics=tuple(
                 Characteristic.from_payload(entry) for entry in payload["characteristics"]
             ),
+            pin_map=tuple(payload.get("pin_map") or ()),
         )
 
     def by_probe(self) -> dict[str, tuple[Characteristic, ...]]:
@@ -237,6 +250,21 @@ class SpecSet:
     def covered(self) -> tuple[Characteristic, ...]:
         """Characteristics a probe can judge."""
         return tuple(char for char in self.characteristics if char.probe is not None)
+
+    def cases(self) -> tuple[tuple[str, str, tuple[Characteristic, ...]], ...]:
+        """Group measurements by probe AND operating point, never discard a corner."""
+        cases = []
+        for probe_id, chars in self.by_probe().items():
+            groups: dict[str, list[Characteristic]] = {}
+            for char in chars:
+                fingerprint = sha256_bytes(canonical_json_bytes(char.payload()["probe_params"]))[
+                    :12
+                ]
+                groups.setdefault(fingerprint, []).append(char)
+            for fingerprint, group in groups.items():
+                name = probe_id if len(groups) == 1 else f"{probe_id}-{fingerprint}"
+                cases.append((name, probe_id, tuple(group)))
+        return tuple(cases)
 
     def uncovered(self) -> tuple[Characteristic, ...]:
         """Characteristics reported ``not_testable`` with a reason."""
@@ -363,6 +391,7 @@ def load_tps54320_spec(
                     probe=None,
                     probe_params={},
                     not_testable_reason=reason,
+                    conditions=_conditions(requirement),
                 )
             )
             continue
@@ -395,6 +424,7 @@ def load_tps54320_spec(
                 probe=probe_id,
                 probe_params={str(k): float(v) for k, v in params.items()},
                 not_testable_reason=None,
+                conditions=_conditions(requirement),
             )
         )
 
@@ -406,6 +436,7 @@ def load_tps54320_spec(
         subckt=subckt,
         doc_id=doc_id,
         characteristics=tuple(characteristics),
+        pin_map=tuple(requirements.get("pin_map") or ()),
     )
 
 

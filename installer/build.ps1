@@ -27,8 +27,8 @@
 #>
 param(
     [Parameter(Mandatory = $true)][string] $Version,
-    [string] $Name = "Spice Maker",   # splash title block and the Add/Remove entry
-    [string] $PackId = "SpiceMaker"   # installs to %LocalAppData%\SpiceMaker
+    [string] $Name = "",   # splash title block and the Add/Remove entry
+    [string] $PackId = ""   # installs to %LocalAppData%\SpiceMaker
 )
 $ErrorActionPreference = "Stop"
 $repo = Split-Path $PSScriptRoot -Parent
@@ -36,6 +36,10 @@ $assets = Join-Path $PSScriptRoot "assets"
 $exe = "SpiceMaker"                   # must match NAME in installer\SpiceMaker.spec
 $python = Join-Path $repo ".venv\Scripts\python.exe"
 if (-not (Test-Path $python)) { $python = "python" }
+$bobOnly = (& $python -c "from boardmodeler.build_flavor import BOB_ONLY; print(int(BOB_ONLY))") -eq "1"
+if (-not $Name) { $Name = if ($bobOnly) { "Spice Maker Bob" } else { "Spice Maker" } }
+if (-not $PackId) { $PackId = if ($bobOnly) { "SpiceMakerBob" } else { "SpiceMaker" } }
+
 
 function Invoke-Step([string] $what, [scriptblock] $cmd) {
     Write-Host "==> $what"
@@ -79,6 +83,24 @@ try {
     Invoke-Step "Publish releases\Setup.exe" {
         Copy-Item "releases\$PackId-win-Setup.exe" "releases\Setup.exe" -Force
     }
+    # The download zip contains the original animated installer, unchanged.
+    $bundle = Join-Path $repo "build/download-$PackId"
+    New-Item -ItemType Directory -Force -Path $bundle | Out-Null
+    Copy-Item "releases/$PackId-win-Setup.exe" "$bundle/Install.exe" -Force
+    @"
+$Name $Version for Windows x64
+
+Extract this zip, then double-click Install.exe. The pepper animation plays during setup.
+Python is included. Open SETUP once to select LTspice and save your API key.
+LTspice and (for IBM Bob) Bob Shell must be installed separately.
+The API key stays in Windows Credential Manager; no account login is needed in this app.
+GO sends the selected datasheet and model text to the chosen provider.
+This build is unsigned. Check the publisher/source and the SHA256 before running it.
+"@ | Set-Content "$bundle/Read me.txt" -Encoding utf8
+    $hash = (Get-FileHash "$bundle/Install.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+    "$hash  Install.exe" | Set-Content "$bundle/SHA256SUMS.txt" -Encoding ascii
+    Compress-Archive -LiteralPath "$bundle/Install.exe", "$bundle/Read me.txt", "$bundle/SHA256SUMS.txt" `
+        -DestinationPath "releases/$PackId-$Version-Windows-x64.zip" -Force
 } finally {
     Pop-Location
 }

@@ -416,7 +416,7 @@ def test_fail_then_pass_reaches_pass_on_turn_two(monkeypatch, tmp_path: Path) ->
     assert double.calls[0]["text"] == "* attempt 1\n"
     assert double.calls[1]["text"] == "* attempt 2\nCORRECTED\n"
     assert double.calls[1]["subckt"] == SUBCKT
-    assert double.calls[1]["workdir"] == workdir / "harness"
+    assert double.calls[1]["workdir"] == workdir / "harness" / "turn-2"
     assert double.calls[1]["ltspice"] == tmp_path / "LTspice.exe"
     assert double.calls[1]["timeout_s"] == TIMEOUT_S
     assert double.calls[0]["spec"].digest() == spec.digest()
@@ -504,7 +504,7 @@ def test_the_iteration_cap_is_unknown_and_names_the_failing_probe(
     assert probe in outcome.detail
     assert "FAIL" in outcome.detail
     assert "max_iterations=3" in outcome.detail
-    assert outcome.report is double.reports[-1]
+    assert outcome.report is double.reports[0], "keep the best candidate when later turns tie"
 
     assert "Harness feedback so far" not in prompts[0]
     assert double.reports[0].feedback() in prompts[1]
@@ -632,7 +632,7 @@ def test_a_repeating_agent_stops_after_stall_patience_no_progress_turns(
     assert "2 consecutive turn(s)" in outcome.detail
     assert "3 turn(s)" in outcome.detail
     assert FIVE[0] in outcome.detail
-    assert outcome.report is double.reports[-1]
+    assert outcome.report is double.reports[0]
     assert outcome.report.model_sha256 == double.reports[-1].model_sha256
     assert len(double.calls) == 3
     assert outcome.history[0] == f"turn 1: progress; failing {FIVE[0]}"
@@ -675,7 +675,7 @@ def test_an_agent_that_improves_twice_then_stalls_stops_at_the_stall(
 def test_max_iterations_still_caps_an_agent_that_would_otherwise_continue(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """A changed failure mode counts as progress, so only the caller's cap can stop this."""
+    """Alternating failures are not improvement; an explicit cap still takes precedence."""
     spec = build_spec(FIVE[0])
     workdir = tmp_path / "build"
     loop.prepare_workdir(spec=spec, subckt=SUBCKT, workdir=workdir)
@@ -703,8 +703,8 @@ def test_max_iterations_still_caps_an_agent_that_would_otherwise_continue(
     assert len(double.calls) == 3
     assert "max_iterations=3" in outcome.detail
     assert FIVE[0] in outcome.detail
-    assert all("no progress" not in line for line in outcome.history)
-    assert outcome.report is double.reports[-1]
+    assert any("no progress" in line for line in outcome.history)
+    assert outcome.report is double.reports[0]
 
 
 def test_cancellation_during_a_turn_ends_unknown_cancelled(monkeypatch, tmp_path: Path) -> None:

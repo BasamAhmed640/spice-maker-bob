@@ -595,3 +595,27 @@ the tree contain no other vendor's key handling outweighs it. What is *not* remo
 transport in `providers/http_inference.py` and `providers/bob.py`: Bob Direct itself speaks the
 OpenAI-compatible chat-completions shape for datasheet extraction, so that code is Bob's own path, not
 another vendor's.
+
+
+## D-016 — Shared, measured model iteration and explicit I/O scope (2026-09-19)
+
+The selected author backend also extracts the supplied datasheet. Four tasks share one
+schema/document context, with one correction attempt for invalid structure or semantic
+classification. Adapter prompt versions participate in extraction-cache keys. The user's
+GO action explicitly authorizes sending the selected document; its unknown classification
+is not relabeled public. Internal/confidential policy restrictions remain authoritative.
+
+Keep the best measured model and immutable attempt snapshots. Compare unknown rows,
+failed rows, then normalized numeric residual; cycling failures is not improvement.
+Reuse only matching validation inputs with intact raw/log evidence, remeasurement and
+limit comparison. No UNKNOWN cache reuse, no tolerance relaxation, no false PASS.
+
+Operating conditions and pin maps are part of the frozen spec. I/O coverage is electrical
+and conditional; separate operating points get separate decks. Temperature-dependent and
+high-speed channel/protocol claims need separate data and engines. Imported vendor files
+are byte-preserved, caller-attributed sources, with validation explicitly UNKNOWN.
+
+The two repositories share implementation and tests; build_flavor.BOB_ONLY filters the
+accepted catalog. Separate Velopack IDs keep installs distinct. Easy-download ZIPs wrap
+the unmodified animated installer as Install.exe; LTspice and Bob Shell remain external
+prerequisites. Publishing to each repository's main branch is explicitly user-authorized.

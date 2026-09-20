@@ -1,3 +1,37 @@
+# Faster model creation and I/O validation — 2026-09-19
+
+Implemented the shared selected-key extraction/author path, batched extraction with one
+bounded semantic repair, current-model repair context, numeric progress ranking, retained
+best candidate, immutable attempt snapshots, and artifact-checked validation reuse. Bob
+prompts use stdin and repairs resume the exact task. Conditions and pin maps reach the
+frozen spec; distinct operating points produce distinct tests. Nine electrical I/O probes
+and an explicitly unvalidated vendor IBIS/AMI/Touchstone import path are available.
+Both editions share source/tests with an explicit Bob-only build flavor.
+
+Observed checks before the publishing gate:
+
+- `uv run pytest -q -m "not ltspice and not network"`: 1009 passed, 4 skipped
+  (git-ignored vendor originals), before the final extraction-repair regression was added.
+- General: focused real-simulator/integration/controller suite: 43 passed in 37.85 s.
+- Bob: `uv run pytest -q tests/authoring/test_fast_io.py`: 7 passed in 12.61 s.
+- `uv run python -m tools.benchmark_authoring`: nine synthetic I/O probes in real
+  LTspice, first validation 5.5378 s / one scripted author turn; repeated validation
+  0.0632 s / zero author turns. This excludes API latency and device qualification.
+- Bounded live DeepSeek extraction of an explicitly synthetic one-page PDF: 40.16 s,
+  four pins, two requirements, no validation issues; repeat used all four cached tasks.
+  Earlier live format/classification failures led to the combined schema and bounded
+  correction; no invalid result is accepted as a valid model specification.
+- Both Velopack packages built successfully; each download ZIP contains the original
+  Setup.exe bytes under Install.exe, checksum and readme. Splash GIFs have 90 frames.
+
+An initial broad suite found fixture/schema integration failures, now repaired, and a
+pre-existing timing-dependent baseline rewrite; unchanged baseline bytes are now retained.
+See the publishing gate/CI for the final committed revision. High-speed electrical and
+protocol simulation, arbitrary-device accuracy and temperature qualification are not
+claimed by these checks. No Bob live inference result is claimed.
+
+---
+
 # STATUS
 
 Updated at every phase boundary. **"Observed" means the exact command was run and

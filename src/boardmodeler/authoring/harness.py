@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from boardmodeler.authoring.probes import PROBES, ProbeError, judge_value, model_ports
@@ -61,6 +61,8 @@ class ProbeOutcome:
     judged: str = ""
     citations: tuple[str, ...] = ()
     cause: str | None = None
+    artifacts: dict[str, str] = field(default_factory=dict)
+    operating_point: dict[str, float] = field(default_factory=dict)
 
     def to_json(self) -> dict:
         return {
@@ -74,6 +76,8 @@ class ProbeOutcome:
             "judged": self.judged,
             "citations": list(self.citations),
             "cause": self.cause,
+            "artifacts": self.artifacts,
+            "operating_point": self.operating_point,
         }
 
     @classmethod
@@ -92,6 +96,8 @@ class ProbeOutcome:
             judged=str(payload.get("judged", "")),
             citations=tuple(str(x) for x in payload.get("citations") or ()),
             cause=None if payload.get("cause") is None else str(payload["cause"]),
+            artifacts=dict(payload.get("artifacts") or {}),
+            operating_point=dict(payload.get("operating_point") or {}),
         )
 
 
@@ -252,6 +258,24 @@ def _judge(char: Characteristic, key: str, value: float) -> tuple[str, str, str 
     )
 
 
+def _simulator_said(log) -> str:
+    """The last lines the simulator printed to its own log, or an empty string.
+
+    A reason that says only "no usable output" leaves the author blind: the deck's own
+    error line (an LTspice syntax error inside the ``.subckt``, an undefined sub-model, an
+    over-defined matrix) is what lets the next turn fix the model. ``log`` is the parsed
+    log summary; anything it kept as a diagnostic is worth repeating, in the order the
+    reasons themselves prefer (errors, then convergence, then warnings).
+    """
+    said: list[str] = []
+    for name in ("errors", "convergence_issues", "warnings"):
+        said.extend(str(line) for line in (getattr(log, name, None) or []))
+    if not said:
+        return ""
+    tail = list(dict.fromkeys(said))[-2:]
+    return f"; LTspice said: {' | '.join(tail)[:300]}"
+
+
 def _run_reason(result: BatchResult, log, *, tstop_s: float, tmax_s: float) -> str | None:
     """Why this run cannot produce a verdict, or ``None`` when it delivered data."""
     if result.cancelled:
@@ -264,9 +288,11 @@ def _run_reason(result: BatchResult, log, *, tstop_s: float, tmax_s: float) -> s
         try:
             raw = read_raw(result.raw_path)
         except (RawFormatError, OSError) as exc:
-            raw_error = str(exc)
+            # An empty or truncated .raw means the run ended before it produced data, and
+            # the simulator's log is the only place that says why.
+            raw_error = f"{exc}{_simulator_said(log)}"
     else:
-        raw_error = f"no .raw was written ({result.observed()})"
+        raw_error = f"no .raw was written ({result.observed()}){_simulator_said(log)}"
     diag = diagnose(
         log=log,
         raw=raw,
@@ -306,8 +332,8 @@ def run_harness(
         library_error = exc.full_reason()
 
     outcomes: list[ProbeOutcome] = []
-    for probe_id, chars in spec.by_probe().items():
-        run_dir = probes_root / probe_id
+    for case_id, probe_id, chars in spec.cases():
+        run_dir = probes_root / case_id
         run_dir.mkdir(parents=True, exist_ok=True)
         if library_error is not None:
             outcomes.append(_unknown_outcome(probe_id, run_dir, chars, library_error))
@@ -317,10 +343,6 @@ def run_harness(
             continue
 
         probe_params = [char.probe_params for char in chars]
-        if any(params != probe_params[0] for params in probe_params[1:]):
-            outcomes.append(_unknown_outcome(probe_id, run_dir, chars, "probe_params_conflict"))
-            continue
-
         try:
             probe = PROBES[probe_id]
         except KeyError:
@@ -383,6 +405,12 @@ def run_harness(
                 judged=f"{key} = {value:.6g} {chars[0].unit}".strip(),
                 citations=citations,
                 cause=cause,
+                operating_point=dict(params),
+                artifacts={
+                    str(path.resolve()): sha256_file(path)
+                    for path in (result.raw_path, result.log_path)
+                    if path is not None
+                },
             )
         )
 

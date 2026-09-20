@@ -43,7 +43,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import ConfigDict, ValidationError, create_model
 
 from boardmodeler.config import load_config
 from boardmodeler.documents.chunk import chunk_document, select_pages
@@ -214,6 +214,7 @@ def extract_requirements(
     responses: dict[ExtractionTask, ExtractionResponse] = {}
     requests: dict[ExtractionTask, ExtractionRequest] = {}
     cache_hits = 0
+    pending: list[ExtractionRequest] = []
     for task in ExtractionTask:
         task_snippets = select_pages(allowed_snippets, pages=_pages_for(task, task_pages))
         request = tasks_for(
@@ -223,7 +224,12 @@ def extract_requirements(
             allow_remote=remote and remote_provider,
         )
         requests[task] = request
-        key = request_hash(request, provider=identity.provider, model=identity.model)
+        key = request_hash(
+            request,
+            provider=identity.provider,
+            model=identity.model,
+            context=getattr(provider, "cache_context", None),
+        )
 
         cached = cache.get(key) if cache is not None else None
         if cached is not None:
@@ -237,7 +243,19 @@ def extract_requirements(
                 detail=f"served from cache entry {key}",
             )
             continue
-        response = provider.extract(request, cancel)
+        pending.append(request)
+
+    batch = getattr(provider, "extract_many", None)
+    fetched = batch(pending, cancel) if pending and callable(batch) else None
+    for request in pending:
+        task = request.task
+        key = request_hash(
+            request,
+            provider=identity.provider,
+            model=identity.model,
+            context=getattr(provider, "cache_context", None),
+        )
+        response = fetched[task] if fetched is not None else provider.extract(request, cancel)
         if response.from_cache:
             cache_hits += 1
         if cache is not None:
@@ -531,127 +549,22 @@ def _disclosures(
 # schemas
 
 
-def _pin_schema() -> dict[str, Any]:
-    return {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "part_id": {"type": "string"},
-            "physical_pin": {"type": "string"},
-            "name": {"type": "string"},
-            "function": {"type": "string"},
-            "polarity": {"enum": ["active_high", "active_low", "bidirectional", "not_applicable"]},
-            "direction": {"enum": ["input", "output", "bidir", "power", "ground", "nc"]},
-            "supply_domain": {"type": ["string", "null"]},
-            "output_topology": {
-                "enum": ["open_drain", "push_pull", "tri_state", "power", "input_only", "unknown"]
-            },
-            "connection_requirement": {
-                "enum": ["required", "optional", "no_connect", "conditional"]
-            },
-            "unused_pin_treatment": {"type": ["string", "null"]},
-            "behavior": {"type": "array", "items": {"type": "string"}},
-            "mapped_symbol_pin": {"type": ["string", "null"]},
-        },
-        "required": [
-            "physical_pin",
-            "name",
-            "function",
-            "polarity",
-            "direction",
-            "connection_requirement",
-        ],
-    }
-
-
-def _requirement_schema() -> dict[str, Any]:
-    return {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "req_id": {"type": "string"},
-            "applies_to": {"type": "string"},
-            "configuration": {"type": ["string", "null"]},
-            "kind": {"enum": ["ELECTRICAL", "FUNCTIONAL", "TEMPORAL", "CONNECTIVITY", "SYSTEM"]},
-            "class": {
-                "enum": [
-                    "DOCUMENTED_LIMIT",
-                    "TYPICAL_VALUE",
-                    "DERIVED_VALUE",
-                    "USER_REQUIREMENT",
-                    "ASSUMPTION",
-                    "UNKNOWN",
-                ]
-            },
-            "criticality": {"enum": ["CRITICAL", "IMPORTANT", "INFORMATIONAL"]},
-            "origin": {"enum": ["DOCUMENT", "TEST_FIXTURE", "USER"]},
-            "statement": {"type": "string"},
-            "limits": {
-                "type": ["object", "null"],
-                "properties": {
-                    "min": {"type": ["number", "null"]},
-                    "typ": {"type": ["number", "null"]},
-                    "max": {"type": ["number", "null"]},
-                    "unit": {"type": "string"},
-                },
-                "required": ["unit"],
-            },
-            "expression": {"type": ["object", "null"]},
-            "conditions": {"type": "array"},
-            "signal_refs": {"type": "array", "items": {"type": "string"}},
-            "evidence": {"type": "array"},
-        },
-        "required": [
-            "req_id",
-            "applies_to",
-            "kind",
-            "class",
-            "criticality",
-            "origin",
-            "statement",
-        ],
-    }
+def _record_schema(name: str, **fields) -> dict[str, Any]:
+    # Generate evidence, expressions, enums and conditions from the actual parser.
+    # Handwritten partial schemas used to make valid extraction impossible.
+    return create_model(name, __config__=ConfigDict(extra="forbid"), **fields).model_json_schema(
+        by_alias=True
+    )
 
 
 _SCHEMAS: dict[ExtractionTask, dict[str, Any]] = {
-    ExtractionTask.IDENTITY: {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "part": {
-                "type": ["object", "null"],
-                "additionalProperties": False,
-                "properties": {
-                    "manufacturer": {"type": ["string", "null"]},
-                    "family": {"type": ["string", "null"]},
-                    "ordering_code": {"type": ["string", "null"]},
-                    "base_part": {"type": ["string", "null"]},
-                    "package": {"type": ["string", "null"]},
-                    "revision": {"type": ["string", "null"]},
-                    "ambiguities": {"type": "array", "items": {"type": "string"}},
-                    "confidence": {"enum": ["resolved", "partial", "unresolved"]},
-                    "evidence": {"type": "array"},
-                },
-                "required": ["confidence"],
-            }
-        },
-        "required": ["part"],
-    },
-    ExtractionTask.PINMAP: {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "part_id": {"type": "string"},
-            "pins": {"type": "array", "items": _pin_schema()},
-        },
-        "required": ["pins"],
-    },
-    ExtractionTask.REQUIREMENTS: {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {"requirements": {"type": "array", "items": _requirement_schema()}},
-        "required": ["requirements"],
-    },
+    ExtractionTask.IDENTITY: _record_schema("IdentityResult", part=(PartIdentity | None, ...)),
+    ExtractionTask.PINMAP: _record_schema(
+        "PinResult", part_id=(str | None, None), pins=(list[PinDefinition], ...)
+    ),
+    ExtractionTask.REQUIREMENTS: _record_schema(
+        "RequirementsResult", requirements=(list[Requirement], ...)
+    ),
     ExtractionTask.CAPABILITY_SUMMARY: {
         "type": "object",
         "additionalProperties": False,

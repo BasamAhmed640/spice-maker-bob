@@ -321,6 +321,109 @@ def test_convergence_failure_in_the_log_is_unknown(
     assert report.counts()["PASS"] == 0 and report.counts()["FAIL"] == 0
 
 
+def test_a_deck_the_simulator_rejects_names_the_simulators_own_error(
+    monkeypatch: pytest.MonkeyPatch, spec: SpecSet, tmp_path: Path
+) -> None:
+    """A model the simulator cannot even parse must say what the simulator said.
+
+    This is the feedback the authoring agent reads on its next turn: without the
+    simulator's own line it knows only that no output appeared.
+    """
+    lib = write_regulator_library(tmp_path / "buck.lib", [SUBCKT])
+    log = tmp_path / "deck.log"
+    log.write_text(
+        "Circuit: deck.cir\n"
+        "deck.cir(16): This sub-circuit cannot be instantiated because it contains these "
+        "syntax errors:\n"
+        "buck.lib(408): Expected a sequence <directive or device instantiation end of line> "
+        "here.\n",
+        encoding="utf-8",
+    )
+
+    def fake_run_batch(exe, deck, run_dir, *, timeout_s, **kwargs):
+        return BatchResult(
+            deck=Path(deck),
+            run_dir=Path(run_dir),
+            exit_code=1,
+            stdout="",
+            stderr="",
+            wall_s=0.01,
+            timed_out=False,
+            raw_path=None,
+            log_path=log,
+        )
+
+    monkeypatch.setattr(harness_mod, "run_batch", fake_run_batch)
+    single = dataclasses.replace(spec, characteristics=(spec.by_id("REQ_TPS54320_ELEC_004"),))
+    report = run_harness(
+        model_lib=lib,
+        subckt=SUBCKT,
+        spec=single,
+        workdir=tmp_path / "work",
+        ltspice=tmp_path / "LTspice.exe",
+    )
+
+    outcome = report.outcomes[0]
+    assert outcome.status == Status.UNKNOWN.value
+    reason = outcome.unknown_reason or ""
+    assert reason.startswith("sim_output_unreadable")
+    assert "Expected a sequence" in reason, reason
+    assert "buck.lib(408)" in reason, reason
+    assert "Expected a sequence" in report.feedback(), report.feedback()
+
+
+def test_an_empty_raw_file_still_names_what_the_simulator_said(
+    monkeypatch: pytest.MonkeyPatch, spec: SpecSet, tmp_path: Path
+) -> None:
+    """A ``.raw`` that exists but holds no data is the same dead end — and says why too.
+
+    LTspice writes the file before it fails, so the run reads as "no usable output";
+    the log is the only place the author can learn what is wrong. This is the log of a
+    real installed-app run: two source-driven nodes, reported without any prefix of its
+    own, and unseen by the author until this line was kept.
+    """
+    lib = write_regulator_library(tmp_path / "buck.lib", [SUBCKT])
+    log = tmp_path / "deck.log"
+    log.write_text(
+        "Voltage source V_en and voltage source B_enable are paralleled making an "
+        "over-defined circuit matrix.\n"
+        "You will need to correct the circuit or add some series resistance.\n",
+        encoding="utf-8",
+    )
+    raw = tmp_path / "deck.raw"
+    raw.write_bytes(b"")
+
+    def fake_run_batch(exe, deck, run_dir, *, timeout_s, **kwargs):
+        return BatchResult(
+            deck=Path(deck),
+            run_dir=Path(run_dir),
+            exit_code=1,
+            stdout="",
+            stderr="",
+            wall_s=0.01,
+            timed_out=False,
+            raw_path=raw,
+            log_path=log,
+        )
+
+    monkeypatch.setattr(harness_mod, "run_batch", fake_run_batch)
+    single = dataclasses.replace(spec, characteristics=(spec.by_id("REQ_TPS54320_ELEC_004"),))
+    report = run_harness(
+        model_lib=lib,
+        subckt=SUBCKT,
+        spec=single,
+        workdir=tmp_path / "work",
+        ltspice=tmp_path / "LTspice.exe",
+    )
+
+    outcome = report.outcomes[0]
+    assert outcome.status == Status.UNKNOWN.value
+    reason = outcome.unknown_reason or ""
+    assert "over-defined circuit matrix" in reason, reason
+    assert "You will need to correct the circuit" in reason, reason
+    assert "over-defined circuit matrix" in report.feedback(), report.feedback()
+
+
 def test_cancelled_harness_reports_cancelled(spec: SpecSet, tmp_path: Path) -> None:
     import threading
 
