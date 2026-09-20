@@ -89,7 +89,7 @@ from boardmodeler.authoring.backends import (
     UnavailableBackend,
 )
 from boardmodeler.authoring.card import write_deliverables, write_symbol_for
-from boardmodeler.authoring.harness import HarnessReport
+from boardmodeler.authoring.harness import HarnessReport, judge_characteristic
 from boardmodeler.authoring.loop import (
     BuildOutcome,
     BuildRequest,
@@ -2004,9 +2004,11 @@ class _Run:
                 continue
             outcome = outcomes.get(req_id)
             measured = "-"
+            status = Status.UNKNOWN.value
             if outcome is not None:
+                status, _detail = judge_characteristic(characteristic, outcome)
                 measured = outcome.judged or "-"
-                if outcome.status == Status.UNKNOWN.value and outcome.unknown_reason:
+                if status == Status.UNKNOWN.value and outcome.unknown_reason:
                     measured = f"- ({outcome.unknown_reason})"
             rows.append(
                 RowOutcome(
@@ -2014,7 +2016,7 @@ class _Run:
                     statement=characteristic.statement,
                     required=required,
                     measured=measured,
-                    status=Status.UNKNOWN.value if outcome is None else outcome.status,
+                    status=status,
                     page=characteristic.source_page,
                 )
             )

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from boardmodeler.authoring.harness import judge_characteristic
 from boardmodeler.models.symbolism import symbol_text, validate_symbol
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -37,13 +38,17 @@ _STATUS_ORDER = {"FAIL": 0, "UNKNOWN": 1, "PASS": 2, "NOT_APPLICABLE": 3}
 
 
 def _status_by_characteristic(
-    report: HarnessReport,
+    spec: SpecSet, report: HarnessReport
 ) -> dict[str, tuple[str, str, dict[str, float | str]]]:
-    """``char_id -> (status, detail, measured)`` from the report's probe outcomes."""
+    """``char_id -> (status, detail, measured)``, re-judged per characteristic."""
+    outcomes = {char_id: outcome for outcome in report.outcomes for char_id in outcome.char_ids}
     judged: dict[str, tuple[str, str, dict[str, float | str]]] = {}
-    for outcome in report.outcomes:
-        for char_id in outcome.char_ids:
-            judged[char_id] = (outcome.status, outcome.detail, dict(outcome.measured))
+    for characteristic in spec.characteristics:
+        outcome = outcomes.get(characteristic.char_id)
+        if outcome is None:
+            continue
+        status, detail = judge_characteristic(characteristic, outcome)
+        judged[characteristic.char_id] = (status, detail, dict(outcome.measured))
     return judged
 
 
@@ -84,7 +89,7 @@ def render_card(
     reinforcement: object | None = None,
 ) -> str:
     """The model card, findings first, every number taken from an observed outcome."""
-    judged = _status_by_characteristic(report)
+    judged = _status_by_characteristic(spec, report)
     counts = report.counts()
     covered = spec.covered()
     uncovered = spec.uncovered()

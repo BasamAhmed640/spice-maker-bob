@@ -599,6 +599,12 @@ transport in `providers/http_inference.py` and `providers/bob.py`: Bob Direct it
 OpenAI-compatible chat-completions shape for datasheet extraction, so that code is Bob's own path, not
 another vendor's.
 
+**Superseded (2026-09-19).** The shared core re-introduced `authoring/api_backend.py` with
+`build_api_backend` and the catalog's `openai`/`anthropic`/`google` wires, and restored
+`model build --backend api --model --max-tokens`; this tree still ships the Bob-only selection
+through `build_flavor.BOB_ONLY`, which filters `agent_providers.CATALOG` to the Bob entry at
+import. The paragraph above records the earlier third-pass state, not current behavior.
+
 
 ## D-016 — Shared, measured model iteration and explicit I/O scope (2026-09-19)
 

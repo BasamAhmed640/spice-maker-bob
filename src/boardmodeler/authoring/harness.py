@@ -35,7 +35,7 @@ from boardmodeler.simulation.ltspice import BatchResult, run_batch
 from boardmodeler.simulation.measures import diagnose
 from boardmodeler.simulation.raw import RawFile, RawFormatError, read_raw
 
-__all__ = ["HarnessReport", "ProbeOutcome", "run_harness"]
+__all__ = ["HarnessReport", "ProbeOutcome", "judge_characteristic", "run_harness"]
 
 #: Relative slack applied to a declared limit before it is called a violation:
 #: one part per million of the limit magnitude absorbs ``.raw`` float rounding.
@@ -256,6 +256,22 @@ def _judge(char: Characteristic, key: str, value: float) -> tuple[str, str, str 
         f"{label}: the characteristic declares no numeric limit to judge {key} against",
         None,
     )
+
+
+def judge_characteristic(characteristic: Characteristic, outcome: ProbeOutcome) -> tuple[str, str]:
+    """``(status, detail)`` for one characteristic judged from its probe's measurement.
+
+    One probe case can carry several characteristics at the same operating point, and the
+    outcome's aggregate status is the worst of them; re-judging from the same measured
+    number keeps every row's verdict its own. An outcome with no measurement falls back to
+    the aggregate status and detail.
+    """
+    try:
+        key, value = judge_value(outcome.probe_id, outcome.measured)
+    except ProbeError, ValueError:
+        return outcome.status, outcome.detail
+    status, detail, _cause = _judge(characteristic, key, value)
+    return status, detail
 
 
 def _simulator_said(log) -> str:

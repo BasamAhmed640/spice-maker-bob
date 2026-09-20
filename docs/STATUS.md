@@ -318,6 +318,13 @@ test for this defect).
 
 ### De-branding and the Bob-specific transport (2026-09-18, third pass)
 
+**Superseded (2026-09-19):** the shared core now carries the HTTP agent transport and the
+full provider catalog again, and this tree selects Bob with `build_flavor.BOB_ONLY`; the
+rows below record the earlier third pass, not current behavior. Current: `authoring/api_backend.py`
+with `build_api_backend`, the catalog's `openai`/`anthropic`/`google` wires, and
+`model build --backend api --model --max-tokens` are present, and the production catalog is
+filtered to Bob at import.
+
 The owner asked this tree to stop presenting itself as a trimmed build, and to carry no other
 provider's API-key handling at all.
 

@@ -1035,6 +1035,122 @@ def test_each_operating_point_keeps_its_own_row_status(
     assert by_id["REQ_VOH_33"].measured != by_id["REQ_VOH_18"].measured
 
 
+def _split_voh_inputs(tmp_path: Path) -> tuple[Path, Path]:
+    """Two VOH rows at one operating point: a min row that passes and a typ row that fails."""
+
+    def row(req_id: str, class_: str, limits: dict) -> dict:
+        return {
+            "req_id": req_id,
+            "applies_to": "SYNTH_IO",
+            "kind": "ELECTRICAL",
+            "class": class_,
+            "criticality": "IMPORTANT",
+            "origin": "TEST_FIXTURE",
+            "statement": "High-level output voltage VOH at VCC = 3.3 V.",
+            "limits": limits,
+            "conditions": [
+                {
+                    "text": "VCC = 3.3 V, IOH = -2 mA",
+                    "parameter_overrides": {"io_vcc": 3.3, "io_load_a": -0.002},
+                }
+            ],
+            "signal_refs": ["Y"],
+            "evidence": [
+                {
+                    "doc_id": "DOC_SYNTH_IO",
+                    "excerpt": "VOH at VCC = 3.3 V",
+                    "extraction": "synthetic_fixture",
+                }
+            ],
+        }
+
+    requirements = {
+        "document": {"doc_id": "DOC_SYNTH_IO"},
+        "pin_map": [],
+        "requirements": [
+            row("REQ_VOH_MIN", "DOCUMENTED_LIMIT", {"min": 2.4, "unit": "V"}),
+            row("REQ_VOH_TYP", "TYPICAL_VALUE", {"typ": 3.2, "unit": "V"}),
+        ],
+    }
+    params = {"io_vcc": 3.3, "io_load_a": 0.002, "io_inverting": 0, "io_input_high": 3.3}
+    bindings = {
+        "part": "SYNTH_IO",
+        "subckt": "SYNTH_IO",
+        "doc_id": "DOC_SYNTH_IO",
+        "bindings": [
+            {"req_id": "REQ_VOH_MIN", "probe": "io_voh", "params": dict(params)},
+            {"req_id": "REQ_VOH_TYP", "probe": "io_voh", "params": dict(params)},
+        ],
+    }
+    requirements_path = tmp_path / "split-req.json"
+    bindings_path = tmp_path / "split-bind.json"
+    requirements_path.write_text(json.dumps(requirements), encoding="utf-8")
+    bindings_path.write_text(json.dumps(bindings), encoding="utf-8")
+    return requirements_path, bindings_path
+
+
+def test_rows_sharing_one_case_get_their_own_verdicts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Two rows at one operating point are judged separately, from one simulation."""
+    from boardmodeler.authoring import loop as loop_module
+    from boardmodeler.authoring.harness import HarnessReport, ProbeOutcome
+
+    requirements_path, bindings_path = _split_voh_inputs(tmp_path)
+    calls: list[str] = []
+
+    def canned_harness(*, model_lib, subckt, spec, workdir, ltspice, timeout_s=120.0, cancel=None):
+        del model_lib, subckt, workdir, ltspice, timeout_s, cancel
+        calls.append("harness")
+        outcome = ProbeOutcome(
+            probe_id="io_voh",
+            status="FAIL",
+            measured={"io_voltage_v": 2.7},
+            detail="REQ_VOH_MIN: pass; REQ_VOH_TYP: fail",
+            unknown_reason=None,
+            run_dir="canned",
+            char_ids=("REQ_VOH_MIN", "REQ_VOH_TYP"),
+            judged="io_voltage_v = 2.7 V",
+        )
+        return HarnessReport(
+            part=spec.part, model_sha256="a" * 64, spec_digest=spec.digest(), outcomes=(outcome,)
+        )
+
+    monkeypatch.setattr(loop_module, "run_harness", canned_harness)
+    monkeypatch.setattr(engine, "locate", lambda explicit=None: fake_ltspice(tmp_path))
+
+    def script(turn: int, workdir: Path, prompt: str) -> None:
+        del turn, prompt
+        model_dir = workdir / "model"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        (model_dir / "SYNTH_IO.lib").write_text(
+            ".subckt SYNTH_IO VCC A Y GND\nR1 Y 0 1k\n.ends SYNTH_IO\n", encoding="utf-8"
+        )
+
+    use_backend(monkeypatch, ScriptedBackend(script))
+    result, _events, _wall = run(
+        tmp_path,
+        subckt="SYNTH_IO",
+        requirements_json=requirements_path,
+        bindings_json=bindings_path,
+        max_iterations=1,
+        reinforce=False,
+    )
+
+    by_id = {row.req_id: row for row in result.rows}
+    assert by_id["REQ_VOH_MIN"].status == "PASS", result.detail
+    assert by_id["REQ_VOH_TYP"].status == "FAIL"
+    assert calls == ["harness"], "one shared operating point means one simulation"
+
+    card = (tmp_path / "out" / "MODEL_CARD.md").read_text(encoding="utf-8")
+    statuses = {
+        line.split("|")[1].strip().strip("`"): line.split("|")[5].strip()
+        for line in card.splitlines()
+        if line.startswith("| `REQ_VOH")
+    }
+    assert statuses == {"REQ_VOH_MIN": "PASS", "REQ_VOH_TYP": "FAIL"}
+
+
 # --------------------------------------------------------------------------- #
 # (g) one judge event per turn, in order, matching the final report
 
