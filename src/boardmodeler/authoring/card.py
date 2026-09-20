@@ -10,11 +10,13 @@ were never reachable by simulation.
 from __future__ import annotations
 
 import shutil
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from boardmodeler.authoring.harness import judge_characteristic
+from boardmodeler.domain.enums import Status
 from boardmodeler.models.symbolism import symbol_text, validate_symbol
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -35,6 +37,14 @@ __all__ = [
 DELIVERABLE_FILES = ("MODEL_CARD.md", "example.cir", "install.md")
 
 _STATUS_ORDER = {"FAIL": 0, "UNKNOWN": 1, "PASS": 2, "NOT_APPLICABLE": 3}
+
+
+def status_tally(statuses: Iterable[str]) -> dict[str, int]:
+    """Per-row status counts in the same five-key shape as a probe tally."""
+    tally = {status.value: 0 for status in Status}
+    for status in statuses:
+        tally[status] = tally.get(status, 0) + 1
+    return tally
 
 
 def _status_by_characteristic(
@@ -90,15 +100,16 @@ def render_card(
 ) -> str:
     """The model card, findings first, every number taken from an observed outcome."""
     judged = _status_by_characteristic(spec, report)
-    counts = report.counts()
     covered = spec.covered()
     uncovered = spec.uncovered()
 
     rows: list[tuple[int, str, str]] = []
+    row_statuses: list[str] = []
     for characteristic in covered:
         status, detail, measured = judged.get(
             characteristic.char_id, ("UNKNOWN", "no probe reported for this characteristic", {})
         )
+        row_statuses.append(status)
         rows.append(
             (
                 _STATUS_ORDER.get(status, 1),
@@ -115,6 +126,7 @@ def render_card(
             )
         )
     rows.sort(key=lambda row: (row[0], row[1]))
+    counts = status_tally(row_statuses)
 
     lines: list[str] = [
         f"# {part} — LTspice model card",

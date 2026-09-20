@@ -88,7 +88,7 @@ from boardmodeler.authoring.backends import (
     ScriptedBackend,
     UnavailableBackend,
 )
-from boardmodeler.authoring.card import write_deliverables, write_symbol_for
+from boardmodeler.authoring.card import status_tally, write_deliverables, write_symbol_for
 from boardmodeler.authoring.harness import HarnessReport, judge_characteristic
 from boardmodeler.authoring.loop import (
     BuildOutcome,
@@ -2127,7 +2127,7 @@ def make_model(
         lib_path=run.lib_path,
         asy_path=run.asy_path,
         rows=rows,
-        counts=dict(run.report.counts()),
+        counts=status_tally(row.status for row in rows),
         stages=tuple(log.events),
         request=request,
     )

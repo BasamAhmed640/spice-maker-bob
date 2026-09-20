@@ -21,7 +21,7 @@ import pytest
 from boardmodeler.authoring import harness as harness_mod
 from boardmodeler.authoring.harness import HarnessReport, ProbeOutcome, run_harness
 from boardmodeler.authoring.probes import ProbeError, model_ports
-from boardmodeler.authoring.spec import SpecSet, load_tps54320_spec
+from boardmodeler.authoring.spec import Characteristic, SpecSet, load_tps54320_spec
 from boardmodeler.domain.enums import Status
 from boardmodeler.models.regulator import write_regulator_library
 from boardmodeler.simulation.ltspice import BatchResult
@@ -496,6 +496,37 @@ def test_empty_report_is_not_a_pass() -> None:
     report = HarnessReport(part="P", model_sha256="", spec_digest="d" * 64, outcomes=())
     assert not report.passed()
     assert report.feedback() == ""
+
+
+def test_judge_characteristic_never_upgrades_unavailable_evidence() -> None:
+    char = Characteristic(
+        char_id="REQ_X",
+        statement="Output high",
+        unit="V",
+        min_value=2.4,
+        max_value=None,
+        typ_value=None,
+        target=None,
+        source_page=None,
+        excerpt="",
+        req_class="DOCUMENTED_LIMIT",
+        probe="io_voh",
+        probe_params={},
+        not_testable_reason=None,
+    )
+    partial = ProbeOutcome(
+        probe_id="io_voh",
+        status="UNKNOWN",
+        measured={"io_voltage_v": 3.0},
+        detail="run_timeout",
+        unknown_reason="run_timeout",
+        run_dir="canned",
+        char_ids=("REQ_X",),
+    )
+    assert harness_mod.judge_characteristic(char, partial) == ("UNKNOWN", "run_timeout")
+
+    shared = dataclasses.replace(partial, unknown_reason="characteristic_without_numeric_limit")
+    assert harness_mod.judge_characteristic(char, shared)[0] == "PASS"
 
 
 def test_model_ports_is_reused_for_the_harness(tmp_path: Path) -> None:

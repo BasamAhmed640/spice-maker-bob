@@ -803,7 +803,7 @@ def _cmd_model(args: argparse.Namespace) -> int:
         return _cmd_model_test(args)
     if action == "install":
         return _cmd_model_install(args)
-    print("error: specify a model subcommand: build, test or install")
+    print("error: specify a model subcommand: build, test, install or import")
     return 2
 
 

@@ -340,7 +340,13 @@ def test_scenario_c_missing_ltspice_is_blocked_and_never_runs_the_agent(
     assert len(result.rows) == 38
     assert sum(row.status == "UNKNOWN" for row in result.rows) == 9
     assert sum(row.status == "NOT_APPLICABLE" for row in result.rows) == 29
-    assert sum(result.counts.values()) == 0
+    assert result.counts == {
+        "PASS": 0,
+        "FAIL": 0,
+        "UNKNOWN": 9,
+        "BLOCKED": 0,
+        "NOT_APPLICABLE": 29,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -1036,7 +1042,7 @@ def test_each_operating_point_keeps_its_own_row_status(
 
 
 def _split_voh_inputs(tmp_path: Path) -> tuple[Path, Path]:
-    """Two VOH rows at one operating point: a min row that passes and a typ row that fails."""
+    """Split VOH rows plus a missing-outcome row, all at one operating point each."""
 
     def row(req_id: str, class_: str, limits: dict) -> dict:
         return {
@@ -1070,6 +1076,7 @@ def _split_voh_inputs(tmp_path: Path) -> tuple[Path, Path]:
         "requirements": [
             row("REQ_VOH_MIN", "DOCUMENTED_LIMIT", {"min": 2.4, "unit": "V"}),
             row("REQ_VOH_TYP", "TYPICAL_VALUE", {"typ": 3.2, "unit": "V"}),
+            row("REQ_VOL_MISSING", "DOCUMENTED_LIMIT", {"max": 0.4, "unit": "V"}),
         ],
     }
     params = {"io_vcc": 3.3, "io_load_a": 0.002, "io_inverting": 0, "io_input_high": 3.3}
@@ -1080,6 +1087,7 @@ def _split_voh_inputs(tmp_path: Path) -> tuple[Path, Path]:
         "bindings": [
             {"req_id": "REQ_VOH_MIN", "probe": "io_voh", "params": dict(params)},
             {"req_id": "REQ_VOH_TYP", "probe": "io_voh", "params": dict(params)},
+            {"req_id": "REQ_VOL_MISSING", "probe": "io_vol", "params": dict(params)},
         ],
     }
     requirements_path = tmp_path / "split-req.json"
@@ -1092,7 +1100,7 @@ def _split_voh_inputs(tmp_path: Path) -> tuple[Path, Path]:
 def test_rows_sharing_one_case_get_their_own_verdicts(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Two rows at one operating point are judged separately, from one simulation."""
+    """Rows sharing one probe case are judged separately, from one simulation."""
     from boardmodeler.authoring import loop as loop_module
     from boardmodeler.authoring.harness import HarnessReport, ProbeOutcome
 
@@ -1140,15 +1148,29 @@ def test_rows_sharing_one_case_get_their_own_verdicts(
     by_id = {row.req_id: row for row in result.rows}
     assert by_id["REQ_VOH_MIN"].status == "PASS", result.detail
     assert by_id["REQ_VOH_TYP"].status == "FAIL"
+    assert by_id["REQ_VOL_MISSING"].status == "UNKNOWN"
     assert calls == ["harness"], "one shared operating point means one simulation"
+    assert result.counts == {
+        "PASS": 1,
+        "FAIL": 1,
+        "UNKNOWN": 1,
+        "BLOCKED": 0,
+        "NOT_APPLICABLE": 0,
+    }
 
     card = (tmp_path / "out" / "MODEL_CARD.md").read_text(encoding="utf-8")
     statuses = {
         line.split("|")[1].strip().strip("`"): line.split("|")[5].strip()
         for line in card.splitlines()
-        if line.startswith("| `REQ_VOH")
+        if line.startswith("| `REQ_VOH") or line.startswith("| `REQ_VOL")
     }
-    assert statuses == {"REQ_VOH_MIN": "PASS", "REQ_VOH_TYP": "FAIL"}
+    assert statuses == {
+        "REQ_VOH_MIN": "PASS",
+        "REQ_VOH_TYP": "FAIL",
+        "REQ_VOL_MISSING": "UNKNOWN",
+    }
+    totals = next(line for line in card.splitlines() if line.startswith("**Totals:**"))
+    assert "1 pass" in totals and "1 fail" in totals and "1 unknown" in totals, totals
 
 
 # --------------------------------------------------------------------------- #
@@ -1166,7 +1188,13 @@ def test_scenario_g_every_turn_reports_its_own_counts_and_the_last_matches(
     assert [event.counts["turn"] for event in turns] == [1, 2]
     assert turns[0].counts["FAIL"] >= 1 and "failing: vref" in turns[0].detail
     assert turns[1].counts["FAIL"] == 0
-    assert turns[1].counts == {**result.counts, "turn": 2}
+    from boardmodeler.authoring.harness import HarnessReport
+
+    final_report = HarnessReport.from_json(
+        (tmp_path / "out" / "harness-report.json").read_text(encoding="utf-8")
+    )
+    assert turns[1].counts == {**final_report.counts(), "turn": 2}
+    assert result.counts["PASS"] == sum(row.status == "PASS" for row in result.rows)
     assert result.status == "PASS", result.detail
 
 
@@ -1394,7 +1422,8 @@ def test_a_capped_run_with_every_row_measured_wrong_is_fail(
 
     assert result.status == "FAIL", result.detail
     assert "outside the datasheet limits" in result.detail and "vref" in result.detail
-    assert result.counts["FAIL"] == 1 and result.counts["UNKNOWN"] == 0
+    assert result.counts["FAIL"] == 1
+    assert result.counts["UNKNOWN"] == 8, "the rows the canned harness did not report are gaps"
     failed = next(row for row in result.rows if row.req_id == VREF_ID)
     assert failed.status == "FAIL" and failed.measured == "v_fb = 0.5 V"
 

@@ -47,6 +47,11 @@ _LIMIT_SLACK = 1e-6
 _TYPICAL_TOLERANCE = 0.10
 
 
+#: Outcome reason for a case where some rows declare no numeric limit: the measurement
+#: is valid and still judges the rows that do.
+_NO_NUMERIC_LIMIT_REASON = "characteristic_without_numeric_limit"
+
+
 @dataclass(frozen=True)
 class ProbeOutcome:
     """What one probe measured, and what the harness concluded from it."""
@@ -263,9 +268,15 @@ def judge_characteristic(characteristic: Characteristic, outcome: ProbeOutcome) 
 
     One probe case can carry several characteristics at the same operating point, and the
     outcome's aggregate status is the worst of them; re-judging from the same measured
-    number keeps every row's verdict its own. An outcome with no measurement falls back to
-    the aggregate status and detail.
+    number keeps every row's verdict its own. An unavailable or invalid run stays UNKNOWN
+    (or BLOCKED) even if a partial measurement is present, so it is never upgraded to
+    PASS; only a valid shared measurement that a sibling row could not use (no numeric
+    limit) is re-judged for the rows that can.
     """
+    if outcome.status in (Status.UNKNOWN.value, Status.BLOCKED.value) and (
+        outcome.unknown_reason != _NO_NUMERIC_LIMIT_REASON
+    ):
+        return outcome.status, outcome.detail
     try:
         key, value = judge_value(outcome.probe_id, outcome.measured)
     except ProbeError, ValueError:
@@ -412,9 +423,7 @@ def run_harness(
                 measured={name: float(value) for name, value in measured.items()},
                 detail="; ".join(verdicts),
                 unknown_reason=(
-                    "characteristic_without_numeric_limit"
-                    if status == Status.UNKNOWN.value
-                    else None
+                    _NO_NUMERIC_LIMIT_REASON if status == Status.UNKNOWN.value else None
                 ),
                 run_dir=str(run_dir),
                 char_ids=tuple(char.char_id for char in chars),
