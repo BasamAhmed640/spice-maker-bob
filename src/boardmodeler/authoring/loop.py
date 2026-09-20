@@ -26,10 +26,12 @@ A turn makes progress when changed model bytes reduce unknown rows, failing rows
 or normalized numeric error, in that order. Ties and cycles consume stall patience.
 The best observed candidate is retained; every attempted revision has its own history.
 
-``turn_timeout_s`` is ``None`` by default, so an agent invocation is unbounded.
-When a caller sets it, one invocation is bounded, the timeout is reported as the
-turn's own reason (``turn_timeout: ...``), and the turn is spent exactly like any
-other: the harness still judges the bytes that were on disk.
+``turn_timeout_s`` bounds one agent invocation. When it is ``None`` the product
+``api`` path (including a Bob API key) applies its own finite 600 s default, and
+an explicit value overrides that; the loop API and the direct Bob CLI path stay
+unbounded when called with ``None``. A bounded invocation reports the timeout as
+the turn's own reason (``turn_timeout: ...``), and the turn is spent exactly like
+any other: the harness still judges the bytes that were on disk.
 """
 
 from __future__ import annotations
@@ -307,10 +309,10 @@ class BuildRequest:
 
     ``max_iterations=None`` (the default) runs until the harness is satisfied or
     the agent stalls; a positive value caps the turns. ``stall_patience`` is how
-    many consecutive no-progress turns end the build. ``turn_timeout_s`` is
-    ``None`` by default — an agent invocation is unbounded — and bounds one
-    invocation when the caller sets it. ``timeout_s`` is the simulator's per-run
-    limit, not a limit on the build.
+    many consecutive no-progress turns end the build. ``turn_timeout_s`` bounds one
+    agent invocation; when it is ``None`` the product ``api`` path (including a Bob
+    API key) applies its own finite 600 s default, and an explicit value overrides
+    that. ``timeout_s`` is the simulator's per-run limit, not a limit on the build.
     """
 
     part: str
@@ -663,7 +665,12 @@ def revalidate_candidate(
     return None
 
 
-def build_model(request: BuildRequest, cancel: threading.Event | None = None) -> BuildOutcome:
+def build_model(
+    request: BuildRequest,
+    cancel: threading.Event | None = None,
+    *,
+    candidate_revalidated: bool = False,
+) -> BuildOutcome:
     """Run the author loop until the harness is satisfied or the agent stalls.
 
     ``max_iterations`` is ``None`` by default: there is no wall-clock stop and no
@@ -676,6 +683,10 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
     re-hashed after every turn, the model file must exist, and the harness is the
     only thing that can produce PASS. Stopping on a cap or a stall is UNKNOWN with
     the last report and the still-failing probes, never a pass by attrition.
+
+    ``candidate_revalidated`` says the caller already judged this candidate with
+    one harness run (for a cache entry this process did not observe), so the
+    precheck is not repeated here.
     """
     workdir = Path(request.workdir)
     from boardmodeler.authoring.validation_cache import (
@@ -716,7 +727,13 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
             history,
             "validated_cache_hit: observed artifacts verified; zero author turns",
         )
-    if cached is None and key is not None and path.is_file() and not (cancel and cancel.is_set()):
+    if (
+        not candidate_revalidated
+        and cached is None
+        and key is not None
+        and path.is_file()
+        and not (cancel and cancel.is_set())
+    ):
         # A candidate left by an earlier run was not observed by this process, so its
         # cache entry is not evidence. One LTspice run re-judges it for no author turn,
         # keeping a passing candidate a PASS without trusting files the agent can write.

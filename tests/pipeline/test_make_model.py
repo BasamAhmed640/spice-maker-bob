@@ -25,7 +25,7 @@ from boardmodeler.authoring.backends import (
 )
 from boardmodeler.authoring.spec import load_tps54320_spec
 from boardmodeler.domain.enums import ProviderKind
-from boardmodeler.domain.records import ProviderIdentity, Requirement
+from boardmodeler.domain.records import Condition, ProviderIdentity, Requirement
 from boardmodeler.models.library import subckt_ports
 from boardmodeler.models.regulator import write_regulator_library
 from boardmodeler.models.symbolism import symbol_pin_orders, symbol_text, validate_symbol
@@ -655,6 +655,35 @@ def test_a_non_logic_mention_of_noninverting_does_not_seed_polarity() -> None:
     assert entry["probe"] is None
 
 
+def test_polarity_requires_an_output_assertion_not_an_input_pin_description() -> None:
+    entry = _voh_entry(
+        _synthetic_io_rows(polarity_excerpt="Y is the output. A is the noninverting input.")
+    )
+    assert entry["probe"] is None
+
+
+def test_a_unicode_dash_does_not_invert_a_noninverting_output() -> None:
+    entry = _voh_entry(_synthetic_io_rows(polarity_excerpt="Y is a non\u2013inverting output."))
+    assert entry["probe"] == "io_voh"
+    assert entry["params"]["io_inverting"] == 0.0
+
+
+def test_a_lost_hyphen_does_not_invert_a_noninverting_output() -> None:
+    for excerpt in (
+        "Y is a non inverting output.",
+        "Y is a non\ninverting output.",
+    ):
+        entry = _voh_entry(_synthetic_io_rows(polarity_excerpt=excerpt))
+        assert entry["probe"] == "io_voh", excerpt
+        assert entry["params"]["io_inverting"] == 0.0, excerpt
+
+
+def test_a_buffer_is_output_polarity_evidence_too() -> None:
+    entry = _voh_entry(_synthetic_io_rows(polarity_excerpt="Y is a noninverting buffer."))
+    assert entry["probe"] == "io_voh"
+    assert entry["params"]["io_inverting"] == 0.0
+
+
 def test_conflicting_polarity_evidence_leaves_the_row_a_gap() -> None:
     rows = _synthetic_io_rows()
     polarity = rows[1]
@@ -675,32 +704,70 @@ def test_conflicting_polarity_evidence_leaves_the_row_a_gap() -> None:
     assert _voh_entry(rows)["probe"] is None
 
 
-def test_a_shutdown_current_row_that_mentions_ioff_is_not_buffer_leakage() -> None:
-    """The regulator shutdown rule wins over the buffer power-off-leakage alias."""
-    row = Requirement.model_validate(
-        {
-            "req_id": "REQ-SHUT",
-            "applies_to": "SYNTH_REG",
-            "kind": "ELECTRICAL",
-            "class": "DOCUMENTED_LIMIT",
-            "criticality": "IMPORTANT",
-            "origin": "DOCUMENT",
-            "statement": "Shutdown current IOFF is at most 1 uA at VIN = 12 V.",
-            "limits": {"max": 1e-6, "unit": "A"},
-            "conditions": [{"text": "VIN = 12 V", "parameter_overrides": {}}],
-            "signal_refs": [],
-            "evidence": [
-                {
-                    "doc_id": "DOC_SYNTH",
-                    "excerpt": "Shutdown current IOFF is at most 1 uA at VIN = 12 V.",
-                    "extraction": "embedded_text",
-                }
-            ],
-            "citation_verified": True,
-        }
+def _io_row(
+    req_id: str,
+    statement: str,
+    unit: str,
+    *,
+    minimum: float | None = None,
+    maximum: float | None = None,
+    conditions: list[Condition] | None = None,
+) -> Requirement:
+    """One datasheet-shaped row copied from the fixture's first requirement."""
+    base = fixture_requirements()[0]
+    evidence = base.evidence[0].model_copy(update={"excerpt": statement})
+    return base.model_copy(
+        deep=True,
+        update={
+            "req_id": req_id,
+            "statement": statement,
+            "limits": base.limits.model_copy(
+                update={"min": minimum, "typ": None, "max": maximum, "unit": unit}
+            ),
+            "conditions": conditions or [],
+            "evidence": [evidence],
+        },
     )
-    entry = bind_requirements([row])[0]
-    assert entry["probe"] == "shutdown_current"
+
+
+def test_shutdown_ioff_binds_to_the_regulator_and_power_off_leakage_to_the_io_probe() -> None:
+    """``IOFF`` is ambiguous: ``shutdown`` disambiguates it to the regulator probe."""
+    shutdown = _io_row("REQ_SHUT", "Shutdown current IOFF is at most 1 uA", "A", maximum=1e-6)
+    leak = _io_row(
+        "REQ_LEAK",
+        "Power-off leakage current IOFF at VCC = 0 V",
+        "A",
+        maximum=5e-6,
+        conditions=[Condition(text="VCC = 0 V", parameter_overrides={"io_test_v": 3.3})],
+    )
+    bare = _io_row(
+        "REQ_BARE",
+        "Power-off leakage current at VCC = 0 V",
+        "A",
+        maximum=5e-6,
+        conditions=[Condition(text="VCC = 0 V", parameter_overrides={"io_test_v": 3.3})],
+    )
+
+    entries = {entry["req_id"]: entry for entry in bind_requirements([shutdown, leak, bare])}
+
+    assert entries["REQ_SHUT"]["probe"] == "shutdown_current"
+    assert entries["REQ_LEAK"]["probe"] == "io_power_off_leakage"
+    assert entries["REQ_LEAK"]["params"]["io_vcc"] == 0.0
+    assert entries["REQ_BARE"]["probe"] == "io_power_off_leakage"
+
+
+def test_a_powered_condition_is_not_a_power_off_leakage_row() -> None:
+    """A supply-current limit is not measured as output leakage by claiming IOFF."""
+    powered = _io_row(
+        "REQ_OFF_33",
+        "Off-state supply current IOFF is at most 1 uA at VCC = 3.3 V",
+        "A",
+        maximum=1e-6,
+        conditions=[Condition(text="VCC = 3.3 V", parameter_overrides={"io_test_v": 3.3})],
+    )
+    entry = bind_requirements([powered])[0]
+    assert entry["probe"] is None
+    assert "condition_invalid" in entry["not_testable_reason"]
 
 
 # --------------------------------------------------------------------------- #
@@ -805,6 +872,130 @@ def test_a_zero_coverage_spec_skips_author_reinforcement_and_simulation(
     assert result.status == "UNKNOWN"
     assert "no_covered_characteristics" in result.detail
     assert result.rows and all(row.status == "NOT_APPLICABLE" for row in result.rows)
+
+
+def _two_corner_voh_inputs(tmp_path: Path) -> tuple[Path, Path]:
+    """Two VOH rows that share one probe at different supply corners."""
+
+    def row(req_id: str, vcc: float) -> dict:
+        return {
+            "req_id": req_id,
+            "applies_to": "SYNTH_IO",
+            "kind": "ELECTRICAL",
+            "class": "DOCUMENTED_LIMIT",
+            "criticality": "IMPORTANT",
+            "origin": "TEST_FIXTURE",
+            "statement": f"High-level output voltage VOH at VCC = {vcc} V is a minimum of 1.5 V.",
+            "limits": {"min": 1.5, "unit": "V"},
+            "conditions": [
+                {
+                    "text": f"VCC = {vcc} V, IOH = -2 mA",
+                    "parameter_overrides": {"io_vcc": vcc, "io_load_a": -0.002},
+                }
+            ],
+            "signal_refs": ["Y"],
+            "evidence": [
+                {
+                    "doc_id": "DOC_SYNTH_IO",
+                    "excerpt": f"VOH at VCC = {vcc} V",
+                    "extraction": "synthetic_fixture",
+                }
+            ],
+        }
+
+    requirements = {
+        "document": {"doc_id": "DOC_SYNTH_IO"},
+        "pin_map": [],
+        "requirements": [row("REQ_VOH_33", 3.3), row("REQ_VOH_18", 1.8)],
+    }
+    bindings = {
+        "part": "SYNTH_IO",
+        "subckt": "SYNTH_IO",
+        "doc_id": "DOC_SYNTH_IO",
+        "bindings": [
+            {
+                "req_id": "REQ_VOH_33",
+                "probe": "io_voh",
+                "params": {
+                    "io_vcc": 3.3,
+                    "io_load_a": 0.002,
+                    "io_inverting": 0,
+                    "io_input_high": 3.3,
+                },
+            },
+            {
+                "req_id": "REQ_VOH_18",
+                "probe": "io_voh",
+                "params": {
+                    "io_vcc": 1.8,
+                    "io_load_a": 0.002,
+                    "io_inverting": 0,
+                    "io_input_high": 1.8,
+                },
+            },
+        ],
+    }
+    requirements_path = tmp_path / "two-corner-req.json"
+    bindings_path = tmp_path / "two-corner-bind.json"
+    requirements_path.write_text(json.dumps(requirements), encoding="utf-8")
+    bindings_path.write_text(json.dumps(bindings), encoding="utf-8")
+    return requirements_path, bindings_path
+
+
+def test_each_operating_point_keeps_its_own_row_status(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """One probe, two corners: each row shows the outcome that judged it, not its twin's."""
+    from boardmodeler.authoring import loop as loop_module
+    from boardmodeler.authoring.harness import HarnessReport, ProbeOutcome
+
+    requirements_path, bindings_path = _two_corner_voh_inputs(tmp_path)
+
+    def canned_harness(*, model_lib, subckt, spec, workdir, ltspice, timeout_s=120.0, cancel=None):
+        del model_lib, subckt, workdir, ltspice, timeout_s, cancel
+        verdicts = (("REQ_VOH_33", "FAIL", 1.2), ("REQ_VOH_18", "PASS", 1.7))
+        outcomes = tuple(
+            ProbeOutcome(
+                probe_id="io_voh",
+                status=status,
+                measured={"io_voltage_v": value},
+                detail=f"{char_id}: io_voltage_v = {value:.6g} V",
+                unknown_reason=None,
+                run_dir="canned",
+                char_ids=(char_id,),
+                judged=f"io_voltage_v = {value:.6g} V",
+            )
+            for char_id, status, value in verdicts
+        )
+        return HarnessReport(
+            part=spec.part, model_sha256="a" * 64, spec_digest=spec.digest(), outcomes=outcomes
+        )
+
+    monkeypatch.setattr(loop_module, "run_harness", canned_harness)
+    monkeypatch.setattr(engine, "locate", lambda explicit=None: fake_ltspice(tmp_path))
+
+    def script(turn: int, workdir: Path, prompt: str) -> None:
+        del turn, prompt
+        model_dir = workdir / "model"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        (model_dir / "SYNTH_IO.lib").write_text(
+            ".subckt SYNTH_IO VCC A Y GND\nR1 Y 0 1k\n.ends SYNTH_IO\n", encoding="utf-8"
+        )
+
+    use_backend(monkeypatch, ScriptedBackend(script))
+    result, _events, _wall = run(
+        tmp_path,
+        subckt="SYNTH_IO",
+        requirements_json=requirements_path,
+        bindings_json=bindings_path,
+        max_iterations=1,
+        reinforce=False,
+    )
+
+    by_id = {row.req_id: row for row in result.rows}
+    assert by_id["REQ_VOH_33"].status == "FAIL"
+    assert by_id["REQ_VOH_18"].status == "PASS"
+    assert by_id["REQ_VOH_33"].measured != by_id["REQ_VOH_18"].measured
 
 
 # --------------------------------------------------------------------------- #
@@ -1198,6 +1389,98 @@ def test_a_fresh_process_revalidates_before_reinforcement_or_the_author(
     second, _events2, _wall2 = run(tmp_path, datasheet=pdf, reinforce=True)
 
     assert second.status == "PASS", second.detail
+
+
+def test_a_run_author_revalidates_the_candidate_before_gathering_reinforcement(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A fresh process has no receipt: the existing pass is re-judged before any search."""
+    from boardmodeler.authoring.harness import HarnessReport
+    from boardmodeler.authoring.loop import BuildOutcome
+
+    spec = load_tps54320_spec(REQUIREMENTS, BINDINGS, part=PART, subckt=SUBCKT)
+    request = make_request(tmp_path)
+    run = engine._Run(request, engine._StageLog(None))
+    run.spec = spec
+    run.workdir = Path(request.out_dir) / engine.WORK_DIRNAME
+    run.backend = ScriptedBackend(template_script())
+    run.backend_name = "scripted"
+    monkeypatch.setattr(engine, "locate", lambda explicit=None: fake_ltspice(tmp_path))
+
+    report = HarnessReport(part=PART, model_sha256="a" * 64, spec_digest=spec.digest(), outcomes=())
+    sentinel = BuildOutcome(
+        status="PASS",
+        iterations=0,
+        report=report,
+        history=(),
+        detail="existing candidate revalidated by the simulator; zero author turns",
+    )
+    calls: list[str] = []
+
+    def fake_revalidate(request: object, cancel: object = None) -> BuildOutcome:
+        calls.append("revalidate")
+        return sentinel
+
+    monkeypatch.setattr(engine, "revalidate_candidate", fake_revalidate)
+
+    def forbidden(**kwargs: object) -> object:
+        raise AssertionError("reinforcement must not run before revalidation")
+
+    monkeypatch.setattr(engine, "reinforce", forbidden)
+
+    run.author(None)
+
+    assert calls == ["revalidate"]
+    assert run.outcome is sentinel
+
+
+def test_a_broken_candidate_is_prechecked_once_without_a_spurious_judge_turn(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An uncacheable UNKNOWN precheck must not make build_model simulate it again."""
+    from boardmodeler.authoring import loop as loop_module
+    from boardmodeler.authoring.harness import HarnessReport, ProbeOutcome
+
+    calls: list[str] = []
+
+    def canned_harness(*, model_lib, subckt, spec, workdir, ltspice, timeout_s=120.0, cancel=None):
+        del subckt, workdir, ltspice, timeout_s, cancel
+        calls.append(str(model_lib))
+        outcome = ProbeOutcome(
+            probe_id="vref",
+            status="UNKNOWN",
+            measured={},
+            detail="",
+            unknown_reason="model_lib_unreadable: no usable .subckt",
+            run_dir="canned",
+            char_ids=(VREF_ID,),
+        )
+        return HarnessReport(
+            part=spec.part, model_sha256="a" * 64, spec_digest=spec.digest(), outcomes=(outcome,)
+        )
+
+    monkeypatch.setattr(loop_module, "run_harness", canned_harness)
+    install = fake_ltspice(tmp_path)
+    install.path.write_bytes(b"")
+    monkeypatch.setattr(engine, "locate", lambda explicit=None: install)
+
+    stub = f".subckt {SUBCKT} VIN EN FB VOUT GND SW\nR1 VOUT FB 1k\n.ends {SUBCKT}\n"
+    model_dir = tmp_path / "out" / engine.WORK_DIRNAME / "model"
+    model_dir.mkdir(parents=True)
+    (model_dir / f"{SUBCKT}.lib").write_text(stub, encoding="utf-8")
+
+    def script(turn: int, workdir: Path, prompt: str) -> None:
+        del turn, prompt
+        target = workdir / "model"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / f"{SUBCKT}.lib").write_text(stub, encoding="utf-8")
+
+    use_backend(monkeypatch, ScriptedBackend(script))
+    result, events, _wall = run(tmp_path, max_iterations=1, reinforce=False)
+
+    assert len(calls) == 2, "one precheck plus one authoring turn, never a second precheck"
+    assert [event.counts["turn"] for event in judge_events(events)] == [1]
+    assert result.rows
 
 
 def test_the_saved_result_round_trips_including_the_turn_bounds(tmp_path: Path) -> None:

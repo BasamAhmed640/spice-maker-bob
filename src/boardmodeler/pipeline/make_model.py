@@ -55,11 +55,11 @@ is no build deadline. ``max_iterations`` is ``None`` by default — no cap — a
 loop stops on satisfaction, on ``max_iterations`` when a caller sets one, or after
 ``stall_patience`` consecutive turns that change nothing the harness can see; a
 capped or stalled run still reports every row the harness measured. The product
-``api``/``bob`` path applies a finite default of
+``api`` path (including a Bob API key) applies a finite default of
 :data:`~boardmodeler.authoring.api_backend.DEFAULT_TIMEOUT_S` (600 s) to each
 turn when the caller leaves ``turn_timeout_s`` unset; an explicit value overrides
-it, and the loop API itself stays unbounded when called with ``None``.
-``timeout_s`` bounds a single simulation run, not the build.
+it, and the loop API and direct Bob CLI path stay unbounded when called with
+``None``. ``timeout_s`` bounds a single simulation run, not the build.
 
 Nothing raises for an expected failure — a missing datasheet, a document the
 provider refuses, a missing key, absent LTspice, a tampered spec or a
@@ -200,9 +200,9 @@ class MakeModelRequest:
     ``max_iterations=None`` (the default) has no cap: the author loop runs until
     the harness is satisfied or the agent stops making progress, which is what
     ``stall_patience`` counts. ``turn_timeout_s`` bounds one agent invocation; when
-    it is ``None`` the product ``api``/``bob`` path applies its own finite 600 s
-    default, and an explicit value overrides that. ``timeout_s`` bounds a single
-    simulation run. There is no build deadline.
+    it is ``None`` the product ``api`` path (including a Bob API key) applies its own
+    finite 600 s default, and an explicit value overrides that. ``timeout_s`` bounds
+    a single simulation run. There is no build deadline.
 
     ``backend_name`` names the author: ``"api"`` (the default) uses an API-key
     provider — ``provider`` is a provider id from
@@ -740,6 +740,7 @@ _RULES: tuple[_Rule, ...] = (
             "no load supply current",
             "supply current",
         ),
+        none_of=("ioff", "power-off", "leakage"),
     ),
     _Rule(
         name="voltage reference",
@@ -819,16 +820,27 @@ def _has_limits(requirement: Requirement) -> bool:
     return limits.min is not None or limits.typ is not None or limits.max is not None
 
 
+_DASH_VARIANTS = "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"
+
 _POLARITY_NONINVERTING = re.compile(
-    r"\bnon-?inverting\s+output\b|\bA\s+high\s+gives\s+Y\s+high\b|"
+    r"\bnon[-\s]?inverting\s+(?:output|buffer)\b|"
+    r"\b(?:output|buffer)\s+is\s+non[-\s]?inverting\b|"
+    r"\bA\s+high\s+gives\s+Y\s+high\b|"
     r"\bA\s+low\s+gives\s+Y\s+low\b",
     re.IGNORECASE,
 )
 _POLARITY_INVERTING = re.compile(
-    r"(?<!non-)\binverting\s+output\b|\bA\s+high\s+gives\s+Y\s+low\b|"
+    r"(?<!non-)(?<!non )\binverting\s+(?:output|buffer)\b|"
+    r"\b(?:output|buffer)\s+is\s+inverting\b|"
+    r"\bA\s+high\s+gives\s+Y\s+low\b|"
     r"\bA\s+low\s+gives\s+Y\s+high\b",
     re.IGNORECASE,
 )
+
+
+def _polarity_text(text: str) -> str:
+    """Fold dash variants to ASCII ``-`` so ``non\u2013inverting`` reads as non-inverting."""
+    return "".join("-" if char in _DASH_VARIANTS else char for char in text)
 
 
 def _cited_polarity(
@@ -840,10 +852,11 @@ def _cited_polarity(
 
     A row that needs ``io_inverting`` may cite the polarity on a neighbouring functional
     row for the *same part and document*, but only when that row's citation is verified
-    and its verbatim excerpt names this row's signal. An unverified citation, a generated
-    statement or section title, another part or document, an unrelated signal, and text
-    stating both behaviours all leave the question open, so the row stays a declared gap
-    rather than guessing.
+    and its verbatim excerpt names this row's signal *and* asserts the output/buffer
+    polarity (or an applicable input-to-output truth relation). An unverified citation,
+    a generated statement or section title, another part or document, an unrelated
+    signal, an input-pin-only description, and text stating both behaviours all leave
+    the question open, so the row stays a declared gap rather than guessing.
     """
     target_docs = {ref.doc_id for ref in requirement.evidence}
     target_signals = {signal.lower() for signal in requirement.signal_refs}
@@ -858,7 +871,7 @@ def _cited_polarity(
         for ref in source.evidence:
             if ref.doc_id not in target_docs:
                 continue
-            excerpt = _normalized(ref.excerpt or "")
+            excerpt = _polarity_text(_normalized(ref.excerpt or ""))
             if not excerpt:
                 continue
             if not any(
@@ -1686,7 +1699,8 @@ class _Run:
         path = model_file(self.workdir, self.request.subckt)
         key = validation_key(path, self.spec, install.path, self.request.timeout_s)
         cached = read_report(self.workdir / "validation-cache", key, self.spec, path)
-        if cached is None and not (cancel and cancel.is_set()):
+        prechecked = cached is None and not (cancel and cancel.is_set())
+        if prechecked:
             # A fresh process has no receipt for an existing candidate. Re-judge it with
             # one LTspice run before any remote reinforcement or author turn is spent.
             revalidated = revalidate_candidate(request, cancel)
@@ -1731,7 +1745,7 @@ class _Run:
             return
         try:
             with _observe_reports(self._on_report):
-                outcome = build_model(request, cancel)
+                outcome = build_model(request, cancel, candidate_revalidated=prechecked)
         finally:
             _BUILD_LOCK.release()
         self.outcome = outcome
@@ -1915,7 +1929,9 @@ class _Run:
     def rows(self) -> tuple[RowOutcome, ...]:
         if self.spec is None:
             return ()
-        outcomes = {outcome.probe_id: outcome for outcome in self.report.outcomes}
+        outcomes = {
+            char_id: outcome for outcome in self.report.outcomes for char_id in outcome.char_ids
+        }
         rows: list[RowOutcome] = []
         for characteristic in self.spec.characteristics:
             req_id = characteristic.char_id
@@ -1944,7 +1960,7 @@ class _Run:
                     )
                 )
                 continue
-            outcome = outcomes.get(characteristic.probe)
+            outcome = outcomes.get(req_id)
             measured = "-"
             if outcome is not None:
                 measured = outcome.judged or "-"

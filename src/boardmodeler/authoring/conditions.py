@@ -56,7 +56,7 @@ def operating_params(
     requirement, probe, *, seed: Mapping[str, float] | None = None
 ) -> tuple[dict[str, float], str | None]:
     allowed = probe.merged_params({})
-    for key, _value in (seed or {}).items():
+    for key in seed or {}:
         if key not in allowed:
             raise ValueError(f"probe {probe.probe_id} has no parameter {key!r}")
     aliases = dict(ALIASES)
@@ -136,9 +136,19 @@ def operating_params(
         if missing:
             return {}, "condition_missing: I/O measurement needs " + ", ".join(sorted(missing))
         params.setdefault("io_input_high", params["io_vcc"])
+        zero_supply = probe.probe_id == "io_power_off_leakage" and params.get("io_vcc") == 0
+        if probe.probe_id == "io_power_off_leakage" and not zero_supply:
+            return (
+                {},
+                "condition_invalid: io_power_off_leakage needs the cited VCC = 0 V; a powered "
+                "condition is a different measurement",
+            )
         for key in ("io_vcc", "io_input_high", "io_cap_f", "io_load_a"):
-            if key in params and params[key] <= 0:
-                return {}, f"condition_invalid: {key} must be positive"
+            if key not in params or params[key] > 0:
+                continue
+            if zero_supply and key in ("io_vcc", "io_input_high"):
+                continue
+            return {}, f"condition_invalid: {key} must be positive"
         for key in ("io_inverting", "io_oe_active_high"):
             if key in params and params[key] not in (0, 1):
                 return {}, f"condition_invalid: {key} must be 0 or 1"

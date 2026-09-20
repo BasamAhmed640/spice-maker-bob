@@ -460,7 +460,8 @@ satisfaction or on the agent stalling, and nothing else:
 * `UNKNOWN(cancelled)`.
 
 `turn_timeout_s` defaults to `None` at the loop API (an agent invocation is unbounded
-there); the product `api`/`bob` path applies a finite 600 s per-turn budget when the caller
+there); the product `api` path (including a Bob API key) applies a finite 600 s per-turn
+budget when the caller
 leaves it unset, and an explicit value overrides that. This is the tool's own policy for the
 product path, not a harness reduction. The probe set, the per-probe timeout and the number
 of judged rows are never reduced for speed — that is the half of the old rule that stands:

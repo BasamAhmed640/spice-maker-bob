@@ -59,7 +59,8 @@ def io_spec():
                 req_class="DOCUMENTED_LIMIT",
                 not_testable_reason=None,
                 probe_params={
-                    "io_vcc": 3.3,
+                    "io_vcc": 0.0 if probe_id == "io_power_off_leakage" else 3.3,
+                    "io_input_high": 0.0 if probe_id == "io_power_off_leakage" else 3.3,
                     "io_load_a": 0.002,
                     "io_cap_f": 15e-12,
                     "io_test_v": 3.3,
@@ -399,9 +400,53 @@ def test_io_conditions_are_required_and_units_checked():
         {"io_vcc": 3.3, "io_load_a": 0.002, "io_inverting": 0, "io_input_high": 3.3},
         None,
     )
+    # The canonical signed override must agree with the magnitude in the cited text.
+    assert compile("VCC = 3.3 V; IOH = -2 mA", {"io_inverting": 0, "io_load_a": -0.002})[0] == {
+        "io_vcc": 3.3,
+        "io_load_a": 0.002,
+        "io_inverting": 0,
+        "io_input_high": 3.3,
+    }
+    assert compile("VCC = 3.3 V; IOH = -2 mA", {"io_inverting": 0, "io_load_a": 0.003})[
+        1
+    ].startswith("condition_conflict")
     assert compile("VCC = 3.3 V")[1].startswith("condition_missing")
     assert compile("VCC = 3.3 A")[1].startswith("condition_unit_invalid")
     assert compile("VCC = 3.3 V", {"VCC": 1.8})[1].startswith("condition_conflict")
+
+
+def test_power_off_leakage_keeps_the_declared_supply_and_refuses_a_powered_row(tmp_path):
+    """The renderer must never silently turn a powered condition into a zero-supply test."""
+    model = tmp_path / "buffer.lib"
+    model.write_text(BUFFER)
+    probe = PROBES["io_power_off_leakage"]
+
+    def deck(**params):
+        return probe.render(model_lib=model, subckt="IO", params=params)
+
+    off = deck(io_vcc=0.0, io_test_v=3.3, io_input_high=0.0)
+    powered = deck(io_vcc=3.3, io_test_v=3.3, io_input_high=3.3)
+
+    assert any(
+        line.split()[:3] == ["Vcc", "vcc", "0"] and line.split()[3] == "0"
+        for line in off.splitlines()
+    )
+    assert any(
+        line.split()[:3] == ["Vcc", "vcc", "0"] and line.split()[3] == "3.3"
+        for line in powered.splitlines()
+    )
+
+    requirement = SimpleNamespace(
+        conditions=[Condition(text="VCC = 3.3 V", parameter_overrides={"io_test_v": 3.3})]
+    )
+    params, reason = operating_params(requirement, probe)
+    assert params == {} and reason.startswith("condition_invalid")
+
+    off_requirement = SimpleNamespace(
+        conditions=[Condition(text="VCC = 0 V", parameter_overrides={"io_test_v": 3.3})]
+    )
+    params, reason = operating_params(off_requirement, probe)
+    assert reason is None and params["io_vcc"] == 0.0
 
 
 def test_ranges_are_checked_against_explicit_nominal_regardless_of_order():

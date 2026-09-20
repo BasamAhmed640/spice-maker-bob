@@ -21,7 +21,7 @@ def _render(spec: ProbeSpec, p: Mapping[str, float], model: Path, subckt: str) -
     from boardmodeler.authoring.probes import _deck, _fmt, model_ports
 
     identifier = spec.probe_id
-    supply = 0.0 if identifier == "io_power_off_leakage" else p["io_vcc"]
+    supply = p["io_vcc"]
     high = identifier != "io_vol"
     input_v = p["io_input_high"] if high != bool(p["io_inverting"]) else 0.0
     enabled = identifier != "io_leakage"
@@ -174,6 +174,10 @@ def register(registry: dict[str, ProbeSpec]) -> None:
         def measure(raw, params, probe_id=identifier):
             return _measure(probe_id, raw, params)
 
+        probe_defaults = dict(defaults)
+        if identifier == "io_power_off_leakage":
+            probe_defaults["io_vcc"] = 0.0
+            probe_defaults["io_input_high"] = 0.0
         registry[identifier] = ProbeSpec(
             probe_id=identifier,
             title=identifier.replace("_", " "),
@@ -181,7 +185,7 @@ def register(registry: dict[str, ProbeSpec]) -> None:
             unit=unit,
             ports_needed=ports,
             judge_key=key,
-            defaults=defaults,
+            defaults=probe_defaults,
             renderer=_render,
             measurer=measure,
         )
