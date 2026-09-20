@@ -52,3 +52,12 @@ Only reviewed, provider-neutral files are synchronized between editions. The syn
 must preserve edition-owned catalog, adapter, UI, branding, tests and documentation.
 Source hashes and observed verification results identify a release; a passing old build
 is not proof of a newer binary.
+
+
+## Elapsed build time (1.1.4)
+
+The GO timer uses a monotonic clock and a GUI event timer, independent of worker
+progress signals. It starts for an accepted build, includes cancellation cleanup,
+freezes on the terminal result/error, and resets on the next GO. It is not an ETA.
+The agent workflow is documented in AGENT_WORKFLOW.md without claiming unmeasured
+model accuracy or exposing private reasoning.

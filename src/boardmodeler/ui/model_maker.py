@@ -19,7 +19,7 @@ import threading
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -144,6 +144,10 @@ class ModelMakerWindow(QMainWindow):
         self._result: object | None = None
         self._out_dir: Path | None = None
         self._started_at: float | None = None
+        self._elapsed_seconds = 0.0
+        self._elapsed_timer = QTimer(self)
+        self._elapsed_timer.setInterval(250)
+        self._elapsed_timer.timeout.connect(self._update_elapsed)
 
         self.setStyleSheet(_window_stylesheet())
         central = QWidget(self)
@@ -217,6 +221,13 @@ class ModelMakerWindow(QMainWindow):
         self.cancel_button.setEnabled(False)
         row.addWidget(self.go_button, 3)
         row.addWidget(self.cancel_button, 1)
+        self.elapsed_label = QLabel("ELAPSED 00:00:00")
+        self.elapsed_label.setStyleSheet("color: #55ffff; font-family: Consolas;")
+        self.elapsed_label.setToolTip(
+            "Time since this build started (hours:minutes:seconds). "
+            "Includes waiting for the agent and cancellation; not an estimate of time remaining."
+        )
+        row.addWidget(self.elapsed_label)
         return row
 
     def _build_stages(self) -> QTableWidget:
@@ -304,16 +315,30 @@ class ModelMakerWindow(QMainWindow):
         self.progress.setVisible(busy)
         if busy:
             self._started_at = time.monotonic()
+            self._elapsed_seconds = 0.0
+            self._elapsed_timer.start()
             self.stages.setRowCount(0)
             self.rows.setRowCount(0)
             self._result = None
             self.install_button.setEnabled(False)
             self.open_button.setEnabled(False)
+        else:
+            if self._started_at is not None:
+                self._elapsed_seconds = time.monotonic() - self._started_at
+                self._started_at = None
+            self._elapsed_timer.stop()
+        self._update_elapsed()
 
     def _elapsed(self) -> str:
-        if self._started_at is None:
-            return ""
-        return f"{time.monotonic() - self._started_at:5.1f}s"
+        seconds = self._elapsed_seconds
+        if self._started_at is not None:
+            seconds = time.monotonic() - self._started_at
+        hours, remainder = divmod(max(0, int(seconds)), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    def _update_elapsed(self) -> None:
+        self.elapsed_label.setText(f"ELAPSED {self._elapsed()}")
 
     # ------------------------------------------------------------------ actions
     def _make_model(self) -> None:
@@ -479,7 +504,7 @@ class ModelMakerWindow(QMainWindow):
             item.setForeground(_colour(_STATUS_COLOUR.get(status, "#ffffff")))
             self.stages.setItem(row, 1, item)
             self.stages.setItem(row, 2, QTableWidgetItem(detail))
-        self.status_label.setText(f"{stage}: {detail} {self._elapsed()}".strip()[:160])
+        self.status_label.setText(f"{stage}: {detail}".strip()[:160])
 
     def _on_result(self, result: object) -> None:
         self._result = result
@@ -487,9 +512,7 @@ class ModelMakerWindow(QMainWindow):
         status = getattr(result, "status", "UNKNOWN")
         counts = getattr(result, "counts", {}) or {}
         detail = getattr(result, "detail", "")
-        self.status_label.setText(
-            f"{status} — {counts} — {detail} ({self._elapsed().strip()})"[:200]
-        )
+        self.status_label.setText(f"{status} — {counts} — {detail}"[:200])
         self.status_label.setStyleSheet(
             f"color: {_STATUS_COLOUR.get(status, '#ffffff')}; font-family: Consolas; "
             "font-size: 10pt;"

@@ -1,5 +1,8 @@
 # Spice Maker Bob
 
+GO now shows a continuously updating **ELAPSED HH:MM:SS** clock, preserving the
+final duration. See [what the agents and simulator do](docs/AGENT_WORKFLOW.md).
+
 **IBM Bob is the only AI in this edition, in both the UI and the application source.**
 Bob reads a datasheet, authors an LTspice model and repairs it using actual simulator
 feedback. A model card records measured behavior and every uncovered requirement.
@@ -7,7 +10,7 @@ feedback. A model card records measured behavior and every uncovered requirement
 ## Install on Windows
 
 On the **main** branch, choose **Code → Download ZIP**, extract the archive and run
-**Install.exe** beside this README. The included **1.1.3** installer retains the animated
+**Install.exe** beside this README. The included **1.1.4** installer retains the animated
 pepper setup. INSTALL.txt contains instructions; SHA256SUMS.txt authenticates the installer.
 Python is bundled. LTspice and IBM Bob Shell are separate prerequisites. This build is unsigned.
 
@@ -75,7 +78,7 @@ uv run boardmodeler model test --out build/part --json
 The fixture/scripted backends remain clearly labeled deterministic test tools. No other
 AI catalog or author transport ships in this repository.
 
-Rebuild with `installer/build.ps1 -Version 1.1.3`. The build checks the frozen GUI before
+Rebuild with `installer/build.ps1 -Version 1.1.4`. The build checks the frozen GUI before
 packaging and refreshes Install.exe, INSTALL.txt and SHA256SUMS.txt at the repository
 root. These generated files must be committed for Code → Download ZIP to update.
 See [installer details](installer/README.md) and [current status](docs/STATUS.md).
