@@ -45,8 +45,9 @@ row's signal; dash, lost-hyphen and line-break variants are normalized, an input
 description does not qualify, and the binding records the source requirement and excerpt
 under `derived_conditions`. An unverified citation, another part/document, an unrelated
 signal or conflicting evidence leaves the row a declared gap. A power-off leakage row must
-cite `VCC = 0 V`; a powered condition is refused rather than silently measured at zero.
-Timing binding also requires the input edge (`io_edge_s`)
+cite `VCC = 0 V`; a powered condition is refused rather than silently measured at zero, and
+a row explicitly about supply current stays a gap instead of being measured as output
+leakage. Timing binding also requires the input edge (`io_edge_s`)
 and rise/fall-time binding requires the low/high fractions (`io_low_frac`, `io_high_frac`).
 Propagation delay binding requires the cited input/output fractions (`io_input_frac`, `io_output_frac`). Every actual deck parameter is in the report.
 Nominal 25 C behavior does not qualify a full temperature range. PASS applies only to

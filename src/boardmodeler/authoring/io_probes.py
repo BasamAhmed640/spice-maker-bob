@@ -18,10 +18,16 @@ if TYPE_CHECKING:  # pragma: no cover - typing only, avoids a runtime import cyc
 
 
 def _render(spec: ProbeSpec, p: Mapping[str, float], model: Path, subckt: str) -> str:
-    from boardmodeler.authoring.probes import _deck, _fmt, model_ports
+    from boardmodeler.authoring.probes import ProbeError, _deck, _fmt, model_ports
 
     identifier = spec.probe_id
     supply = p["io_vcc"]
+    if identifier == "io_power_off_leakage" and supply != 0:
+        raise ProbeError(
+            "power_off_supply_invalid",
+            "a power-off leakage deck is measured at VCC = 0 V; a powered condition is a "
+            "different measurement",
+        )
     high = identifier != "io_vol"
     input_v = p["io_input_high"] if high != bool(p["io_inverting"]) else 0.0
     enabled = identifier != "io_leakage"

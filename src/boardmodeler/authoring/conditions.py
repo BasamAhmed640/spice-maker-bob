@@ -144,11 +144,14 @@ def operating_params(
                 "condition is a different measurement",
             )
         for key in ("io_vcc", "io_input_high", "io_cap_f", "io_load_a"):
-            if key not in params or params[key] > 0:
+            if key not in params:
                 continue
             if zero_supply and key in ("io_vcc", "io_input_high"):
+                if params[key] < 0:
+                    return {}, f"condition_invalid: {key} must be nonnegative"
                 continue
-            return {}, f"condition_invalid: {key} must be positive"
+            if params[key] <= 0:
+                return {}, f"condition_invalid: {key} must be positive"
         for key in ("io_inverting", "io_oe_active_high"):
             if key in params and params[key] not in (0, 1):
                 return {}, f"condition_invalid: {key} must be 0 or 1"

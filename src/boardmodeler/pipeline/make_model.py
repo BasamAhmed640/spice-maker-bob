@@ -504,7 +504,12 @@ _IO_RULES = (
         all_of=("tplh", "tphl"),
         reason="split rising and falling propagation delay into separate requirements",
     ),
-    _Rule("power-off leakage", "io_power_off_leakage", any_of=("ioff", "power-off leakage")),
+    _Rule(
+        "power-off leakage",
+        "io_power_off_leakage",
+        any_of=("ioff", "power-off leakage"),
+        none_of=("supply current",),
+    ),
     _Rule("disabled output leakage", "io_leakage", any_of=("ioz", "three-state output leakage")),
     _Rule("input leakage", "io_input_leakage", any_of=("input leakage current",)),
     _Rule("output high", "io_voh", any_of=("voh", "high-level output voltage")),
@@ -821,16 +826,19 @@ def _has_limits(requirement: Requirement) -> bool:
 
 
 _DASH_VARIANTS = "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"
+_NON_INVERTING_SEPARATOR = re.compile(r"\bnon[\s\-]*inverting\b", re.IGNORECASE)
+_SIGNAL_NODE = re.compile(r"^\s*[vi]\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*$", re.IGNORECASE)
+_SIGNAL_BARE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*$")
 
 _POLARITY_NONINVERTING = re.compile(
-    r"\bnon[-\s]?inverting\s+(?:output|buffer)\b|"
-    r"\b(?:output|buffer)\s+is\s+non[-\s]?inverting\b|"
+    r"\bnon-?inverting\s+(?:output|buffer)\b|"
+    r"\b(?:output|buffer)\s+is\s+non-?inverting\b|"
     r"\bA\s+high\s+gives\s+Y\s+high\b|"
     r"\bA\s+low\s+gives\s+Y\s+low\b",
     re.IGNORECASE,
 )
 _POLARITY_INVERTING = re.compile(
-    r"(?<!non-)(?<!non )\binverting\s+(?:output|buffer)\b|"
+    r"(?<!non-)\binverting\s+(?:output|buffer)\b|"
     r"\b(?:output|buffer)\s+is\s+inverting\b|"
     r"\bA\s+high\s+gives\s+Y\s+low\b|"
     r"\bA\s+low\s+gives\s+Y\s+high\b",
@@ -839,8 +847,29 @@ _POLARITY_INVERTING = re.compile(
 
 
 def _polarity_text(text: str) -> str:
-    """Fold dash variants to ASCII ``-`` so ``non\u2013inverting`` reads as non-inverting."""
-    return "".join("-" if char in _DASH_VARIANTS else char for char in text)
+    """Fold non/inverting separators so whitespace and dashed spellings read as one word."""
+    folded = "".join("-" if char in _DASH_VARIANTS else char for char in text)
+    return _NON_INVERTING_SEPARATOR.sub("non-inverting", folded)
+
+
+def _signal_names(signals: Sequence[str]) -> set[str]:
+    """Bare node identities for single-node ``V(...)``/``I(...)`` references.
+
+    The extractor writes node syntax (``V(Y)``) while datasheet prose writes the bare
+    name (``Y``), so both are reduced to the node identity. A differential or multi-node
+    expression is not one signal and is skipped: it cannot name this row's terminal.
+    """
+    names: set[str] = set()
+    for signal in signals:
+        text = str(signal).strip()
+        node = _SIGNAL_NODE.match(text)
+        if node is not None:
+            names.add(node.group(1).lower())
+            continue
+        bare = _SIGNAL_BARE.match(text)
+        if bare is not None:
+            names.add(bare.group(1).lower())
+    return names
 
 
 def _cited_polarity(
@@ -859,19 +888,19 @@ def _cited_polarity(
     the question open, so the row stays a declared gap rather than guessing.
     """
     target_docs = {ref.doc_id for ref in requirement.evidence}
-    target_signals = {signal.lower() for signal in requirement.signal_refs}
+    target_signals = _signal_names(requirement.signal_refs)
     if not target_docs or not target_signals:
         return None, None, None
     hints: dict[float, tuple[str, str]] = {}
     for source in requirements:
         if source.req_id in blocked or source.applies_to != requirement.applies_to:
             continue
-        if not target_signals & {signal.lower() for signal in source.signal_refs}:
+        if not target_signals & _signal_names(source.signal_refs):
             continue
         for ref in source.evidence:
             if ref.doc_id not in target_docs:
                 continue
-            excerpt = _polarity_text(_normalized(ref.excerpt or ""))
+            excerpt = _normalized(ref.excerpt or "")
             if not excerpt:
                 continue
             if not any(
@@ -879,9 +908,10 @@ def _cited_polarity(
                 for signal in target_signals
             ):
                 continue
-            if _POLARITY_NONINVERTING.search(excerpt):
+            polarity_text = _polarity_text(excerpt)
+            if _POLARITY_NONINVERTING.search(polarity_text):
                 hints.setdefault(0.0, (source.req_id, excerpt))
-            if _POLARITY_INVERTING.search(excerpt):
+            if _POLARITY_INVERTING.search(polarity_text):
                 hints.setdefault(1.0, (source.req_id, excerpt))
     if len(hints) == 1:
         polarity, (source_req, excerpt) = next(iter(hints.items()))

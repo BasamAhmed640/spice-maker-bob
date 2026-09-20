@@ -11,7 +11,7 @@ import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -369,3 +369,72 @@ def test_the_agent_provider_model_and_budget_reach_the_request(
     assert calls[-1].provider == entry.id
     assert calls[-1].agent_model == override
     assert calls[-1].agent_max_tokens == 4096
+
+
+def test_the_direct_build_path_forwards_the_bob_team_id(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """``model build --requirements ... --team-id`` must reach the resolved backend."""
+    from boardmodeler.authoring import api_backend, card
+    from boardmodeler.authoring import loop as loop_module
+    from boardmodeler.simulation import ltspice
+
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "regulator" / "tps54320"
+    captured: dict[str, object] = {}
+
+    class _Backend:
+        name = "api"
+
+    def spy(**kwargs: object) -> _Backend:
+        captured.update(kwargs)
+        return _Backend()
+
+    class _Report:
+        model_sha256 = ""
+        outcomes: tuple[object, ...] = ()
+
+        def counts(self) -> dict[str, int]:
+            return {}
+
+        def to_json(self) -> str:
+            return "{}"
+
+    class _Outcome:
+        status = "UNKNOWN"
+        detail = "stub"
+        iterations = 0
+        history: tuple[str, ...] = ()
+        report = _Report()
+
+    monkeypatch.setattr(api_backend, "build_api_backend", spy)
+    monkeypatch.setattr(loop_module, "build_model", lambda request: _Outcome())
+    monkeypatch.setattr(card, "write_deliverables", lambda **kwargs: [])
+    monkeypatch.setattr(
+        ltspice,
+        "locate",
+        lambda explicit=None: SimpleNamespace(path=tmp_path / "ltspice.exe"),
+    )
+
+    code = cli.main(
+        [
+            "model",
+            "build",
+            "--part",
+            "TPS54320",
+            "--requirements",
+            str(fixture / "requirements.json"),
+            "--bindings",
+            str(fixture / "probes.json"),
+            "--out",
+            str(tmp_path),
+            "--backend",
+            "api",
+            "--team-id",
+            "team-x",
+            "--json",
+        ]
+    )
+    capsys.readouterr()
+
+    assert code == 0
+    assert captured.get("team_id") == "team-x"

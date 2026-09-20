@@ -417,24 +417,27 @@ def test_io_conditions_are_required_and_units_checked():
 
 def test_power_off_leakage_keeps_the_declared_supply_and_refuses_a_powered_row(tmp_path):
     """The renderer must never silently turn a powered condition into a zero-supply test."""
+    from boardmodeler.authoring.probes import ProbeError
+
     model = tmp_path / "buffer.lib"
     model.write_text(BUFFER)
     probe = PROBES["io_power_off_leakage"]
 
-    def deck(**params):
-        return probe.render(model_lib=model, subckt="IO", params=params)
-
-    off = deck(io_vcc=0.0, io_test_v=3.3, io_input_high=0.0)
-    powered = deck(io_vcc=3.3, io_test_v=3.3, io_input_high=3.3)
-
+    off = probe.render(
+        model_lib=model,
+        subckt="IO",
+        params={"io_vcc": 0.0, "io_test_v": 3.3, "io_input_high": 0.0},
+    )
     assert any(
         line.split()[:3] == ["Vcc", "vcc", "0"] and line.split()[3] == "0"
         for line in off.splitlines()
     )
-    assert any(
-        line.split()[:3] == ["Vcc", "vcc", "0"] and line.split()[3] == "3.3"
-        for line in powered.splitlines()
-    )
+    with pytest.raises(ProbeError, match="power_off_supply_invalid"):
+        probe.render(
+            model_lib=model,
+            subckt="IO",
+            params={"io_vcc": 3.3, "io_test_v": 3.3, "io_input_high": 3.3},
+        )
 
     requirement = SimpleNamespace(
         conditions=[Condition(text="VCC = 3.3 V", parameter_overrides={"io_test_v": 3.3})]
@@ -447,6 +450,20 @@ def test_power_off_leakage_keeps_the_declared_supply_and_refuses_a_powered_row(t
     )
     params, reason = operating_params(off_requirement, probe)
     assert reason is None and params["io_vcc"] == 0.0
+
+
+def test_a_zero_supply_power_off_row_rejects_a_negative_input_rail() -> None:
+    probe = PROBES["io_power_off_leakage"]
+    requirement = SimpleNamespace(
+        conditions=[
+            Condition(
+                text="VCC = 0 V",
+                parameter_overrides={"io_test_v": 3.3, "io_input_high": -1.0},
+            )
+        ]
+    )
+    params, reason = operating_params(requirement, probe)
+    assert params == {} and "nonnegative" in reason
 
 
 def test_ranges_are_checked_against_explicit_nominal_regardless_of_order():

@@ -980,7 +980,10 @@ def _cmd_model_build(args: argparse.Namespace) -> int:
     backend_name = str(args.backend or "api").strip().lower()
     if backend_name == "api":
         backend = build_api_backend(
-            provider_id=args.provider, model=args.model, max_tokens=args.max_tokens
+            provider_id=args.provider,
+            model=args.model,
+            max_tokens=args.max_tokens,
+            team_id=args.team_id,
         )
     elif backend_name == "bob":
         backend = BobShellBackend(team_id=args.team_id)
