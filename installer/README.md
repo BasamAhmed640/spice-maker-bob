@@ -86,7 +86,18 @@ Nothing here is code-signed (no certificate on the build machine), so Windows Sm
 warns on first run.
 
 
-## Easy download
+## Code menu download
+
+The repository tracks the real **Install.exe** at its root, alongside **INSTALL.txt**
+and **SHA256SUMS.txt**. GitHub's **Code → Download ZIP** on main includes these files.
+After extracting the archive, users run Install.exe directly from the repository folder.
+Each edition carries its own verified v1.1.1 setup executable, including the animation.
+
+After a successful build, build.ps1 refreshes all three root files. Commit those files
+with a release update to keep the Code menu download current. The installer is stored
+as a regular Git binary, so the downloaded archive contains the executable itself.
+
+## Additional release archive
 
 The build also emits `<PackId>-<Version>-Windows-x64.zip`, containing **Install.exe**,
 **Read me.txt** and **SHA256SUMS.txt**. Install.exe is the unmodified Velopack setup bundle,

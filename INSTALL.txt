@@ -1,0 +1,8 @@
+Spice Maker Bob 1.1.1 for Windows x64
+
+Extract this zip, then double-click Install.exe. The pepper animation plays during setup.
+Python is included. Open SETUP once to select LTspice and save your API key.
+LTspice and (for IBM Bob) Bob Shell must be installed separately.
+The API key stays in Windows Credential Manager; no account login is needed in this app.
+GO sends the selected datasheet and model text to the chosen provider.
+This build is unsigned. Check the publisher/source and the SHA256 before running it.

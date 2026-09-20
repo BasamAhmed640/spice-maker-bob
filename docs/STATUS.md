@@ -1,3 +1,11 @@
+# Code menu ZIP includes the installer — 2026-09-20
+
+Added this edition's verified v1.1.1 Install.exe, INSTALL.txt and SHA256SUMS.txt at the
+repository root. The installer is byte-identical to the already GUI-tested release ZIP
+payload; its SHA256 matches the included checksum. Updated build.ps1 to refresh these
+root files after successful packaging, and README instructions to use Code -> Download
+ZIP on main. No backend or frozen application code changed.
+
 # Windows startup hotfix 1.1.1 — 2026-09-20
 
 Confirmed the 1.1.0 QtWidgets startup crash: PyInstaller collected Poppler's ICU 78

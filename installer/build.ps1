@@ -106,6 +106,10 @@ This build is unsigned. Check the publisher/source and the SHA256 before running
     "$hash  Install.exe" | Set-Content "$bundle/SHA256SUMS.txt" -Encoding ascii
     Compress-Archive -LiteralPath "$bundle/Install.exe", "$bundle/Read me.txt", "$bundle/SHA256SUMS.txt" `
         -DestinationPath "releases/$PackId-$Version-Windows-x64.zip" -Force
+    # Track the actual installer in the repository so Code -> Download ZIP includes it.
+    Copy-Item "$bundle/Install.exe" "$repo/Install.exe" -Force
+    Copy-Item "$bundle/Read me.txt" "$repo/INSTALL.txt" -Force
+    Copy-Item "$bundle/SHA256SUMS.txt" "$repo/SHA256SUMS.txt" -Force
 } finally {
     Pop-Location
 }

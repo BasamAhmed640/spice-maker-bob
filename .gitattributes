@@ -8,3 +8,4 @@
 *.raw binary
 *.lib binary
 *.sub binary
+*.exe binary

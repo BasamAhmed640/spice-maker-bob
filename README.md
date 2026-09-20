@@ -1,11 +1,12 @@
 # Spice Maker
 
-**[Download Windows installer v1.1.1](https://github.com/BasamAhmed640/spice-maker-bob/releases/download/v1.1.1/SpiceMakerBob-1.1.1-Windows-x64.zip)** · [All releases](https://github.com/BasamAhmed640/spice-maker-bob/releases)
+**Install on Windows:** click **Code → Download ZIP** with the **main** branch
+selected. Extract the ZIP, open the extracted repository folder, and double-click
+**Install.exe** beside this README. The installer is included in the ZIP.
 
-Extract the ZIP and run **Install.exe**; the animated setup installs the app with Python
-included. Version **1.1.1 fixes the QtWidgets startup crash in 1.1.0**. LTspice and, when
-using IBM Bob, Bob Shell are separate prerequisites. Installer downloads are in **Releases**;
-GitHub's **Code → Download ZIP** contains source code.
+The included v1.1.1 installer fixes the QtWidgets startup crash and keeps the animated
+pepper setup. Python is bundled; LTspice and, when using IBM Bob, Bob Shell are separate
+prerequisites. See INSTALL.txt for instructions and SHA256SUMS.txt for the installer hash.
 
 **Give it a datasheet and a part number; agents author an LTspice model; real simulator
 runs judge it against the datasheet's own rows; you get a `.lib`, a symbol and a card
@@ -49,14 +50,16 @@ high-speed channel/protocol validation remains external. See
 
 ## Install
 
-Download **SpiceMakerBob-1.1.0-Windows-x64.zip** from [Releases](https://github.com/BasamAhmed640/spice-maker-bob/releases/latest).
-Extract it, then double-click **Install.exe**. The existing pepper animation plays during
-the Velopack setup. The ZIP also includes a short readme and an installer SHA256 checksum.
-The application includes Python; install LTspice and (when using Bob) Bob Shell separately.
-Open SETUP once to select the simulator and save your API key. This installer is unsigned.
+Use **Code → Download ZIP** on **main**. Extract the archive, then double-click
+**Install.exe** in the extracted repository folder. The pepper animation plays during
+setup. The same folder contains INSTALL.txt and SHA256SUMS.txt.
 
-To build from source, run `installer\build.ps1 -Version 1.1.0`; see
-[installer details](installer/README.md). The Windows download workflow also builds the ZIP.
+Open SETUP once to select LTspice and save your API key. Python is bundled; LTspice and,
+when using Bob, Bob Shell must be installed separately. This installer is unsigned.
+
+To rebuild, run `installer\build.ps1 -Version 1.1.1`; see
+[installer details](installer/README.md). The build refreshes the root installer,
+instructions and checksum so committing those files updates Code → Download ZIP.
 
 ## The agent provider
 

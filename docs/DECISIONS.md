@@ -651,3 +651,11 @@ Windows system directories, never arbitrary tools inherited through PATH. Frozen
 success does not establish GUI startup: before packaging, launch the normal executable
 from outside the source tree, observe its actual responsive Qt window, and close it.
 This gate belongs in build.ps1 so local and GitHub Windows builds both enforce it.
+
+
+### Installer in GitHub Code archives (2026-09-20)
+
+At the user's explicit request, track the verified installer as root Install.exe, plus
+INSTALL.txt and SHA256SUMS.txt. GitHub Code -> Download ZIP must include the executable.
+Use an ordinary Git binary, not a pointer or download bootstrapper. build.ps1 refreshes
+these files after packaging; release updates must commit them to the appropriate main.
