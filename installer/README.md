@@ -9,6 +9,18 @@ It installs **only this application**. It never downloads or installs LTspice, B
 Python or any other runtime: the LTspice executable is discovered by the app (or pointed at
 on its SETUP page) and smoke-tested there, and `doctor` reports plainly when it is missing.
 
+## Startup verification
+
+Version 1.1.1 isolates PyInstaller's PATH to Python and Windows directories. A build
+machine's unrelated PDF/image tools must not supply DLLs to the application: a Poppler
+ICU DLL named `icuuc.dll` lacks the unversioned symbols Qt expects from Windows ICU.
+
+The build now launches the actual frozen GUI from an empty working directory with a
+minimal PATH. It requires a visible, responsive Qt model-maker window, saves
+`build/gui-startup.png`, and closes that test process. An error dialog or timeout fails
+the build before Velopack creates an installer. This check also runs in the Windows
+download workflow; a CLI-only smoke check is insufficient.
+
 ## Build it
 
 One-time setup:
@@ -21,7 +33,7 @@ dotnet tool install -g vpk --version 1.2.0           # needs the .NET SDK; keep 
 Then, from the repository root:
 
 ```powershell
-.\installer\build.ps1 -Version 1.1.0
+.\installer\build.ps1 -Version 1.1.1
 ```
 
 The script renders the splash/icon from `render_assets.py`, freezes the app from

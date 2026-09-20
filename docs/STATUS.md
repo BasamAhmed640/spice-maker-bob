@@ -1,3 +1,25 @@
+# Windows startup hotfix 1.1.1 — 2026-09-20
+
+Confirmed the 1.1.0 QtWidgets startup crash: PyInstaller collected Poppler's ICU 78
+`icuuc.dll` from the build machine's PATH instead of using Windows ICU. Qt requested
+`ucnv_open`; the bundled DLL exposed `ucnv_open_78`. Loading Qt6Core failed with Windows
+error 127; preloading Windows System32/icuuc.dll made the same Qt6Core load successfully.
+
+Changes: `installer/freeze.py` limits dependency discovery to Python/Windows locations;
+`installer/build.ps1` now requires the actual frozen GUI to open before packaging.
+`installer/verify_gui.py` launches from an empty directory with a minimal PATH, requires
+a visible responsive Qt window, captures it, and checks clean exit. Both README pages
+link directly to their own v1.1.1 download; the Windows workflow default is 1.1.1.
+
+Observed checks:
+- The new GUI verifier rejected the unchanged 1.1.0 executable's error dialog.
+- `installer/build.ps1 -Version 1.1.1` succeeded in both repositories, including the
+  real Windows GUI launch, screenshot, clean exit, animated setup and download ZIP.
+- Both captured model-maker windows were visually inspected.
+- Ruff check and format check passed for both new Python packaging helpers.
+- Both existing 1.1.0 installations were removed using their registered uninstallers,
+  exit 0. Their installation folders and uninstall registrations are gone.
+
 # Faster model creation and I/O validation — 2026-09-19
 
 Implemented the shared selected-key extraction/author path, batched extraction with one

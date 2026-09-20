@@ -1,5 +1,12 @@
 # Spice Maker
 
+**[Download Windows installer v1.1.1](https://github.com/BasamAhmed640/spice-maker-bob/releases/download/v1.1.1/SpiceMakerBob-1.1.1-Windows-x64.zip)** · [All releases](https://github.com/BasamAhmed640/spice-maker-bob/releases)
+
+Extract the ZIP and run **Install.exe**; the animated setup installs the app with Python
+included. Version **1.1.1 fixes the QtWidgets startup crash in 1.1.0**. LTspice and, when
+using IBM Bob, Bob Shell are separate prerequisites. Installer downloads are in **Releases**;
+GitHub's **Code → Download ZIP** contains source code.
+
 **Give it a datasheet and a part number; agents author an LTspice model; real simulator
 runs judge it against the datasheet's own rows; you get a `.lib`, a symbol and a card
 saying exactly what was tested.** That is the product. Everything below the fold is

@@ -642,3 +642,12 @@ Per-characteristic verdicts and totals are derived from the existing frozen spec
 observed measurement. No extra simulation or persisted report field is required.
 Harness and authoring progress remain probe counts; results.json and model-card
 summaries count rows. Missing outcomes are UNKNOWN and unsupported rows remain gaps.
+
+
+### Windows installer dependency isolation (2026-09-20)
+
+The release build must resolve native dependencies using the Python environment and
+Windows system directories, never arbitrary tools inherited through PATH. Frozen CLI
+success does not establish GUI startup: before packaging, launch the normal executable
+from outside the source tree, observe its actual responsive Qt window, and close it.
+This gate belongs in build.ps1 so local and GitHub Windows builds both enforce it.

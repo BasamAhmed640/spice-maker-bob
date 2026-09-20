@@ -56,7 +56,12 @@ try {
     Invoke-Step "Freeze the app with PyInstaller" {
         # The spec carries every analysis option (entry script, icon, data files, the
         # run-time provider imports), so the output is identical on any checkout.
-        & $python -m PyInstaller --noconfirm --clean "$PSScriptRoot\SpiceMaker.spec"
+        & $python "$PSScriptRoot\freeze.py"
+    }
+
+    Invoke-Step "Verify the frozen GUI opens" {
+        & $python "$PSScriptRoot\verify_gui.py" "dist\$exe\$exe.exe" `
+            --screenshot "build\gui-startup.png"
     }
 
     Invoke-Step "Package with Velopack" {
