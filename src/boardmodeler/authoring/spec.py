@@ -29,6 +29,8 @@ from boardmodeler.authoring.probes import PROBES
 from boardmodeler.domain.enums import RequirementClass
 from boardmodeler.domain.hashing import canonical_json_bytes, sha256_bytes
 from boardmodeler.models.library import subckt_ports
+from boardmodeler.requirements.model import UnknownUnitError, scale_factor
+from boardmodeler.requirements.model import normalize_unit as canonical_unit
 
 __all__ = [
     "Characteristic",
@@ -93,6 +95,13 @@ def normalize_unit(unit: str) -> tuple[str, float]:
     text = unit.strip()
     if not text:
         return "", 1.0
+    try:
+        base = canonical_unit(text)
+        return base, scale_factor(text, base)
+    except UnknownUnitError:
+        # Preserve the legacy fixture vocabulary and explicit unsupported units.
+        # Production extraction has already validated units before this stage.
+        pass
     for base in sorted(_BASE_UNITS, key=len, reverse=True):
         if text == base:
             return base, 1.0

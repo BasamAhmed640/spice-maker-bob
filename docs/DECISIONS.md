@@ -76,3 +76,12 @@ symbol. Datasheet pin directions guide placement; physical package pin numbers n
 replace `.subckt` positions. Validation checks each pin's actual order, as well as the
 set and bijection. The agent is asked to write only the electrical model, saving the
 symbol output tokens. See STANDARD_SYMBOLS.md.
+
+
+## 2026-09-20 — preserve compound quantity dimensions
+
+Datasheet extraction and frozen characteristics share the validated unit parser.
+Prefixes on quotient operands are independent: `ns/V` is `1e-9 s/V`, whereas
+`V/ns` is `1e9 V/s`. No reciprocal conversion is implied. Thermal resistance in
+Celsius per watt and kelvin per watt uses temperature differences, not absolute
+temperature offsets. Unknown units and incompatible dimensions remain rejected.

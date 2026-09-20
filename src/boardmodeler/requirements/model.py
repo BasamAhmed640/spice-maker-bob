@@ -85,6 +85,11 @@ UNIT_VOCABULARY: dict[str, str] = {
     "S": "conductance",
     "A/V": "transconductance",
     "V/V": "gain",
+    "s/V": "inverse_voltage_slew",
+    "V/s": "voltage_slew",
+    "A/s": "current_slew",
+    "C/W": "thermal_resistance",
+    "K/W": "thermal_resistance",
     "cycles": "count",
 }
 """Canonical unit symbol → physical dimension.
@@ -130,23 +135,42 @@ def scale_factor(from_unit: str, to_unit: str) -> float:
     ``0.001``). Raises :class:`UnknownUnitError` for a unit outside the
     vocabulary and :class:`UnitError` for two units of different dimensions.
     """
-    from_prefix, from_symbol = _split_unit(from_unit)
-    to_prefix, to_symbol = _split_unit(to_unit)
+    from_scale, from_symbol = _split_unit(from_unit)
+    to_scale, to_symbol = _split_unit(to_unit)
     if UNIT_VOCABULARY[from_symbol] != UNIT_VOCABULARY[to_symbol]:
         raise UnitError(
             f"cannot convert {from_unit!r} ({UNIT_VOCABULARY[from_symbol]}) to "
             f"{to_unit!r} ({UNIT_VOCABULARY[to_symbol]})"
         )
-    return _SI_PREFIXES.get(from_prefix, 1.0) / _SI_PREFIXES.get(to_prefix, 1.0)
+    return from_scale / to_scale
 
 
-def _split_unit(unit: str) -> tuple[str, str]:
-    """``(si_prefix, canonical_symbol)`` for ``unit``; raise when unknown."""
+def _split_unit(unit: str) -> tuple[float, str]:
+    """``(scale, canonical_symbol)``; prefixes apply to each quotient operand.
+
+    Time per volt is not voltage per time. Recognizing a compound unit does not
+    make it measurable by a probe, nor does it authorize taking its reciprocal.
+    """
     text = _fold_unit(unit)
     if text in UNIT_VOCABULARY:
-        return "", text
+        return 1.0, text
+    if text.count("/") == 1:
+        numerator, denominator = text.split("/")
+        # Kelvin here denotes a temperature difference; no absolute-temperature
+        # conversion is introduced by accepting thermal resistance.
+        numerator = _fold_unit(numerator)
+        if numerator == "K":
+            num_scale, num_symbol = 1.0, "K"
+        elif numerator.endswith("K") and numerator[:-1] in _SI_PREFIXES:
+            num_scale, num_symbol = _SI_PREFIXES[numerator[:-1]], "K"
+        else:
+            num_scale, num_symbol = _split_unit(numerator)
+        den_scale, den_symbol = _split_unit(denominator)
+        symbol = f"{num_symbol}/{den_symbol}"
+        if symbol in UNIT_VOCABULARY:
+            return num_scale / den_scale, symbol
     if len(text) > 1 and text[0] in _SI_PREFIXES and text[1:] in UNIT_VOCABULARY:
-        return text[0], text[1:]
+        return _SI_PREFIXES[text[0]], text[1:]
     raise UnknownUnitError(
         f"unit {unit!r} is not in the unit vocabulary: "
         f"{sorted(UNIT_VOCABULARY)} with SI prefixes {sorted(_SI_PREFIXES)}"

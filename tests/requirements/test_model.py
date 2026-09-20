@@ -251,9 +251,14 @@ def test_unit_vocabulary_stays_small_and_typed() -> None:
         "S": "conductance",
         "A/V": "transconductance",
         "V/V": "gain",
+        "s/V": "inverse_voltage_slew",
+        "V/s": "voltage_slew",
+        "A/s": "current_slew",
+        "C/W": "thermal_resistance",
+        "K/W": "thermal_resistance",
         "cycles": "count",
     }
-    # Prefixes only apply to single-symbol units; the compound ones stay whole.
+    # Canonical compound units retain their direction and physical dimension.
     assert normalize_unit("uS") == "S"
     assert normalize_unit("A/V") == "A/V"
     assert scale_factor("uS", "S") == pytest.approx(1e-6)
@@ -269,6 +274,48 @@ def test_unknown_limit_unit_is_an_error() -> None:
     assert [(i.severity, i.code, i.detail["field"], i.detail["unit"]) for i in issues] == [
         ("error", "unit_unknown", "limits", "furlong")
     ]
+
+
+@pytest.mark.parametrize(
+    ("unit", "canonical", "factor"),
+    [
+        ("ns/V", "s/V", 1e-9),
+        ("ns / mV", "s/V", 1e-6),
+        ("V/ns", "V/s", 1e9),
+        ("mV/µs", "V/s", 1e3),
+        ("mA/ms", "A/s", 1.0),
+        ("°C/W", "C/W", 1.0),
+        ("℃/mW", "C/W", 1e3),
+        ("deg C / W", "C/W", 1.0),
+        ("K / W", "K/W", 1.0),
+        ("mK/W", "K/W", 1e-3),
+        ("mV/mV", "V/V", 1.0),
+        ("µA/mV", "A/V", 1e-3),
+    ],
+)
+def test_compound_units_validate_and_freeze_at_the_same_scale(
+    unit: str, canonical: str, factor: float
+) -> None:
+    from boardmodeler.authoring.spec import normalize_unit as frozen_unit
+
+    row = make_requirement(limits=Limit(max=20, unit=unit))
+    assert not any(issue.code == "unit_unknown" for issue in validate_requirement(row))
+    assert normalize_unit(unit) == canonical
+    assert scale_factor(unit, canonical) == pytest.approx(factor)
+    assert scale_factor(canonical, unit) == pytest.approx(1 / factor)
+    base, multiplier = frozen_unit(unit)
+    assert base == canonical
+    assert multiplier == pytest.approx(factor)
+
+
+def test_compound_units_do_not_invert_limits_or_accept_unrelated_dimensions() -> None:
+    for target in ("V/ns", "ns", "V", "°C/W"):
+        with pytest.raises(UnitError):
+            scale_factor("ns/V", target)
+    for unit in ("ns/furlong", "V/", "/V", "V/s/A", "V//s", "K"):
+        with pytest.raises(UnknownUnitError):
+            normalize_unit(unit)
+    assert scale_factor("K/W", "°C/W") == 1.0
 
 
 def test_unknown_expression_unit_is_an_error() -> None:

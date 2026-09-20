@@ -79,3 +79,18 @@ Final local checks: `pytest -q -m "not ltspice and not network"`: 1008 passed, 4
   separated labels, all pins within the body height, reference and value outside.
 - No paid inference requests were needed for this change. This does not add electrical
   coverage or establish a new live IBM Bob result.
+
+
+## 2026-09-20 — compound datasheet units (1.1.7)
+
+The saved SN74LVC1GX04 extraction failed before authoring: the unit vocabulary
+rejected valid `ns/V` and `°C/W` limits. Recognition now includes time/voltage,
+voltage/time, current/time and thermal resistance. Numerator and denominator
+prefixes are scaled independently. Frozen characteristics use the same conversion.
+Unmeasurable rows remain explicit gaps; accepting a unit does not create a probe.
+
+- `python -m ruff check .` and `python -m ruff format --check .`: passed.
+- `python -m pytest -q -m "not ltspice and not network"`: 1028 passed,
+  4 skipped (unavailable vendor originals), 154 deselected.
+- New checks cover compound scaling, incompatible dimensions, extraction without
+  an unnecessary correction request, cached replay and retaining unprobed rows.

@@ -135,3 +135,43 @@ def test_invalid_classification_gets_one_repair_and_only_valid_result_is_cached(
     assert not [issue for issue in result.issues if issue.severity == "error"]
     assert extract_requirements(project, provider=provider, allow_remote=True).cache_hits == 4
     assert len(backend.calls) == 2
+
+
+def test_datasheet_compound_units_do_not_trigger_a_paid_correction(tmp_path):
+    """Valid but unprobed quantities must survive extraction without losing rows."""
+    from dataclasses import replace
+
+    from boardmodeler.pipeline.make_model import bind_requirements
+
+    project = make_project(tmp_path)
+    text = "Input transition rate is at most 20 ns/V. Thermal resistance is 165 °C/W."
+    store_plain_document(
+        project, text, doc_id="DOC_1", classification="public", remote_inference_allowed=True
+    )
+
+    class CompoundAgent(RecordingAgent):
+        def author(self, request, cancel):
+            result = super().author(request, cancel)
+            data = json.loads(result.stdout_tail)
+            rows = []
+            for req_id, unit, value, statement in (
+                ("EDGE", "ns/V", 20, "Input transition rate"),
+                ("THERMAL", "°C/W", 165, "Thermal resistance"),
+            ):
+                row = requirement_payload(req_id, text)
+                row.update(statement=statement, limits={"max": value, "unit": unit})
+                rows.append(row)
+            data["REQUIREMENTS"]["requirements"] = rows
+            return replace(result, stdout_tail=json.dumps(data))
+
+    backend = CompoundAgent()
+    provider = AgentExtractionProvider(backend)
+    result = extract_requirements(project, provider=provider, allow_remote=True)
+    assert len(backend.calls) == 1
+    assert [row.limits.unit for row in result.requirements] == ["ns/V", "°C/W"]
+    assert not [issue for issue in result.issues if issue.severity == "error"]
+    bindings = bind_requirements(result.requirements)
+    assert len(bindings) == 2
+    assert all(row["probe"] is None and row["not_testable_reason"] for row in bindings)
+    assert extract_requirements(project, provider=provider, allow_remote=True).cache_hits == 4
+    assert len(backend.calls) == 1
