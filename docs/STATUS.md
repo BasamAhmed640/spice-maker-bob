@@ -108,14 +108,23 @@ Observed checks:
 - `.venv/Scripts/python.exe -m pytest -q -m "not ltspice and not network" --disable-warnings`: 1056 passed, 8 skipped.
 - Final shared partial-fixture change: `pytest -q tests/authoring/test_circuit_probe.py -m "not ltspice"`: 24 passed, 2 deselected in the general checkout.
 - General real-simulator regression: `pytest -q tests/authoring/test_circuit_probe.py tests/authoring/test_live_failure_regressions.py tests/pipeline/test_make_model.py -m ltspice`: 9 passed, 80 deselected.
-- Ruff lint/format checks passed before final packaging. Both frozen GUIs opened in the startup verifier.
+- Ruff lint/format checks passed before final packaging. The final general frozen GUI opened; the final Bob executable was blocked by Windows signing policy. Earlier Bob startup passes were intermediate builds only.
 
 The live five-datasheet matrix includes TLV9002, SN74LVC1G14, SN74LVC1T45,
-TPS7A2033 and LMV331. Four currently pass their covered checks and independent
-functional tests. The regulator exposed full-load, shutdown and convergence failures;
-its repair remains under investigation. These results do not establish every datasheet,
-all operating conditions, or a new live Bob account result. Software regression passes
-must not be represented as device certification. See DATASHEET_ROBUSTNESS.md.
+TPS7A2033 and LMV331. All five final model files passed 30 independent real-LTspice
+functional checks (3, 1, 8, 10 and 8 respectively). Checks cover both amplifier channels,
+both logic edges, translator directions, unequal supplies, ground offsets, regulator
+full load and shutdown, and comparator output states. The regulator has 14 covered
+PASS results and one covered UNKNOWN settling check. All devices retain untested
+numeric rows as UNKNOWN. Translator propagation timing was omitted by extraction.
+
+Earlier failed regulator candidates are historical evidence, not the published model.
+The final repair request ended with an incomplete provider stream; the last measured
+candidate was preserved. Its 731-second run demonstrates that maximum-reasoning API
+latency remains unresolved. Latest replay times are not cold-start speed benchmarks.
+These tests do not establish every datasheet, all operating conditions, manufacturer
+diversity (all five are TI), or a new live Bob account result. Software regression
+passes must not be represented as device certification. See DATASHEET_ROBUSTNESS.md.
 
 
 ### Bob installer verification blocked
@@ -137,3 +146,6 @@ offline suite: 1159 passed, 4 skipped, 159 deselected. Bob focused latest regres
 TLV9002 checks and the release ZIP installer matched the root checksum. General
 installer completed with exit 0; installed and built executable SHA256 both equal
 51bbecc18c56c8b1be49ba6bf745fccc342a9622d33c07ec25945950da1208ba.
+
+Final source CI at `e85480f` passed: 1058 passed, 9 skipped, 159 deselected; Ruff lint and format passed.
+[GitHub Actions evidence](https://github.com/BasamAhmed640/spice-maker-bob/actions/runs/35535579411).
