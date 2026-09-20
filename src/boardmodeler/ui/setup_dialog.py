@@ -21,9 +21,12 @@ import json
 import os
 import sys
 import tempfile
+import threading
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -41,6 +44,7 @@ from PySide6.QtWidgets import (
 from boardmodeler import agent_providers
 from boardmodeler.agent_providers import AgentProvider
 from boardmodeler.config import AppConfig, config_path, load_config, save_config
+from boardmodeler.security.key_verification import CHECK_TIMEOUT_S, KeyVerification, verify_key
 from boardmodeler.ui.theme import CGA, RETRO_STYLESHEET
 
 __all__ = ["SetupDialog", "configured_provider", "describe_settings", "ltspice_user_lib", "main"]
@@ -104,6 +108,11 @@ class SetupDialog(QDialog):
 
     def __init__(self, parent: object | None = None) -> None:
         super().__init__(parent)
+        self._key_check = None
+        self._key_timer = QTimer(self)
+        self._key_timer.setInterval(100)
+        self._key_timer.timeout.connect(self._poll_key_check)
+        self.finished.connect(self._cancel_key_check)
         self.setWindowTitle("Spice Maker setup")
         self.setStyleSheet(RETRO_STYLESHEET)
         self._config = load_config()
@@ -187,7 +196,8 @@ class SetupDialog(QDialog):
         self.key_edit = QLineEdit()
         self.key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.key_edit.setPlaceholderText(f"paste your {self._provider.label} API key")
-        save_key = QPushButton("SAVE KEY")
+        save_key = QPushButton("SAVE & CHECK KEY")
+        self.save_key_button = save_key
         save_key.clicked.connect(self._save_key)
         grid.addWidget(self.key_label, row, 0)
         grid.addWidget(self.key_edit, row, 1)
@@ -268,7 +278,8 @@ class SetupDialog(QDialog):
         self.key_edit.setPlaceholderText(f"paste your {provider.label} API key")
         self.key_hint.setText(
             f"{provider.key_hint}\n{provider.docs}\n"
-            "GO sends your chosen datasheet and model text to this provider."
+            "GO sends your chosen datasheet and model text to this provider.\n"
+            "Saving a key runs a small connection check (may use a little API credit)."
         )
         self.model_edit.setText(self._model_for(provider))
         self.model_label.setVisible(provider.model_editable)
@@ -282,6 +293,7 @@ class SetupDialog(QDialog):
         return provider.model or ""
 
     def _on_provider_changed(self) -> None:
+        self._cancel_key_check()
         assert self.provider_combo is not None  # only connected when the row exists
         provider = agent_providers.by_id(self.provider_combo.currentData())
         if provider is None:  # pragma: no cover - the combo only holds catalog ids
@@ -349,8 +361,10 @@ class SetupDialog(QDialog):
             from boardmodeler.security.credentials import set_credential
 
             set_credential(self._provider.credential, value)
-        except Exception as exc:
-            QMessageBox.warning(self, "Could not store the key", str(exc))
+        except Exception:
+            QMessageBox.warning(
+                self, "Could not store the key", "Windows credential storage failed."
+            )
             return
         self.key_edit.clear()
         # SAVE KEY must also save which provider owns it; otherwise GO can still
@@ -360,6 +374,54 @@ class SetupDialog(QDialog):
         self.saved_label.setText(
             f"{self._provider.label} key stored in the Windows credential store"
         )
+        self._start_key_check(value)
+
+    def _start_key_check(self, value: str) -> None:
+        self._cancel_key_check()
+        provider, model = self._provider, self.model_edit.text().strip() or None
+        cancel = threading.Event()
+        results = []
+        self._key_check = (cancel, results, time.monotonic())
+        self.key_status.setText("Key saved; checking connection (up to 15 seconds)…")
+        self.save_key_button.setEnabled(False)
+
+        def run() -> None:
+            try:
+                result = verify_key(provider, value, model=model, cancel=cancel)
+            except Exception:
+                result = KeyVerification("unverified", "Could not complete the connection check.")
+            results.append(result)
+
+        threading.Thread(target=run, name="api-key-check", daemon=True).start()
+        self._key_timer.start()
+
+    def _poll_key_check(self) -> None:
+        if self._key_check is None:
+            return
+        cancel, results, started = self._key_check
+        if not results and time.monotonic() - started < CHECK_TIMEOUT_S:
+            return
+        result = (
+            results[0]
+            if results
+            else KeyVerification("unverified", "Check timed out; the saved key may still be valid.")
+        )
+        cancel.set()
+        self._key_timer.stop()
+        self._key_check = None
+        self.save_key_button.setEnabled(True)
+        self.key_status.setText(f"Key saved — {result.status.upper()}: {result.detail}")
+        self.key_status.setWordWrap(True)
+        self.key_status.setMaximumWidth(620)
+        self.setFixedSize(self.sizeHint())
+
+    def _cancel_key_check(self, *_args) -> None:
+        if self._key_check is not None:
+            self._key_check[0].set()
+        self._key_check = None
+        self._key_timer.stop()
+        if hasattr(self, "save_key_button"):
+            self.save_key_button.setEnabled(True)
 
     def _accept_only_provider(self) -> None:
         """Accept this build's one provider — the explicit fix for a config naming another.

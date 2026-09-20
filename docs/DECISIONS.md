@@ -90,3 +90,12 @@ temperature offsets. Unknown units and incompatible dimensions remain rejected.
 ## 2026-09-20 — independent fixtures and explicit coverage
 
 Use bounded declarative test recipes for diverse physical pin maps; freeze recipes and limits before authoring. Preserve untested quantitative rows as UNKNOWN. Unknown units are retained without conversion and cannot be measured; stress ratings have an explicit class. Cache successful extraction batches; keep observed UNKNOWN feedback in memory for repair, never as a shortcut to PASS. A failed API turn with unchanged bytes stops. Local unambiguous syntax/ground corrections retain original bytes and require a new simulator run. Correct fixture thresholds only from explicit source conditions before freezing a new run.
+
+## D-020 — bounded credential verification
+
+Saving a key retains it in the OS credential store even when a short connection
+check is inconclusive. Only an observed inference response earns VERIFIED. Timeouts,
+quota, setup and incomplete replies remain UNVERIFIED. HTTP 401/403 are reported as
+authentication/permission refusal, without echoing server text. Checks send no user
+documents and cannot change the provider, model or reasoning choice. Bob license
+acceptance is explicit and is never performed automatically by the application.

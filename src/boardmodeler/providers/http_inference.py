@@ -128,6 +128,12 @@ def _ssl_context() -> ssl.SSLContext:
     return ssl.create_default_context(cafile=cafile)
 
 
+class _NoCredentialRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # Never forward provider credentials through redirects.
+        return None
+
+
 def urllib_transport(request: HttpRequest) -> HttpResponse:
     """Production transport: stdlib ``urllib`` with system TLS and proxy settings.
 
@@ -141,6 +147,7 @@ def urllib_transport(request: HttpRequest) -> HttpResponse:
         method=request.method,
     )
     opener = urllib.request.build_opener(
+        _NoCredentialRedirect(),
         urllib.request.HTTPSHandler(context=_ssl_context()),
         urllib.request.ProxyHandler(),
     )
@@ -154,9 +161,11 @@ def urllib_transport(request: HttpRequest) -> HttpResponse:
             )
     except urllib.error.HTTPError as exc:
         try:
-            body = exc.read()
+            body = _read_response_body(exc, deadline)
         except Exception:  # the error body is best effort, never the reason we fail
             body = b""
+        finally:
+            exc.close()
         return HttpResponse(
             status=int(exc.code),
             headers={str(key): str(value) for key, value in (exc.headers or {}).items()},

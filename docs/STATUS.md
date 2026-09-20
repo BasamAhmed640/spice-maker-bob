@@ -149,3 +149,28 @@ installer completed with exit 0; installed and built executable SHA256 both equa
 
 Final source CI at `e85480f` passed: 1058 passed, 9 skipped, 159 deselected; Ruff lint and format passed.
 [GitHub Actions evidence](https://github.com/BasamAhmed640/spice-maker-bob/actions/runs/35535579411).
+
+## 2026-09-20 — credential connection check (1.1.9)
+
+SAVE & CHECK KEY now checks the exact newly saved credential asynchronously, with
+a 15-second UI deadline, cancellation on close/provider change, no automatic retries,
+and fixed messages that never echo provider bodies or exception text. HTTP checks
+use a 256-token inference budget and retain model/reasoning settings. Bob checks
+use an empty workspace, all documented tool groups disabled, one turn and a 0.05
+Bobcoin cap. License acceptance remains a user action. HTTP redirects cannot forward keys.
+
+`pytest -q -m "not ltspice and not network" --disable-warnings`: 1067 passed, 8 skipped, 159 deselected.
+Ruff check and format passed. Live general-edition checks accepted the saved valid
+credential and rejected an intentionally invalid credential. No saved key was found
+in either repository or the inspected Bob JSON/log files.
+
+Both final 1.1.9 frozen GUI startup verifiers passed. The earlier Bob signing-policy
+block did not recur on this feature build; no Windows security policy or trust store
+was changed. Bob Shell 2.0.4 was installed from its checksum-verified IBM package.
+Its optional telemetry was disabled using the documented setting. Live Bob inference
+is pending the user's acceptance of IBM's license.
+
+Both packaged 1.1.9 executables passed all seven TLV9002 real-LTspice checks;
+release ZIP installer bytes matched the tracked root installers and checksums.
+The Bob 1.1.9 installer completed with exit 0, and the installed application opened
+successfully with the same executable hash as the tested frozen build.
