@@ -85,3 +85,8 @@ Prefixes on quotient operands are independent: `ns/V` is `1e-9 s/V`, whereas
 `V/ns` is `1e9 V/s`. No reciprocal conversion is implied. Thermal resistance in
 Celsius per watt and kelvin per watt uses temperature differences, not absolute
 temperature offsets. Unknown units and incompatible dimensions remain rejected.
+
+
+## 2026-09-20 — independent fixtures and explicit coverage
+
+Use bounded declarative test recipes for diverse physical pin maps; freeze recipes and limits before authoring. Preserve untested quantitative rows as UNKNOWN. Unknown units are retained without conversion and cannot be measured; stress ratings have an explicit class. Cache successful extraction batches; keep observed UNKNOWN feedback in memory for repair, never as a shortcut to PASS. A failed API turn with unchanged bytes stops. Local unambiguous syntax/ground corrections retain original bytes and require a new simulator run. Correct fixture thresholds only from explicit source conditions before freezing a new run.

@@ -111,6 +111,10 @@ def required_ports_for(spec: SpecSet) -> tuple[str, ...]:
     symbol instead of inventing an order, and the harness reports the binding
     defect itself when it runs.
     """
+    if spec.pin_map and any(char.probe_ports or char.probe_recipe for char in spec.covered()):
+        from boardmodeler.authoring.pin_roles import physical_terminals
+
+        return physical_terminals(spec.pin_map)
     try:
         from boardmodeler.authoring.probes import required_ports
     except ImportError:  # pragma: no cover - the registry ships with the harness
@@ -162,6 +166,17 @@ def _describe(characteristic: Characteristic) -> list[str]:
         lines.append(
             "  datasheet conditions: " + json.dumps(characteristic.conditions, ensure_ascii=False)
         )
+    if characteristic.probe_recipe:
+        from boardmodeler.authoring.circuit_probe import CircuitRecipe
+
+        lines.append(
+            "  frozen independent test circuit: "
+            + CircuitRecipe.model_validate(characteristic.probe_recipe).model_dump_json(
+                exclude_defaults=True, exclude_none=True
+            )
+        )
+    if characteristic.relative_limits:
+        lines.append("  original relative limits: " + json.dumps(characteristic.relative_limits))
     return lines
 
 
@@ -199,21 +214,32 @@ def build_prompt(spec: SpecSet, subckt: str, harness_summary: str = "") -> str:
         lines.extend(
             [
                 "Physical pin map (preserve pin identity and supply domains):",
-                json.dumps(spec.pin_map, ensure_ascii=False),
+                json.dumps(
+                    [
+                        {
+                            k: v
+                            for k, v in p.items()
+                            if v not in (None, [], {}) and k not in ("schema_version", "evidence")
+                        }
+                        for p in spec.pin_map
+                    ],
+                    ensure_ascii=False,
+                ),
             ]
         )
     if ports:
         lines.extend(f"  - {port}" for port in ports)
-        lines.append(
-            "Those are the ports the harness binds by name; declare every one of them. Extra"
-        )
-        lines.append(
-            "ports are allowed (the harness gives them a DC path). Declare the ports in the"
-        )
+        lines.append("Those are the ports the harness binds by name; declare every one of them.")
         lines.append(
             "order your model wants: the `.subckt` port list is what counts, and the symbol's"
         )
         lines.append("`PINATTR SpiceOrder` entries will be generated to match it one-to-one.")
+        if any(char.probe_ports or char.probe_recipe for char in covered):
+            lines.append(
+                "For this physical-pin model, declare EXACTLY the listed terminals. "
+                "The harness uses a separate adapter for its fixture roles; do not add "
+                "fictitious A/Y/FB pins. Model every channel and each listed supply."
+            )
     else:
         lines.append(
             "  (the probe registry did not report a port list here — declare every port your"
@@ -247,7 +273,7 @@ def build_prompt(spec: SpecSet, subckt: str, harness_summary: str = "") -> str:
             reason = characteristic.not_testable_reason or "no deterministic probe available"
             lines.append(f"- [{characteristic.char_id}] {reason}")
             lines.append(f"  requirement: {characteristic.statement}")
-            lines.append(f"  citation: {_citation_text(characteristic)}")
+            lines.append(f"  limits: {_limits_text(characteristic)}")
         lines.append(
             "These are reported as not testable with that reason. They must not be presented"
         )
@@ -270,6 +296,10 @@ def build_prompt(spec: SpecSet, subckt: str, harness_summary: str = "") -> str:
             "3. Do not relax, reinterpret or delete a target, a limit or a requirement.",
             "4. Keep the model self-contained: the harness includes your file by absolute path.",
             "5. Report honestly in your notes: an untested behaviour stays untested.",
+            "6. Use a compact behavioral macromodel, with brief comments. Do not reproduce the datasheet as comments. A capacitor state must have stabilizing feedback (a current leaving its node discharges it). Prioritize a convergent complete first candidate; measured feedback drives repairs.",
+            "7. Every behavioural voltage must use an explicit local reference, e.g. V(A,GND), including internal state voltages. Global node 0 is not the device's ground pin. Clamp outputs and internal state to the physical supply range and model all channels, both signal polarities, and power-off behavior.",
+            "8. A stable state primitive is: Cstate state GND C; Rdc state GND 1T; Bstate GND state I=(V(target,GND)-V(state,GND))*C/tau. tau must stay strictly positive. For different edge speeds choose tau with if(), do not distribute terms outside the feedback difference. Give capacitor/current-source nodes a DC path. Disable all pass/drive currents when disabled; a small line-regulation correction must not turn a disabled regulator back on. Close each subcircuit with .ends.",
+            "9. Regulator pass elements must recover from a below-ground initial DC guess: do not let a foldback limit become zero while a positive load is demanding current. Keep the short-circuit current floor positive and include a weak output DC path. Avoid high-order discharge polynomials, which can create extra operating points. Use the observed failure details to make a small repair and preserve working characteristics.",
         ]
     )
     if harness_summary.strip():
@@ -683,14 +713,11 @@ def build_model(
     re-hashed after every turn, the model file must exist, and the harness is the
     only thing that can produce PASS. Stopping on a cap or a stall is UNKNOWN with
     the last report and the still-failing probes, never a pass by attrition.
-
-    ``candidate_revalidated`` says the caller already judged this candidate with
-    one harness run (for a cache entry this process did not observe), so the
-    precheck is not repeated here.
     """
     workdir = Path(request.workdir)
     from boardmodeler.authoring.validation_cache import (
         progress_score,
+        read_feedback,
         read_report,
         validation_key,
         write_report,
@@ -740,17 +767,19 @@ def build_model(
         revalidated = revalidate_candidate(request, cancel)
         if revalidated is not None:
             return revalidated
+        cached = read_report(cache_root, key, frozen, path)
     usable, reason = request.backend.availability()
     if not usable:
         report = _report_without_runs(request.part, digest, path)
         return _outcome(Status.BLOCKED, 0, report, history, reason)
 
     harness_dir = workdir / HARNESS_DIRNAME
-    report = _report_without_runs(request.part, digest, path)
-    prompt = build_prompt(frozen, request.subckt)
-    best_score = None
-    best_bytes = None
-    best_report = None
+    previous = cached or read_feedback(cache_root, key, frozen, path)
+    report = previous or _report_without_runs(request.part, digest, path)
+    prompt = build_prompt(frozen, request.subckt, _feedback_text(report) if previous else "")
+    best_score = progress_score(report, frozen) if previous else None
+    best_bytes = path.read_bytes() if previous and path.is_file() else None
+    best_report = previous
     session_id = None
     attempts_dir = workdir / "candidates" / uuid.uuid4().hex
     stalled = 0
@@ -796,6 +825,9 @@ def build_model(
         if tamper is not None:
             history.append(f"turn {turn}: {note}; {tamper}")
             return _outcome(Status.UNKNOWN, turn, report, history, tamper)
+        if not authored.ok and path.is_file() and _digest(path) == before:
+            history.append(f"turn {turn}: {note}; existing candidate preserved")
+            return _outcome(Status.UNKNOWN, turn, report, history, note)
         if not path.is_file():
             history.append(f"turn {turn}: {note}; model_file_missing ({path})")
             missing = f"model_file_missing: {path} does not exist after turn {turn}"
@@ -807,6 +839,12 @@ def build_model(
                 missing if authored.ok else f"{note}; {missing}",
             )
         try:
+            from boardmodeler.authoring.model_reference import normalize_ground_reference
+
+            if normalize_ground_reference(
+                path, frozen.pin_map, workdir / "evidence" / "ground-reference", spec=frozen
+            ):
+                note += "; normalized global references to the declared GND pin; re-simulating"
             key = validation_key(
                 path, frozen, _ltspice_executable(request.ltspice), request.timeout_s
             )

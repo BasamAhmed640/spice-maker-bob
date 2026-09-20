@@ -1,5 +1,9 @@
 # Spice Maker Bob
 
+**Installer update pending:** the source contains the new reliability fixes, but Windows Application Control blocked the rebuilt Bob executable under its signing policy. The Code-menu ZIP still contains the previous v1.1.7 installer; it does not include these source changes. No security policy was changed.
+
+Datasheet extraction and model verification now recover smaller requests, preserve failed-run feedback, and report untested numeric requirements honestly. See [coverage and reliability](docs/DATASHEET_ROBUSTNESS.md).
+
 IC symbols now use a consistent local layout with verified model pin order. See
 [standard symbols](docs/STANDARD_SYMBOLS.md).
 

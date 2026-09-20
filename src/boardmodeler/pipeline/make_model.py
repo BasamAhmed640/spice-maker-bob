@@ -105,7 +105,7 @@ from boardmodeler.authoring.spec import SpecSet, load_tps54320_spec, normalize_u
 from boardmodeler.config import load_config
 from boardmodeler.documents.pdf import page_text, read_pdf
 from boardmodeler.documents.store import DocumentStore, DocumentStoreError
-from boardmodeler.domain.enums import RequirementOrigin, Status
+from boardmodeler.domain.enums import RequirementClass, RequirementOrigin, Status
 from boardmodeler.domain.records import DocumentRecord, Requirement
 from boardmodeler.models.library import ModelStoreError, subckt_ports
 from boardmodeler.models.symbolism import symbol_text
@@ -969,6 +969,15 @@ def bind_requirements(
     )
     for requirement in requirements:
         req_id = requirement.req_id
+        if requirement.req_class in (RequirementClass.UNKNOWN, RequirementClass.ABSOLUTE_MAXIMUM):
+            entries.append(
+                {
+                    "req_id": req_id,
+                    "probe": None,
+                    "not_testable_reason": "unknown classification or absolute stress rating; not an operating model target",
+                }
+            )
+            continue
         if req_id in blocked:
             entries.append(
                 {
@@ -1478,7 +1487,12 @@ class _Run:
                 ).provider
             else:
                 self.backend = build_backend(self.request)
-                extraction_provider = AgentExtractionProvider(self.backend, part=self.request.part)
+                extraction_provider = AgentExtractionProvider(
+                    self.backend,
+                    part=self.request.part,
+                    diagnostics_dir=self.workdir / "evidence" / "extraction-attempts",
+                    progress=lambda detail: self.log.emit("extract", "running", detail),
+                )
         except ProviderError as exc:
             raise _Stop(
                 "extract",
@@ -1603,7 +1617,7 @@ class _Run:
     def _row_counts(self) -> dict[str, int]:
         return {"rows": len(self.requirements), "unverified": len(self.unverified)}
 
-    def bind(self) -> None:
+    def bind(self, cancel=None) -> None:
         request = self.request
         self.log.emit("bind", "running", "binding datasheet rows to the probe registry")
         self.spec_dir.mkdir(parents=True, exist_ok=True)
@@ -1622,6 +1636,23 @@ class _Run:
         elif self.reference_bindings is not None:
             entries = self.reference_bindings
             note = "reviewed LM358 operating points and dual-amplifier probes"
+        elif self.pin_map and self.request.backend_name not in ("fixture", "scripted"):
+            from boardmodeler.authoring.test_planner import plan_bindings
+
+            try:
+                entries = plan_bindings(
+                    self.requirements,
+                    self.pin_map,
+                    self.backend or build_backend(self.request),
+                    self.workdir / "evidence" / "test-plans",
+                    part=self.request.part,
+                    unverified=self.unverified,
+                    cancel=cancel,
+                    progress=lambda detail: self.log.emit("bind", "running", detail),
+                )
+            except (ValueError, TypeError, KeyError) as exc:
+                raise _Stop("bind", Status.BLOCKED.value, str(exc)) from exc
+            note = "independent device-specific fixtures, frozen before model authoring"
         else:
             entries = bind_requirements(self.requirements, unverified=self.unverified)
             note = "binding computed from the reviewed keyword table"
@@ -1755,6 +1786,11 @@ class _Run:
             timeout_s=self.request.timeout_s,
         )
         path = model_file(self.workdir, self.request.subckt)
+        from boardmodeler.authoring.model_reference import normalize_ground_reference
+
+        normalize_ground_reference(
+            path, self.spec.pin_map, self.workdir / "evidence" / "ground-reference", spec=self.spec
+        )
         key = validation_key(path, self.spec, install.path, self.request.timeout_s)
         cached = read_report(self.workdir / "validation-cache", key, self.spec, path)
         prechecked = cached is None and not (cancel and cancel.is_set())
@@ -1998,13 +2034,29 @@ class _Run:
                 )
                 continue
             if characteristic.probe is None:
+                missing_numeric_test = (
+                    characteristic.req_class in ("DOCUMENTED_LIMIT", "TYPICAL_VALUE")
+                    and any(
+                        value is not None
+                        for value in (
+                            characteristic.min_value,
+                            characteristic.max_value,
+                            characteristic.typ_value,
+                        )
+                    )
+                    and not re.search(
+                        r"recommended|operating (?:range|envelope)", characteristic.statement, re.I
+                    )
+                )
                 rows.append(
                     RowOutcome(
                         req_id=req_id,
                         statement=characteristic.statement,
                         required=characteristic.not_testable_reason or "no simulation probe",
                         measured="-",
-                        status=Status.NOT_APPLICABLE.value,
+                        status=Status.UNKNOWN.value
+                        if missing_numeric_test
+                        else Status.NOT_APPLICABLE.value,
                         page=characteristic.source_page,
                     )
                 )
@@ -2038,21 +2090,20 @@ class _Run:
         if outcome.status == Status.BLOCKED.value:
             return Status.BLOCKED.value, outcome.detail
         if outcome.status == Status.PASS.value:
-            unverified = [row.req_id for row in rows if row.status == Status.UNKNOWN.value]
-            if unverified:
+            incomplete = [row.req_id for row in rows if row.status == Status.UNKNOWN.value]
+            if incomplete:
                 return (
                     Status.UNKNOWN.value,
                     "every bound row passed its simulator run, but "
-                    f"{len(unverified)} row(s) could not be verified against their cited page "
-                    f"({', '.join(unverified[:5])}); point requirements_json at the extraction "
-                    "result whose citations verify, or supply the datasheet the rows came from, "
-                    "and re-run",
+                    f"{len(incomplete)} row(s) remain unverified or lack a measurement "
+                    f"({', '.join(incomplete[:5])}). The model is available with limited coverage; "
+                    "review the UNKNOWN rows and model card before using it outside the tested conditions.",
                 )
             judged = sum(1 for row in rows if row.status in (Status.PASS.value, Status.FAIL.value))
             return (
                 Status.PASS.value,
-                f"every one of the {len(rows)} datasheet row(s) is accounted for: {judged} bound "
-                f"row(s) passed real LTspice runs and the rest are declared not testable with a "
+                f"{judged} measured row(s) passed real LTspice runs at the recorded operating points; "
+                f"{len(rows) - judged} other row(s) remain outside the tested scope with a "
                 f"reason. The model is in {self.out_dir}; open "
                 f"{self.request.subckt}.asy in LTspice or run 'boardmodeler model install "
                 f"--out {self.out_dir} --user-lib --apply'.",
@@ -2116,7 +2167,7 @@ def make_model(
     try:
         run.read()
         run.extract(cancel)
-        run.bind()
+        run.bind(cancel)
         run.author(cancel)
         run.save()
     except _Stop as stop:

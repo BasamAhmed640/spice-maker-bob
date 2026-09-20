@@ -1115,3 +1115,15 @@ def _register_opamp_probes() -> None:
 
 
 _register_opamp_probes()
+
+# The per-characteristic frozen recipe supplies this probe's implementation.
+# A missing recipe has no renderer and is UNKNOWN, never a synthetic result.
+_register(
+    ProbeSpec(
+        probe_id="circuit_measurement",
+        title="Frozen device fixture",
+        unit="",
+        ports_needed=(),
+        judge_key="recipe_value",
+    )
+)

@@ -61,7 +61,7 @@ __all__ = [
     "TestResult",
 ]
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 BEHAVIOR_KEYS: tuple[str, ...] = (
     "startup",
@@ -192,6 +192,18 @@ class PinDefinition(Record):
 # requirements
 
 
+class RelativeLimit(Record):
+    """An affine bound, in the limit's unit: factor * parameter + offset.
+
+    The parameter is an explicitly cited operating-condition name, never a
+    Python or SPICE expression. Evaluation requires an explicit operating point.
+    """
+
+    parameter: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]*$")
+    factor: float = Field(allow_inf_nan=False)
+    offset: float = Field(default=0.0, allow_inf_nan=False)
+
+
 class Limit(Record):
     """A numeric limit triple with a unit. Values must be ordered if all given."""
 
@@ -199,9 +211,15 @@ class Limit(Record):
     typ: float | None = None
     max: float | None = None
     unit: str
+    min_relative: RelativeLimit | None = None
+    typ_relative: RelativeLimit | None = None
+    max_relative: RelativeLimit | None = None
 
     @model_validator(mode="after")
     def _check_order(self) -> Limit:
+        for side in ("min", "typ", "max"):
+            if getattr(self, side) is not None and getattr(self, side + "_relative") is not None:
+                raise ValueError(f"{side} cannot be both a scalar and a relative bound")
         present = [v for v in (self.min, self.typ, self.max) if v is not None]
         if present != sorted(present):
             raise ValueError(f"limit min/typ/max out of order: {self.min}/{self.typ}/{self.max}")

@@ -144,12 +144,13 @@ def urllib_transport(request: HttpRequest) -> HttpResponse:
         urllib.request.HTTPSHandler(context=_ssl_context()),
         urllib.request.ProxyHandler(),
     )
+    deadline = time.monotonic() + request.timeout_s
     try:
         with opener.open(http_request, timeout=request.timeout_s) as response:
             return HttpResponse(
                 status=int(response.status),
                 headers={str(key): str(value) for key, value in response.headers.items()},
-                body=response.read(),
+                body=_read_response_body(response, deadline),
             )
     except urllib.error.HTTPError as exc:
         try:
@@ -161,6 +162,27 @@ def urllib_transport(request: HttpRequest) -> HttpResponse:
             headers={str(key): str(value) for key, value in (exc.headers or {}).items()},
             body=body or b"",
         )
+
+
+def _read_response_body(response, deadline):
+    """Enforce a whole-response deadline even while SSE keeps the socket alive."""
+    chunks, size = [], 0
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("the API response exceeded its total time budget")
+        sock = getattr(getattr(getattr(response, "fp", None), "raw", None), "_sock", None)
+        if sock is not None:
+            sock.settimeout(remaining)
+        chunk = response.read1(65536)
+        if time.monotonic() >= deadline:
+            raise TimeoutError("the API response exceeded its total time budget")
+        if not chunk:
+            return b"".join(chunks)
+        size += len(chunk)
+        if size > 128 * 1024 * 1024:
+            raise ValueError("API response exceeds the 128 MiB transport bound")
+        chunks.append(chunk)
 
 
 def probe_endpoint(

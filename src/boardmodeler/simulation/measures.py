@@ -90,7 +90,9 @@ class RunDiagnostics:
         simulator did not deliver data, which is not evidence about the design.
         """
         if self.convergence_issues:
-            return "sim_convergence_failure: " + self.convergence_issues[0]
+            return "sim_convergence_failure: " + " | ".join(
+                (self.errors + self.convergence_issues)[:2]
+            )
         if self.raw_missing_reason:
             return f"sim_output_unreadable: {self.raw_missing_reason}"
         if not self.completed:

@@ -91,6 +91,18 @@ UNIT_VOCABULARY: dict[str, str] = {
     "C/W": "thermal_resistance",
     "K/W": "thermal_resistance",
     "cycles": "count",
+    "dB": "logarithmic_ratio",
+    "J": "energy",
+    "A/A": "current_gain",
+    "V/C": "voltage_temperature_drift",
+    "A/C": "current_temperature_drift",
+    "ppm/C": "relative_temperature_drift",
+    "ppm": "parts_per_million",
+    "%/V": "relative_voltage_sensitivity",
+    "%/A": "relative_current_sensitivity",
+    "%/C": "relative_temperature_sensitivity",
+    "V/sqrt(Hz)": "voltage_noise_density",
+    "A/sqrt(Hz)": "current_noise_density",
 }
 """Canonical unit symbol → physical dimension.
 
@@ -165,7 +177,10 @@ def _split_unit(unit: str) -> tuple[float, str]:
             num_scale, num_symbol = _SI_PREFIXES[numerator[:-1]], "K"
         else:
             num_scale, num_symbol = _split_unit(numerator)
-        den_scale, den_symbol = _split_unit(denominator)
+        if denominator == "sqrt(Hz)":
+            den_scale, den_symbol = 1.0, denominator
+        else:
+            den_scale, den_symbol = _split_unit(denominator)
         symbol = f"{num_symbol}/{den_symbol}"
         if symbol in UNIT_VOCABULARY:
             return num_scale / den_scale, symbol
@@ -184,6 +199,7 @@ def _fold_unit(unit: str) -> str:
         raise UnknownUnitError("the empty unit is not in the unit vocabulary")
     text = _MICRO_SIGNS.sub("u", text)
     text = text.replace("\u2103", "C").replace("\u00b0", "")
+    text = text.replace("√Hz", "sqrt(Hz)").replace("√(Hz)", "sqrt(Hz)")
     ohm = _OHM_ALIAS.match(text)
     if ohm is not None:
         return f"{ohm.group('prefix')}ohm"
@@ -487,7 +503,10 @@ def _check_limit_presence(requirement: Requirement) -> list[RequirementIssue]:
     limits = requirement.limits
     klass = requirement.req_class
     if klass is RequirementClass.DOCUMENTED_LIMIT:
-        has_bound = limits is not None and (limits.min is not None or limits.max is not None)
+        has_bound = limits is not None and any(
+            getattr(limits, side) is not None
+            for side in ("min", "max", "min_relative", "max_relative")
+        )
         if not has_bound and requirement.expression is None:
             return [
                 _error(
@@ -500,7 +519,9 @@ def _check_limit_presence(requirement: Requirement) -> list[RequirementIssue]:
                     kind=requirement.kind.value,
                 )
             ]
-    elif klass is RequirementClass.TYPICAL_VALUE and (limits is None or limits.typ is None):
+    elif klass is RequirementClass.TYPICAL_VALUE and (
+        limits is None or (limits.typ is None and limits.typ_relative is None)
+    ):
         return [
             _error(
                 "limit_missing_value",
@@ -528,10 +549,11 @@ def _check_units(requirement: Requirement) -> list[RequirementIssue]:
             normalize_unit(unit)
         except UnknownUnitError:
             issues.append(
-                _error(
+                (_warning if field_name == "limits" else _error)(
                     "unit_unknown",
                     requirement.req_id,
-                    f"{field_name} unit {unit!r} is not in the unit vocabulary",
+                    f"{field_name} unit {unit!r} is preserved without conversion; "
+                    "no numeric probe may judge this unsupported unit",
                     field=field_name,
                     unit=unit,
                 )

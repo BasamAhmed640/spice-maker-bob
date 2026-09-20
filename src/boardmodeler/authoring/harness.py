@@ -162,11 +162,20 @@ class HarnessReport:
                 blocks.append(f"  datasheet: {citation}")
             if outcome.cause:
                 blocks.append(f"  likely cause: {outcome.cause}")
+        deferred = []
         for outcome in self.unknown():
+            if (outcome.unknown_reason or "").startswith("deferred_after_invalid_simulation:"):
+                deferred.extend(outcome.char_ids)
+                continue
             blocks.append(f"probe {outcome.probe_id} [UNKNOWN]")
             blocks.append(f"  reason: {outcome.unknown_reason or '(unspecified)'}")
             for citation in outcome.citations:
                 blocks.append(f"  would have required: {citation}")
+        if deferred:
+            blocks.append(
+                "Remaining fixtures deferred until the simulation error is repaired (all limits stay frozen): "
+                + ", ".join(deferred)
+            )
         return "\n".join(blocks)
 
     def to_json(self) -> str:
@@ -299,7 +308,7 @@ def _simulator_said(log) -> str:
         said.extend(str(line) for line in (getattr(log, name, None) or []))
     if not said:
         return ""
-    tail = list(dict.fromkeys(said))[-2:]
+    tail = list(dict.fromkeys(said))[:2]
     return f"; LTspice said: {' | '.join(tail)[:300]}"
 
 
@@ -360,7 +369,10 @@ def run_harness(
 
     library_error: str | None = None
     try:
+        from boardmodeler.authoring.model_syntax import validate_library
+
         model_ports(model_lib, subckt)
+        validate_library(model_lib)
     except ProbeError as exc:
         library_error = exc.full_reason()
 
@@ -378,12 +390,32 @@ def run_harness(
         probe_params = [char.probe_params for char in chars]
         try:
             probe = PROBES[probe_id]
+            if probe_id == "circuit_measurement":
+                from boardmodeler.authoring.circuit_probe import make_probe
+
+                probe = make_probe(chars[0].probe_recipe)
         except KeyError:
             outcomes.append(_unknown_outcome(probe_id, run_dir, chars, f"unknown_probe:{probe_id}"))
             continue
+        except ValueError as exc:
+            outcomes.append(_unknown_outcome(probe_id, run_dir, chars, f"invalid_recipe:{exc}"))
+            continue
 
         try:
-            deck_text = probe.render(model_lib=model_lib, subckt=subckt, params=probe_params[0])
+            test_model, test_subckt = model_lib, subckt
+            if chars[0].probe_ports:
+                from boardmodeler.authoring.pin_roles import write_probe_adapter
+
+                test_model, test_subckt = write_probe_adapter(
+                    model_lib,
+                    subckt,
+                    chars[0].probe_ports,
+                    spec.pin_map,
+                    run_dir / "fixture-adapter.lib",
+                )
+            deck_text = probe.render(
+                model_lib=test_model, subckt=test_subckt, params=probe_params[0]
+            )
         except (ProbeError, ValueError) as exc:
             reason = exc.full_reason() if isinstance(exc, ProbeError) else str(exc)
             outcomes.append(_unknown_outcome(probe_id, run_dir, chars, reason))
@@ -407,6 +439,13 @@ def run_harness(
         )
         if reason is not None:
             outcomes.append(_unknown_outcome(probe_id, run_dir, chars, reason))
+            if reason.startswith(
+                ("run_timeout:", "sim_convergence_failure:", "sim_output_unreadable:")
+            ):
+                # Repair an invalid candidate before spending another timeout on
+                # every remaining fixture. All deferred rows remain UNKNOWN and
+                # are run normally after a changed candidate is supplied.
+                library_error = "deferred_after_invalid_simulation: " + reason
             continue
 
         try:
@@ -442,7 +481,16 @@ def run_harness(
                 judged=f"{key} = {value:.6g} {chars[0].unit}".strip(),
                 citations=citations,
                 cause=cause,
-                operating_point=dict(params),
+                operating_point=(
+                    {
+                        **chars[0].probe_recipe.get("operating_point", {}),
+                        "temperature_C": chars[0].probe_recipe.get("temperature", 25),
+                        "tstop_s": chars[0].probe_recipe.get("stop"),
+                        "tmax_s": chars[0].probe_recipe.get("step"),
+                    }
+                    if chars[0].probe_recipe
+                    else dict(params)
+                ),
                 artifacts={
                     str(path.resolve()): sha256_file(path)
                     for path in (result.raw_path, result.log_path)

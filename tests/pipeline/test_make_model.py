@@ -226,7 +226,8 @@ def test_scenario_a_scripted_template_passes_and_publishes_the_deliverables(
     result, _events, wall_s = run(tmp_path)
     print(f"\nscenario (a) wall time: {wall_s:.1f} s for {len(result.rows)} rows")
 
-    assert result.status == "PASS", result.detail
+    assert result.status == "UNKNOWN", result.detail
+    assert "limited coverage" in result.detail
     assert not result.counts or result.counts["FAIL"] == 0
 
     # One row per datasheet row, in the fixture's order, with the reviewed split.
@@ -235,7 +236,8 @@ def test_scenario_a_scripted_template_passes_and_publishes_the_deliverables(
     by_id = {row.req_id: row for row in result.rows}
     assert {row.req_id for row in result.rows if row.status == "PASS"} == set(BOUND_IDS)
     unbound = [row for row in result.rows if row.status == "NOT_APPLICABLE"]
-    assert len(unbound) == 29
+    assert len(unbound) == 8
+    assert result.counts["UNKNOWN"] == 21
     assert all(row.required.strip() for row in unbound), "every gap needs its reason"
     assert by_id[UNBOUND_ID].required.startswith("operating-range")
     assert by_id[UNBOUND_ID].measured == "-"
@@ -277,7 +279,7 @@ def test_scenario_a_scripted_template_passes_and_publishes_the_deliverables(
     assert frozen == json.loads(spec.to_json())
 
     results = json.loads((result.out_dir / "results.json").read_text(encoding="utf-8"))
-    assert results["status"] == "PASS"
+    assert results["status"] == "UNKNOWN"
     assert [row["req_id"] for row in results["rows"]] == fixture_ids
 
 
@@ -312,8 +314,8 @@ def test_scenario_b_one_failing_probe_is_unknown_and_keeps_every_row_status(
         VREF_ID,
         PG_ID,
     }
-    assert by_status["NOT_APPLICABLE"] == 29
-    assert result.counts["FAIL"] == 1 and result.counts["UNKNOWN"] == 1
+    assert by_status["NOT_APPLICABLE"] == 8
+    assert result.counts["FAIL"] == 1 and result.counts["UNKNOWN"] == 22
 
 
 # --------------------------------------------------------------------------- #
@@ -338,14 +340,14 @@ def test_scenario_c_missing_ltspice_is_blocked_and_never_runs_the_agent(
     assert judge_events(events) == []
     # The rows are still listed: bound rows UNKNOWN, unbound rows with reasons.
     assert len(result.rows) == 38
-    assert sum(row.status == "UNKNOWN" for row in result.rows) == 9
-    assert sum(row.status == "NOT_APPLICABLE" for row in result.rows) == 29
+    assert sum(row.status == "UNKNOWN" for row in result.rows) == 30
+    assert sum(row.status == "NOT_APPLICABLE" for row in result.rows) == 8
     assert result.counts == {
         "PASS": 0,
         "FAIL": 0,
-        "UNKNOWN": 9,
+        "UNKNOWN": 30,
         "BLOCKED": 0,
-        "NOT_APPLICABLE": 29,
+        "NOT_APPLICABLE": 8,
     }
 
 
@@ -423,7 +425,8 @@ def test_the_scripted_backend_authors_the_bundled_template_without_injection(
     """
     result, events, _wall = run(tmp_path, backend_name="scripted")
 
-    assert result.status == "PASS", result.detail
+    assert result.status == "UNKNOWN", result.detail
+    assert "limited coverage" in result.detail
     assert result.lib_path is not None and result.lib_path.is_file()
     assert result.asy_path is not None and result.asy_path.is_file()
     assert [event.counts["turn"] for event in judge_events(events)] == [1]
@@ -471,8 +474,8 @@ def test_scenario_e_cancellation_before_the_first_turn_is_unknown_with_the_stage
     assert judge and judge[-1].status == "skipped"
     assert judge_events(events) == []
     assert ("save", "skipped") in stages
-    assert sum(row.status == "UNKNOWN" for row in result.rows) == 9
-    assert sum(row.status == "NOT_APPLICABLE" for row in result.rows) == 29
+    assert sum(row.status == "UNKNOWN" for row in result.rows) == 30
+    assert sum(row.status == "NOT_APPLICABLE" for row in result.rows) == 8
 
 
 # --------------------------------------------------------------------------- #
@@ -915,7 +918,7 @@ def test_a_zero_coverage_spec_skips_author_reinforcement_and_simulation(
 
     assert result.status == "UNKNOWN"
     assert "no_covered_characteristics" in result.detail
-    assert result.rows and all(row.status == "NOT_APPLICABLE" for row in result.rows)
+    assert result.rows and all(row.status == "UNKNOWN" for row in result.rows)
 
 
 def _two_corner_voh_inputs(tmp_path: Path) -> tuple[Path, Path]:
@@ -1196,7 +1199,8 @@ def test_scenario_g_every_turn_reports_its_own_counts_and_the_last_matches(
     )
     assert turns[1].counts == {**final_report.counts(), "turn": 2}
     assert result.counts["PASS"] == sum(row.status == "PASS" for row in result.rows)
-    assert result.status == "PASS", result.detail
+    assert result.status == "UNKNOWN", result.detail
+    assert "limited coverage" in result.detail
 
 
 # --------------------------------------------------------------------------- #
@@ -1424,7 +1428,7 @@ def test_a_capped_run_with_every_row_measured_wrong_is_fail(
     assert result.status == "FAIL", result.detail
     assert "outside the datasheet limits" in result.detail and "vref" in result.detail
     assert result.counts["FAIL"] == 1
-    assert result.counts["UNKNOWN"] == 8, "the rows the canned harness did not report are gaps"
+    assert result.counts["UNKNOWN"] == 29, "the rows the canned harness did not report are gaps"
     failed = next(row for row in result.rows if row.req_id == VREF_ID)
     assert failed.status == "FAIL" and failed.measured == "v_fb = 0.5 V"
 

@@ -170,7 +170,7 @@ def extract_requirements(
     records = {record.doc_id: record for record in project.documents()}
     findings, snippets_by_doc = _collect_snippets(project, records, max_chars=max_chars)
 
-    codec = _PageLookup(project, records)
+    codec = _PageLookup(project, records, snippets_by_doc)
 
     sent_docs: list[DocumentRecord] = []
     allowed_snippets: list[DocSnippet] = []
@@ -352,13 +352,25 @@ class _PageLookup:
     records as "not verified" rather than as an exception.
     """
 
-    def __init__(self, project: Project, records: Mapping[str, DocumentRecord]) -> None:
+    def __init__(
+        self,
+        project: Project,
+        records: Mapping[str, DocumentRecord],
+        snippets_by_doc: Mapping[str, Sequence[DocSnippet]] | None = None,
+    ) -> None:
         self._project = project
         self._records = records
         self._pdfs: dict[str, PdfDocument] = {}
         self._texts: dict[str, str] = {}
+        self._pages: dict[tuple[str, int], str] = {}
+        for doc_id, snippets in (snippets_by_doc or {}).items():
+            for snippet in snippets:
+                key = (doc_id, snippet.pdf_page)
+                self._pages[key] = self._pages.get(key, "") + snippet.text
 
     def page_text(self, doc_id: str, pdf_page: int) -> str | None:
+        if (doc_id, pdf_page) in self._pages:
+            return self._pages[(doc_id, pdf_page)]
         record = self._records.get(doc_id)
         if record is None or not record.path:
             return None

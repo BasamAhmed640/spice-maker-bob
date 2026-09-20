@@ -17,6 +17,20 @@ CACHE_VERSION = 1
 #: entry is reused only when this process produced it; a fresh process re-simulates the
 #: existing candidate instead of trusting files nobody can bind to their run.
 _OBSERVED: dict[tuple[str, str], object] = {}
+_FEEDBACK: dict[tuple[str, str], object] = {}
+
+
+def read_feedback(root: Path, key: str | None, spec, model: Path):
+    """Return this process's measured failures, including UNKNOWN, for repair only.
+
+    This is never a shortcut to PASS or a reusable simulation verdict.
+    """
+    report = _FEEDBACK.get((str(Path(root).resolve()), key)) if key else None
+    if report is None or not model.is_file():
+        return None
+    if report.spec_digest != spec.digest() or report.model_sha256 != sha256_file(model):
+        return None
+    return report
 
 
 @lru_cache(maxsize=64)
@@ -114,8 +128,21 @@ def read_report(root: Path, key: str | None, spec, model: Path):
             # A cached status is never its own evidence: remeasure the hashed raw
             # waveform and compare with the frozen limits, without launching LTspice.
             probe = PROBES[row.probe_id]
+            if row.probe_id == "circuit_measurement":
+                from boardmodeler.authoring.circuit_probe import make_probe
+
+                probe = make_probe(case[1][0].probe_recipe)
             params = probe.merged_params(case[1][0].probe_params)
-            if row.operating_point != params:
+            operating_point = params
+            if row.probe_id == "circuit_measurement":
+                recipe = case[1][0].probe_recipe
+                operating_point = {
+                    **recipe["operating_point"],
+                    "temperature_C": recipe["temperature"],
+                    "tstop_s": recipe["stop"],
+                    "tmax_s": recipe["step"],
+                }
+            if row.operating_point != operating_point:
                 return None
             raw_path = Path(row.run_dir) / "deck.raw"
             log_path = Path(row.run_dir) / "deck.log"
@@ -124,7 +151,12 @@ def read_report(root: Path, key: str | None, spec, model: Path):
             diagnosis = diagnose(
                 log=parse_log(log_path),
                 raw=read_raw(raw_path),
-                tran=TranSpec(tstep=0, tstop=params["tstop_s"], tstart=0, tmax=params["tmax_s"])
+                tran=TranSpec(
+                    tstep=0,
+                    tstop=operating_point["tstop_s"],
+                    tstart=0,
+                    tmax=operating_point["tmax_s"],
+                )
                 if probe.analysis == "tran"
                 else None,
             )
@@ -144,6 +176,8 @@ def read_report(root: Path, key: str | None, spec, model: Path):
 
 
 def write_report(root: Path, key: str | None, report) -> None:
+    if key is not None and report.outcomes:
+        _FEEDBACK[(str(Path(root).resolve()), key)] = report
     if (
         key is None
         or not report.outcomes

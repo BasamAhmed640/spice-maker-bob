@@ -870,6 +870,25 @@ def reinforce(
     a filesystem error while writing the report can propagate.
     """
     out_root = Path(out_dir)
+    if (
+        enabled
+        and candidate_provider is None
+        and fetcher is None
+        and not (cancel and cancel.is_set())
+    ):
+        prior = out_root / _SPEC_DIR / _SUPPORTING_FILENAME
+        try:
+            saved = ReinforcementReport.from_json(prior.read_text(encoding="utf-8"))
+            ttl = 3600 if saved.status == "ok" else 600
+            if (
+                saved.part == part
+                and saved.spec_digest == spec_digest
+                and saved.enabled
+                and time.time() - prior.stat().st_mtime < ttl
+            ):
+                return saved
+        except OSError, ValueError, KeyError, TypeError:
+            pass
     deadline = None if timeout_s is None else time.monotonic() + float(timeout_s)
 
     def budget_left() -> float | None:

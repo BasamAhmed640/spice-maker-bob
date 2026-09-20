@@ -52,6 +52,7 @@ class RequirementClass(StrEnum):
     """Class of a requirement statement."""
 
     DOCUMENTED_LIMIT = "DOCUMENTED_LIMIT"
+    ABSOLUTE_MAXIMUM = "ABSOLUTE_MAXIMUM"
     TYPICAL_VALUE = "TYPICAL_VALUE"
     DERIVED_VALUE = "DERIVED_VALUE"
     USER_REQUIREMENT = "USER_REQUIREMENT"

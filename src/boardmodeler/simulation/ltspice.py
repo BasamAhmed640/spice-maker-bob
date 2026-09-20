@@ -499,6 +499,27 @@ def run_batch(
         _release_lock(lock)
 
 
+def _native_path(path: Path) -> str:
+    """Keep long evidence paths while giving legacy Windows tools an existing short alias."""
+    text = str(path)
+    if os.name != "nt" or len(text) < 240:
+        return text
+    import ctypes
+
+    buffer = ctypes.create_unicode_buffer(32768)
+    is_file = path.is_file()
+    target = str(path.parent) if is_file else text
+    count = ctypes.windll.kernel32.GetShortPathNameW(target, buffer, len(buffer))
+    native = str(Path(buffer.value) / path.name) if is_file else buffer.value
+    if count and count < len(buffer) and len(native) < 240:
+        # Preserve the deck basename: LTspice derives .raw/.log names from
+        # argv, so an 8.3 alias for the file itself would hide its outputs.
+        return native
+    raise OSError(
+        "windows_path_too_long: this volume has no short path alias; choose a shorter model folder"
+    )
+
+
 def _run_locked(
     *,
     exe: Path,
@@ -519,8 +540,8 @@ def _run_locked(
 
     started = time.monotonic()
     proc = subprocess.Popen(
-        argv,
-        cwd=str(run_dir),
+        [*argv[:-1], _native_path(deck)],
+        cwd=_native_path(run_dir),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

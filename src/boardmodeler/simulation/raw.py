@@ -178,7 +178,7 @@ def _parse_header(data: bytes) -> _Header:
             f"header declares {nvars} variables but lists {len(variables)}: {variables}"
         )
 
-    flags = fields.get("Flags", "").split()
+    flags = fields.get("Flags", "").lower().split()
     plotname = fields.get("Plotname", "")
     return _Header(
         fields=fields,
@@ -318,6 +318,10 @@ def read_raw(path: str | Path) -> RawFile:
         )
 
     payload = data[header.data_start :]
+    if "fastaccess" in header.flags:
+        raise RawFormatError(
+            "FastAccess column-major raw data is unsupported; save normal binary data"
+        )
     if "complex" in header.flags:
         expected = header.npoints * header.nvars * 16
         if header.mode != "binary" or "fastaccess" in header.flags or len(payload) != expected:
@@ -326,6 +330,12 @@ def read_raw(path: str | Path) -> RawFile:
             )
         values = np.frombuffer(payload, dtype="<c16").reshape(header.npoints, header.nvars).copy()
         layout = "complex128"
+    elif header.mode == "binary" and "double" in header.flags:
+        expected = header.npoints * header.nvars * 8
+        if len(payload) != expected:
+            raise RawFormatError("double-precision raw payload length disagrees with its header")
+        values = np.frombuffer(payload, dtype="<f8").reshape(header.npoints, header.nvars).copy()
+        layout = "float64"
     elif header.mode == "binary":
         values, layout = _decode_binary(payload, header.nvars, header.npoints)
     else:

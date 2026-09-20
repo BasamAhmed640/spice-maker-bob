@@ -257,6 +257,18 @@ def test_unit_vocabulary_stays_small_and_typed() -> None:
         "C/W": "thermal_resistance",
         "K/W": "thermal_resistance",
         "cycles": "count",
+        "dB": "logarithmic_ratio",
+        "J": "energy",
+        "A/A": "current_gain",
+        "V/C": "voltage_temperature_drift",
+        "A/C": "current_temperature_drift",
+        "ppm/C": "relative_temperature_drift",
+        "ppm": "parts_per_million",
+        "%/V": "relative_voltage_sensitivity",
+        "%/A": "relative_current_sensitivity",
+        "%/C": "relative_temperature_sensitivity",
+        "V/sqrt(Hz)": "voltage_noise_density",
+        "A/sqrt(Hz)": "current_noise_density",
     }
     # Canonical compound units retain their direction and physical dimension.
     assert normalize_unit("uS") == "S"
@@ -266,13 +278,13 @@ def test_unit_vocabulary_stays_small_and_typed() -> None:
         scale_factor("A/V", "V/V")
 
 
-def test_unknown_limit_unit_is_an_error() -> None:
+def test_unknown_limit_unit_is_retained_as_an_unconverted_warning() -> None:
     requirement = make_requirement(limits=Limit(min=3.234, max=3.366, unit="furlong"))
 
     issues = validate_requirement(requirement)
 
     assert [(i.severity, i.code, i.detail["field"], i.detail["unit"]) for i in issues] == [
-        ("error", "unit_unknown", "limits", "furlong")
+        ("warning", "unit_unknown", "limits", "furlong")
     ]
 
 
@@ -662,6 +674,7 @@ def test_report_counts_cover_every_class_and_split_errors_from_warnings() -> Non
     assert report.ok is False
     assert report.counts == {
         RequirementClass.DOCUMENTED_LIMIT.value: 2,
+        RequirementClass.ABSOLUTE_MAXIMUM.value: 0,
         RequirementClass.TYPICAL_VALUE.value: 0,
         RequirementClass.DERIVED_VALUE.value: 0,
         RequirementClass.USER_REQUIREMENT.value: 1,

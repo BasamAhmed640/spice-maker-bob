@@ -2,7 +2,7 @@
 
 The card is the only place a claim about the model is allowed to live, and every row on
 it is produced from an observed harness outcome. A characteristic with no probe is
-listed as ``NOT_APPLICABLE`` with its reason rather than being quietly dropped, so a
+listed as a coverage gap with its reason rather than being quietly dropped, so a
 reader can see exactly which datasheet rows were tested, which were judged, and which
 were never reachable by simulation.
 """
@@ -138,7 +138,7 @@ def render_card(
         "This model is the product of an agent's work judged by real LTspice runs against "
         "the datasheet rows listed below. A row is only `PASS` when a completed simulation "
         "produced the measured value shown; rows that could not be judged are `UNKNOWN` with "
-        "the reason, and datasheet rows no probe can reach are `NOT_APPLICABLE` with the "
+        "the reason. Datasheet rows no probe can reach are listed as coverage gaps with the "
         "reason. Nothing else about this part is claimed.",
         "PASS applies only at the operating points recorded in harness-report.json. "
         "A nominal sample inside a datasheet range does not validate the whole range. "
@@ -147,7 +147,7 @@ def render_card(
         "",
         f"**Totals:** {counts.get('PASS', 0)} pass · {counts.get('FAIL', 0)} fail · "
         f"{counts.get('UNKNOWN', 0)} unknown · {len(uncovered)} rows not testable by "
-        f"simulation out of {len(spec.characteristics)} datasheet rows.",
+        f"simulation out of {len(spec.characteristics)} datasheet rows. The pass/fail/unknown totals here cover executed probes; the application also counts untested numeric requirements as UNKNOWN.",
         "",
         "## Judged characteristics",
         "",

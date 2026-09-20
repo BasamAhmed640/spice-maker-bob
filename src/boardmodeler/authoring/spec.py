@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -130,6 +130,9 @@ class Characteristic:
     probe_params: dict[str, float]
     not_testable_reason: str | None
     conditions: tuple[dict[str, Any], ...] = ()
+    probe_ports: dict[str, str] = field(default_factory=dict)
+    probe_recipe: dict[str, Any] = field(default_factory=dict)
+    relative_limits: dict[str, Any] = field(default_factory=dict)
 
     @property
     def has_limits(self) -> bool:
@@ -149,6 +152,9 @@ class Characteristic:
 
     def payload(self) -> dict[str, Any]:
         return {
+            **({"probe_ports": dict(sorted(self.probe_ports.items()))} if self.probe_ports else {}),
+            **({"probe_recipe": self.probe_recipe} if self.probe_recipe else {}),
+            **({"relative_limits": self.relative_limits} if self.relative_limits else {}),
             "char_id": self.char_id,
             "statement": self.statement,
             "unit": self.unit,
@@ -187,6 +193,9 @@ class Characteristic:
                 else str(payload["not_testable_reason"])
             ),
             conditions=tuple(payload.get("conditions") or ()),
+            probe_ports=dict(payload.get("probe_ports") or {}),
+            probe_recipe=dict(payload.get("probe_recipe") or {}),
+            relative_limits=dict(payload.get("relative_limits") or {}),
         )
 
 
@@ -266,9 +275,15 @@ class SpecSet:
         for probe_id, chars in self.by_probe().items():
             groups: dict[str, list[Characteristic]] = {}
             for char in chars:
-                fingerprint = sha256_bytes(canonical_json_bytes(char.payload()["probe_params"]))[
-                    :12
-                ]
+                fingerprint = sha256_bytes(
+                    canonical_json_bytes(
+                        {
+                            "params": char.probe_params,
+                            "ports": char.probe_ports,
+                            "recipe": char.probe_recipe,
+                        }
+                    )
+                )[:12]
                 groups.setdefault(fingerprint, []).append(char)
             for fingerprint, group in groups.items():
                 name = probe_id if len(groups) == 1 else f"{probe_id}-{fingerprint}"
@@ -373,12 +388,30 @@ def load_tps54320_spec(
 
         unit = ""
         min_value = max_value = typ_value = None
+        relative = {}
         if isinstance(limits, dict):
             base, scale = normalize_unit(str(limits.get("unit", "")))
             unit = base
             min_value = _scaled(limits.get("min"), scale)
             max_value = _scaled(limits.get("max"), scale)
             typ_value = _scaled(limits.get("typ"), scale)
+            relative = {
+                side: limits[side + "_relative"]
+                for side in ("min", "typ", "max")
+                if limits.get(side + "_relative") is not None
+            }
+            if binding.get("probe") is not None and relative:
+                values = {"min": min_value, "typ": typ_value, "max": max_value}
+                operating = (binding.get("recipe") or {}).get("operating_point", {})
+                for side, bound in relative.items():
+                    parameter = bound["parameter"]
+                    if parameter not in operating:
+                        raise ValueError(f"{req_id}: relative limit needs explicit {parameter}")
+                    values[side] = (
+                        float(bound["factor"]) * float(operating[parameter])
+                        + float(bound.get("offset", 0))
+                    ) * scale
+                min_value, typ_value, max_value = values["min"], values["typ"], values["max"]
 
         probe = binding.get("probe")
         if probe is None:
@@ -401,6 +434,7 @@ def load_tps54320_spec(
                     probe_params={},
                     not_testable_reason=reason,
                     conditions=_conditions(requirement),
+                    relative_limits=relative,
                 )
             )
             continue
@@ -432,6 +466,9 @@ def load_tps54320_spec(
                 req_class=_req_class(requirement.get("class")),
                 probe=probe_id,
                 probe_params={str(k): float(v) for k, v in params.items()},
+                probe_ports=dict(binding.get("ports") or {}),
+                probe_recipe=dict(binding.get("recipe") or {}),
+                relative_limits=relative,
                 not_testable_reason=None,
                 conditions=_conditions(requirement),
             )

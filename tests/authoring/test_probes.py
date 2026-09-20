@@ -106,6 +106,10 @@ def test_registry_has_the_required_probes() -> None:
     assert required <= set(PROBES)
     for probe_id, spec in PROBES.items():
         assert spec.probe_id == probe_id
+        if probe_id == "circuit_measurement":
+            # Frozen recipes provide their own ports, units, renderer and measurement.
+            assert spec.renderer is None and spec.measurer is None
+            continue
         assert spec.title and spec.question
         assert spec.unit in {"V", "A", "s", "ohm", "F", "Hz", "V/V", "V/s"}
         assert spec.ports_needed
