@@ -311,11 +311,6 @@ def read_raw(path: str | Path) -> RawFile:
     data = target.read_bytes()
     header = _parse_header(data)
 
-    if "complex" in header.flags:
-        raise RawFormatError(
-            "complex (AC/FFT) raw data is not supported by the native reader; "
-            f"plotname={header.plotname!r} flags={header.flags}"
-        )
     if "stepped" in header.flags:
         raise RawFormatError(
             "stepped .raw files concatenate every step without an index in the header; "
@@ -323,7 +318,15 @@ def read_raw(path: str | Path) -> RawFile:
         )
 
     payload = data[header.data_start :]
-    if header.mode == "binary":
+    if "complex" in header.flags:
+        expected = header.npoints * header.nvars * 16
+        if header.mode != "binary" or "fastaccess" in header.flags or len(payload) != expected:
+            raise RawFormatError(
+                "unsupported or truncated complex raw payload; expected binary complex128 points"
+            )
+        values = np.frombuffer(payload, dtype="<c16").reshape(header.npoints, header.nvars).copy()
+        layout = "complex128"
+    elif header.mode == "binary":
         values, layout = _decode_binary(payload, header.nvars, header.npoints)
     else:
         values = _decode_values(
@@ -346,7 +349,7 @@ def read_raw(path: str | Path) -> RawFile:
         variables=header.variables,
         variable_types=header.variable_types,
         data=values,
-        complex_data=False,
+        complex_data="complex" in header.flags,
         points_per_step=[header.npoints],
         header_encoding=header.encoding,
         layout=layout,

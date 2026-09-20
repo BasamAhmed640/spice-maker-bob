@@ -1,0 +1,18 @@
+* SYNTHETIC_TEST_FIXTURE: idealized dominant-pole dual amplifier, not vendor silicon data.
+.subckt ORACLE OUT1 IN1M IN1P VEE IN2P IN2M OUT2 VCC
+XA IN1P IN1M VCC VEE OUT1 SYNTH_AMP
+XB IN2P IN2M VCC VEE OUT2 SYNTH_AMP
+.ends ORACLE
+.subckt SYNTH_AMP P M VP VN O
+Ibase VP VN 350u
+IbP VN P 20n
+IbM VN M 22n
+Bcharge 0 pole I=limit(0.00439823*(V(P,M)+0.003),-0.0003,0.0003)
+Rdom pole 0 22.7364meg
+Cdom pole 0 1n
+Bstop pole 0 I=0.1*(V(pole)-limit(V(pole),V(VN)+0.005,V(VP)-2))
+Bdrive drive 0 V=limit(V(pole),V(VN)+0.005,V(VP)-2)
+Bsource VP O I=max(0,min(0.03,(V(drive)-V(O))/10))
+Bsink O VN I=max(0,min(0.02,(V(O)-V(drive))/10))
+Rout O VN 1g
+.ends SYNTH_AMP

@@ -1344,6 +1344,8 @@ class _Run:
         self.backend: AuthorBackend | None = None
         self.backend_name = ""
         self.turns = 0
+        self.reference_bindings: list[dict[str, Any]] | None = None
+        self.citation_lookup = None
         self.status = Status.UNKNOWN.value
         self.detail = ""
         self.lib_path: Path | None = None
@@ -1453,6 +1455,27 @@ class _Run:
             )
             return
 
+        if self.record is not None and self.request.backend_name not in ("fixture", "scripted"):
+            from boardmodeler.authoring.lm358_reference import matches, records
+
+            if matches(self.request.part, self.record.file_hash):
+                self.citation_lookup = _page_lookup(self.record, self.store)
+                page = self.citation_lookup(self.record.doc_id, 9)
+                self.requirements, self.reference_bindings, self.pin_map = records(
+                    self.record, page
+                )
+                self._verify_citations()
+                if self.unverified:
+                    raise _Stop(
+                        "extract", Status.BLOCKED.value, "reviewed extraction citations failed"
+                    )
+                self.log.emit(
+                    "extract",
+                    "ok",
+                    "reviewed LM358 table 5.7 and eight-pin map matched the exact TI datasheet; zero extraction API calls",
+                    self._row_counts(),
+                )
+                return
         self.log.emit("extract", "running", "asking the extraction provider for the datasheet rows")
         from boardmodeler.pipeline.project import ProjectError, create_project
         from boardmodeler.requirements.extract import extract_requirements
@@ -1566,7 +1589,9 @@ class _Run:
         if documents:
             assert self.record is not None
             checks = verify_citations(
-                self.requirements, documents, excerpt_lookup=_page_lookup(self.record, self.store)
+                self.requirements,
+                documents,
+                excerpt_lookup=self.citation_lookup or _page_lookup(self.record, self.store),
             )
             self.unverified = {
                 req_id: (
@@ -1607,6 +1632,9 @@ class _Run:
                 )
             entries = self._supplied_entries(supplied)
             note = f"binding file supplied by the caller ({supplied.name})"
+        elif self.reference_bindings is not None:
+            entries = self.reference_bindings
+            note = "reviewed LM358 operating points and dual-amplifier probes"
         else:
             entries = bind_requirements(self.requirements, unverified=self.unverified)
             note = "binding computed from the reviewed keyword table"

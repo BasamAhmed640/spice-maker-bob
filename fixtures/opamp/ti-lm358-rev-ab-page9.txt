@@ -1,0 +1,96 @@
+5.7 Electrical Characteristics: LM358, LM358A
+For VS = (V+) – (V–) = 5 V, T A = 25°C (unless otherwise noted)
+PARAMETER TEST CONDITIONS (1) MIN TYP (2) MAX UNIT
+OFFSET VOLTAGE
+VOS Input offset voltage VS = 5 V to 30 V; V C M = 0 V; V O = 1.4
+V
+LM358
+3 7
+mV
+TA = 0°C to 70°C 9
+LM358A 2 3
+TA = 0°C to 70°C 5
+dVOS/dT Input offset voltage drift
+LM358 T A = 0°C to 70°C 7
+µV/°C
+LM358A T A = 0°C to 70°C 7 20
+PSRR Input offset voltage vs power
+supply (ΔVIO/ΔVS) VS = 5 V to 30 V 65 100 dB
+VO1/ VO2 Channel separation f = 1 kHz to 20 kHz 120 dB
+INPUT VOLTAGE RANGE
+VCM Common-mode voltage range
+VS = 5 V to 30 V LM358
+(V–) (V+) – 1.5
+V
+VS = 30 V LM358A
+VS = 5 V to 30 V LM358
+TA = 0°C to 70°C (V–) (V+) – 2
+VS = 30 V LM358A
+CMRR Common-mode rejection ratio V S = 5 V to 30 V; V CM = 0 V 65 80 dB
+INPUT BIAS CURRENT
+IB Input bias current V O = 1.4 V
+LM358
+–20 –250
+nA
+TA = 0°C to 70°C –500
+LM358A
+–15 –100
+TA = 0°C to 70°C –200
+IOS Input offset current V O = 1.4 V
+LM358
+2 50
+nA
+TA = 0°C to 70°C 150
+LM358A
+2 30
+TA = 0°C to 70°C 75
+dIOS/dT Input offset current drift
+10
+pA/°C
+LM358A T A = 0°C to 70°C 300
+NOISE
+en Input voltage noise density f = 1 kHz 40 nV/√ Hz
+OPEN-LOOP GAIN
+AOL Open-loop voltage gain V S = 15 V; V O = 1 V to 11 V; R L ≥2 kΩ
+25 100
+V/mV
+TA = 0°C to 70°C 15
+FREQUENCY RESPONSE
+GBW Gain bandwidth product 0.7 MHz
+SR Slew rate G = +1 0.3 V/µs
+OUTPUT
+VO Voltage output swing from rail
+Positive rail
+VS = 30 V; R L = 2 kΩT A = 0°C to 70°C 4
+VVS = 30 V; R L ≥10 kΩ 2 3
+VS = 5 V; R L ≥2 kΩ 1.5
+Negative rail V S = 5 V; R L ≤10 kΩT A = 0°C to 70°C 5 20 mV
+IO Output current
+VS = 15 V; V O = 0 V; V ID
+= 1 V Source
+–20 –30
+mA
+LM358A –60
+TA = 0°C to 70°C –10
+VS = 15 V; V O = 15 V;
+VID = –1 V Sink
+10 20
+TA = 0°C to 70°C 5
+VID = –1 V; V O = 200 mV 12 30 µA
+ISC Short-circuit current V S = 10 V; V O = VS / 2 ±40 ±60 mA
+POWER SUPPLY
+IQ Quiescent current per amplifier
+VO = 2.5 V; I O = 0 A
+TA = 0°C to 70°C
+350 600
+µA
+VS = 30 V; V O = 15 V; I O = 0 A 500 1000
+(1) All characteristics are measured under open-loop conditions, with zero common-mode input voltage, unless otherwise specified.
+Maximum VS for testing purposes is 30 V for LM358 and LM358A.
+(2) All typical values are T A = 25°C.
+LM158, LM158A, LM258, LM258A
+LM2904, LM2904B, LM2904BA, LM2904V
+LM358, LM358A, LM358B, LM358BA
+SLOS068AB – JUNE 1976 – REVISED OCTOBER 2024 www.ti.com
+10 Submit Document Feedback Copyright © 2024 T exas Instruments Incorporated
+Product Folder Links: LM158 LM158A LM258 LM258A LM2904 LM2904B LM2904BA LM2904V LM358 LM358A LM358B LM358BA

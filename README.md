@@ -1,5 +1,8 @@
 # Spice Maker Bob
 
+LM358 now has reviewed datasheet extraction and real dual-amplifier checks. See
+[measured coverage and limitations](docs/LM358_VALIDATION.md).
+
 GO now shows a continuously updating **ELAPSED HH:MM:SS** clock, preserving the
 final duration. See [what the agents and simulator do](docs/AGENT_WORKFLOW.md).
 

@@ -495,6 +495,7 @@ class ModelMakerWindow(QMainWindow):
                     _colour(_STATUS_COLOUR.get(status, "#ffffff"))
                 )
                 self.stages.item(row, 2).setText(detail)
+                self.stages.item(row, 2).setToolTip(detail)
                 break
         else:
             row = self.stages.rowCount()
@@ -504,7 +505,9 @@ class ModelMakerWindow(QMainWindow):
             item.setForeground(_colour(_STATUS_COLOUR.get(status, "#ffffff")))
             self.stages.setItem(row, 1, item)
             self.stages.setItem(row, 2, QTableWidgetItem(detail))
+            self.stages.item(row, 2).setToolTip(detail)
         self.status_label.setText(f"{stage}: {detail}".strip()[:160])
+        self.status_label.setToolTip(detail)
 
     def _on_result(self, result: object) -> None:
         self._result = result
@@ -513,6 +516,7 @@ class ModelMakerWindow(QMainWindow):
         counts = getattr(result, "counts", {}) or {}
         detail = getattr(result, "detail", "")
         self.status_label.setText(f"{status} — {counts} — {detail}"[:200])
+        self.status_label.setToolTip(detail)
         self.status_label.setStyleSheet(
             f"color: {_STATUS_COLOUR.get(status, '#ffffff')}; font-family: Consolas; "
             "font-size: 10pt;"

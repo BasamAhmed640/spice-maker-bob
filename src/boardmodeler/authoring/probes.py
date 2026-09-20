@@ -378,6 +378,7 @@ class ProbeSpec:
     judge_key: str = "value"
     renderer: Renderer | None = None
     measurer: Measurer | None = None
+    analysis: str = "tran"
 
     def merged_params(self, params: Mapping[str, float] | None = None) -> dict[str, float]:
         merged = {**_BASE_DEFAULTS, **self.defaults}
@@ -1105,3 +1106,12 @@ def _register_io_probes() -> None:
 
 
 _register_io_probes()
+
+
+def _register_opamp_probes() -> None:
+    from boardmodeler.authoring.opamp_probes import register
+
+    register(PROBES)
+
+
+_register_opamp_probes()

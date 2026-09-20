@@ -303,7 +303,9 @@ def _simulator_said(log) -> str:
     return f"; LTspice said: {' | '.join(tail)[:300]}"
 
 
-def _run_reason(result: BatchResult, log, *, tstop_s: float, tmax_s: float) -> str | None:
+def _run_reason(
+    result: BatchResult, log, *, tstop_s: float, tmax_s: float, analysis: str = "tran"
+) -> str | None:
     """Why this run cannot produce a verdict, or ``None`` when it delivered data."""
     if result.cancelled:
         return "cancelled"
@@ -323,7 +325,11 @@ def _run_reason(result: BatchResult, log, *, tstop_s: float, tmax_s: float) -> s
     diag = diagnose(
         log=log,
         raw=raw,
-        tran=TranSpec(tstep=0.0, tstop=tstop_s, tstart=0.0, tmax=tmax_s),
+        tran=(
+            TranSpec(tstep=0.0, tstop=tstop_s, tstart=0.0, tmax=tmax_s)
+            if analysis == "tran"
+            else None
+        ),
         raw_error=raw_error,
     )
     return diag.blocked_reason()
@@ -389,7 +395,13 @@ def run_harness(
         log = parse_log(result.log_path) if result.log_path is not None else None
         params = probe.merged_params(probe_params[0])
         reason = (
-            _run_reason(result, log, tstop_s=params["tstop_s"], tmax_s=params["tmax_s"])
+            _run_reason(
+                result,
+                log,
+                tstop_s=params["tstop_s"],
+                tmax_s=params["tmax_s"],
+                analysis=probe.analysis,
+            )
             if log is not None
             else f"run_incomplete: {result.observed()}"
         )

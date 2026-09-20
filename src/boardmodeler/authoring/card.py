@@ -427,9 +427,15 @@ def write_deliverables(
     written.append(card)
 
     example = out_dir / "example.cir"
-    example.write_text(
-        _example_deck(subckt=subckt, model_file=model_file), encoding="utf-8", newline="\n"
-    )
+    if any((row.probe or "").startswith("opamp_") for row in spec.covered()):
+        from boardmodeler.authoring.probes import PROBES
+
+        library = out_dir / model_file
+        text = PROBES["opamp_slew_rise"].render(model_lib=library, subckt=subckt, params={})
+        text = text.replace(library.resolve().as_posix(), model_file)
+    else:
+        text = _example_deck(subckt=subckt, model_file=model_file)
+    example.write_text(text, encoding="utf-8", newline="\n")
     written.append(example)
 
     for name, text in (("install.md", _install_text(part=part, subckt=subckt, lib=model_file)),):

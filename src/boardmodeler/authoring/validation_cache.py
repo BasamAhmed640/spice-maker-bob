@@ -124,7 +124,9 @@ def read_report(root: Path, key: str | None, spec, model: Path):
             diagnosis = diagnose(
                 log=parse_log(log_path),
                 raw=read_raw(raw_path),
-                tran=TranSpec(tstep=0, tstop=params["tstop_s"], tstart=0, tmax=params["tmax_s"]),
+                tran=TranSpec(tstep=0, tstop=params["tstop_s"], tstart=0, tmax=params["tmax_s"])
+                if probe.analysis == "tran"
+                else None,
             )
             if diagnosis.blocked_reason():
                 return None

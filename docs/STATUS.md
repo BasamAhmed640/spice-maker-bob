@@ -57,3 +57,10 @@ Validation of 1.1.3 is recorded below after the actual commands complete.
 - Root Install.exe matches the release ZIP and canonical setup; checksum verified.
   The pepper animation retains 90 frames. No paid API requests were made.
 - Agent roles and present LM358 qualification limits are documented in AGENT_WORKFLOW.md.
+
+
+## 1.1.5 LM358 correction — 2026-09-20
+
+Added the exact-datasheet reviewed profile, dual-op-amp DC/AC/transient probes, complex raw support, and op-amp follower export. Offline suites initially found a missing probe question and an outdated registry unit whitelist; both corrected. Final checks and package evidence are recorded below.
+
+Final local checks: `pytest -q -m "not ltspice and not network"`: 1008 passed, 4 skipped (git-ignored vendor originals). `ruff check .` and `ruff format --check .`: passed. Frozen GUI launch and animated package checks: passed; release ZIP and root Install.exe are identical. Shared simulator suite: 151 passed; the subsequently added exported-op-amp-example test also passed. Instrument-only tests use a labeled synthetic fixture, not claimed device data.

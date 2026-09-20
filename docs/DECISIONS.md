@@ -61,3 +61,8 @@ progress signals. It starts for an accepted build, includes cancellation cleanup
 freezes on the terminal result/error, and resets on the next GO. It is not an ETA.
 The agent workflow is documented in AGENT_WORKFLOW.md without claiming unmeasured
 model accuracy or exposing private reasoning.
+
+
+## LM358 qualification (1.1.5)
+
+Use a hash-bound reviewed extraction profile for the exact supplied LM358 datasheet, preserving explicit coverage gaps and rechecking citations. Qualify both the instruments and the generated model in LTspice; typical comparisons prevent idealized zero-offset/bias candidates passing maximum limits alone. Add native complex AC decoding and use it consistently when revalidating cached reports. See LM358_VALIDATION.md for scope.
