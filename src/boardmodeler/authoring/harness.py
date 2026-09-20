@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from boardmodeler.authoring.probes import PROBES, ProbeError, judge_value, model_ports
@@ -35,7 +35,7 @@ from boardmodeler.simulation.ltspice import BatchResult, run_batch
 from boardmodeler.simulation.measures import diagnose
 from boardmodeler.simulation.raw import RawFile, RawFormatError, read_raw
 
-__all__ = ["HarnessReport", "ProbeOutcome", "run_harness"]
+__all__ = ["HarnessReport", "ProbeOutcome", "judge_characteristic", "run_harness"]
 
 #: Relative slack applied to a declared limit before it is called a violation:
 #: one part per million of the limit magnitude absorbs ``.raw`` float rounding.
@@ -45,6 +45,11 @@ _LIMIT_SLACK = 1e-6
 
 #: Fraction of a typical value that counts as "matching the datasheet typical".
 _TYPICAL_TOLERANCE = 0.10
+
+
+#: Outcome reason for a case where some rows declare no numeric limit: the measurement
+#: is valid and still judges the rows that do.
+_NO_NUMERIC_LIMIT_REASON = "characteristic_without_numeric_limit"
 
 
 @dataclass(frozen=True)
@@ -61,6 +66,8 @@ class ProbeOutcome:
     judged: str = ""
     citations: tuple[str, ...] = ()
     cause: str | None = None
+    artifacts: dict[str, str] = field(default_factory=dict)
+    operating_point: dict[str, float] = field(default_factory=dict)
 
     def to_json(self) -> dict:
         return {
@@ -74,6 +81,8 @@ class ProbeOutcome:
             "judged": self.judged,
             "citations": list(self.citations),
             "cause": self.cause,
+            "artifacts": self.artifacts,
+            "operating_point": self.operating_point,
         }
 
     @classmethod
@@ -92,6 +101,8 @@ class ProbeOutcome:
             judged=str(payload.get("judged", "")),
             citations=tuple(str(x) for x in payload.get("citations") or ()),
             cause=None if payload.get("cause") is None else str(payload["cause"]),
+            artifacts=dict(payload.get("artifacts") or {}),
+            operating_point=dict(payload.get("operating_point") or {}),
         )
 
 
@@ -252,6 +263,46 @@ def _judge(char: Characteristic, key: str, value: float) -> tuple[str, str, str 
     )
 
 
+def judge_characteristic(characteristic: Characteristic, outcome: ProbeOutcome) -> tuple[str, str]:
+    """``(status, detail)`` for one characteristic judged from its probe's measurement.
+
+    One probe case can carry several characteristics at the same operating point, and the
+    outcome's aggregate status is the worst of them; re-judging from the same measured
+    number keeps every row's verdict its own. An unavailable or invalid run stays UNKNOWN
+    (or BLOCKED) even if a partial measurement is present, so it is never upgraded to
+    PASS; only a valid shared measurement that a sibling row could not use (no numeric
+    limit) is re-judged for the rows that can.
+    """
+    if outcome.status in (Status.UNKNOWN.value, Status.BLOCKED.value) and (
+        outcome.unknown_reason != _NO_NUMERIC_LIMIT_REASON
+    ):
+        return outcome.status, outcome.detail
+    try:
+        key, value = judge_value(outcome.probe_id, outcome.measured)
+    except ProbeError, ValueError:
+        return outcome.status, outcome.detail
+    status, detail, _cause = _judge(characteristic, key, value)
+    return status, detail
+
+
+def _simulator_said(log) -> str:
+    """The last lines the simulator printed to its own log, or an empty string.
+
+    A reason that says only "no usable output" leaves the author blind: the deck's own
+    error line (an LTspice syntax error inside the ``.subckt``, an undefined sub-model, an
+    over-defined matrix) is what lets the next turn fix the model. ``log`` is the parsed
+    log summary; anything it kept as a diagnostic is worth repeating, in the order the
+    reasons themselves prefer (errors, then convergence, then warnings).
+    """
+    said: list[str] = []
+    for name in ("errors", "convergence_issues", "warnings"):
+        said.extend(str(line) for line in (getattr(log, name, None) or []))
+    if not said:
+        return ""
+    tail = list(dict.fromkeys(said))[-2:]
+    return f"; LTspice said: {' | '.join(tail)[:300]}"
+
+
 def _run_reason(result: BatchResult, log, *, tstop_s: float, tmax_s: float) -> str | None:
     """Why this run cannot produce a verdict, or ``None`` when it delivered data."""
     if result.cancelled:
@@ -264,9 +315,11 @@ def _run_reason(result: BatchResult, log, *, tstop_s: float, tmax_s: float) -> s
         try:
             raw = read_raw(result.raw_path)
         except (RawFormatError, OSError) as exc:
-            raw_error = str(exc)
+            # An empty or truncated .raw means the run ended before it produced data, and
+            # the simulator's log is the only place that says why.
+            raw_error = f"{exc}{_simulator_said(log)}"
     else:
-        raw_error = f"no .raw was written ({result.observed()})"
+        raw_error = f"no .raw was written ({result.observed()}){_simulator_said(log)}"
     diag = diagnose(
         log=log,
         raw=raw,
@@ -306,8 +359,8 @@ def run_harness(
         library_error = exc.full_reason()
 
     outcomes: list[ProbeOutcome] = []
-    for probe_id, chars in spec.by_probe().items():
-        run_dir = probes_root / probe_id
+    for case_id, probe_id, chars in spec.cases():
+        run_dir = probes_root / case_id
         run_dir.mkdir(parents=True, exist_ok=True)
         if library_error is not None:
             outcomes.append(_unknown_outcome(probe_id, run_dir, chars, library_error))
@@ -317,10 +370,6 @@ def run_harness(
             continue
 
         probe_params = [char.probe_params for char in chars]
-        if any(params != probe_params[0] for params in probe_params[1:]):
-            outcomes.append(_unknown_outcome(probe_id, run_dir, chars, "probe_params_conflict"))
-            continue
-
         try:
             probe = PROBES[probe_id]
         except KeyError:
@@ -374,15 +423,19 @@ def run_harness(
                 measured={name: float(value) for name, value in measured.items()},
                 detail="; ".join(verdicts),
                 unknown_reason=(
-                    "characteristic_without_numeric_limit"
-                    if status == Status.UNKNOWN.value
-                    else None
+                    _NO_NUMERIC_LIMIT_REASON if status == Status.UNKNOWN.value else None
                 ),
                 run_dir=str(run_dir),
                 char_ids=tuple(char.char_id for char in chars),
                 judged=f"{key} = {value:.6g} {chars[0].unit}".strip(),
                 citations=citations,
                 cause=cause,
+                operating_point=dict(params),
+                artifacts={
+                    str(path.resolve()): sha256_file(path)
+                    for path in (result.raw_path, result.log_path)
+                    if path is not None
+                },
             )
         )
 

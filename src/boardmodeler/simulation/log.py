@@ -39,6 +39,11 @@ _ERROR_MARKERS = (
     "can't find",
     "cannot find",
     "syntax error",
+    # LTspice reports an over-defined matrix without any prefix of its own:
+    # "Voltage source V_en and voltage source B_enable are paralleled making an
+    # over-defined circuit matrix. / You will need to correct the circuit …".
+    "over-defined circuit matrix",
+    "will need to correct the circuit",
 )
 _WARNING_MARKERS = ("warning",)
 _CONVERGENCE_MARKERS = (

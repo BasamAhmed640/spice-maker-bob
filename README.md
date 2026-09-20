@@ -30,19 +30,26 @@ web-reinforcement switch. Installing a finished model is always the window's **I
 LTspice** action, which copies into the per-user library. The main window holds nothing but the
 part number, the datasheet, the save location, **GO** and the progress detail. Without an agent
 the run stops immediately with `BLOCKED` naming what is missing — it never substitutes another
-provider. A build costs a few agent turns plus about ten seconds of simulation: the TPS54320
-fixtures judge 38 datasheet rows in **10.7 s** of real LTspice work once the model exists, and a
-repeated run makes **zero** further extraction calls.
+provider. The selected key now handles extraction and authoring. Four extraction tasks
+share one request, repairs receive the current model, and verified repeat builds reuse
+hashed simulator evidence without more author turns. The TPS54320 fixture has 38 rows:
+9 bind to 8 regulator probes and 29 remain explicitly untested.
+
+The new electrical I/O probes cover output levels, leakage and transitions at recorded
+operating points. Vendor IBIS/AMI/Touchstone sources can also be imported with provenance;
+high-speed channel/protocol validation remains external. See
+[coverage, conditions, caching and limitations](docs/FAST_ACCURATE_MODELS.md).
 
 ## Install
 
-`releases\SpiceMaker-win-Setup.exe` is a one-click Velopack installer: it unpacks the frozen
-application under `%LocalAppData%\SpiceMaker`, adds a Start Menu entry, and starts it — with
-the pepper splash while it unpacks and no wizard pages to click through. It installs **only
-this application**: no LTspice, no Python, no agent CLI is downloaded or installed by it.
-LTspice is discovered by the app (or pointed at in SETUP) and smoke-tested there, and
-`doctor` says plainly when it is missing. Build the installer yourself with
-`installer\build.ps1 -Version <x.y.z>`; see `installer/README.md`.
+Download **SpiceMakerBob-1.1.0-Windows-x64.zip** from [Releases](https://github.com/BasamAhmed640/spice-maker-bob/releases/latest).
+Extract it, then double-click **Install.exe**. The existing pepper animation plays during
+the Velopack setup. The ZIP also includes a short readme and an installer SHA256 checksum.
+The application includes Python; install LTspice and (when using Bob) Bob Shell separately.
+Open SETUP once to select the simulator and save your API key. This installer is unsigned.
+
+To build from source, run `installer\build.ps1 -Version 1.1.0`; see
+[installer details](installer/README.md). The Windows download workflow also builds the ZIP.
 
 ## The agent provider
 

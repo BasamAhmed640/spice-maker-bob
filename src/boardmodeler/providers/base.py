@@ -156,7 +156,9 @@ class Provider(Protocol):
     ) -> ExtractionResponse: ...
 
 
-def request_hash(request: ExtractionRequest, *, provider: str, model: str | None) -> str:
+def request_hash(
+    request: ExtractionRequest, *, provider: str, model: str | None, context: str | None = None
+) -> str:
     """Content-addressed cache key for one extraction call.
 
     Hashes every input that changes what a provider would see — provider and
@@ -175,6 +177,8 @@ def request_hash(request: ExtractionRequest, *, provider: str, model: str | None
             for snippet in request.snippets
         ],
     }
+    if context is not None:
+        payload["adapter_context"] = context
     return sha256_bytes(canonical_json_bytes(payload))
 
 

@@ -693,8 +693,8 @@ def query_agent_backend(
 
     ``backend`` is the build's own backend, so the search runs on the same agent
     the author loop uses; without one the configured provider is built through
-    :func:`~boardmodeler.authoring.backends.build_agent_backend` (the catalog's
-    provider when nothing is configured). The turn is a text turn
+    :func:`~boardmodeler.authoring.api_backend.build_api_backend` (the catalog's
+    default provider when nothing is configured). The turn is a text turn
     (``expect_text``): it must not write a file, and the answer is returned as it
     was given.
 
@@ -708,14 +708,15 @@ def query_agent_backend(
     without any agent, network or credential.
     """
     try:
-        from boardmodeler.authoring.backends import DEFAULT_TIMEOUT_S, AuthorRequest
+        from boardmodeler.authoring.api_backend import DEFAULT_TIMEOUT_S
+        from boardmodeler.authoring.backends import AuthorRequest
 
         limit = DEFAULT_TIMEOUT_S if timeout_s is None else float(timeout_s)
         chosen = backend
         if chosen is None:
-            from boardmodeler.authoring.backends import build_agent_backend
+            from boardmodeler.authoring.api_backend import build_api_backend
 
-            chosen = build_agent_backend(timeout_s=limit)
+            chosen = build_api_backend(timeout_s=limit)
         usable, reason = chosen.availability()
         if not usable:
             return "", f"agent_backend_unavailable: {reason}"

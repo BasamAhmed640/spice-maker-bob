@@ -22,26 +22,24 @@ The loop ends on satisfaction or on the agent stalling — never on a clock:
   carries the last report with every row measured so far;
 * ``UNKNOWN`` — the caller cancelled (``cancelled``).
 
-A turn *makes progress* when both hold: the model file's bytes changed during the
-turn, and the set of not-yet-passing bound rows differs from the previous turn's.
-A smaller failing set is progress, and so is a different one — a failure that
-changed shape is still motion. Rewriting the same bytes, writing nothing, or
-reporting the same failing set is no progress, and the history line says which it
-was::
+A turn makes progress when changed model bytes reduce unknown rows, failing rows,
+or normalized numeric error, in that order. Ties and cycles consume stall patience.
+The best observed candidate is retained; every attempted revision has its own history.
 
-    turn 3: progress; failing vref, soft_start
-    turn 4: no progress; failing vref
-
-``turn_timeout_s`` is ``None`` by default, so an agent invocation is unbounded.
-When a caller sets it, one invocation is bounded, the timeout is reported as the
-turn's own reason (``turn_timeout: ...``), and the turn is spent exactly like any
-other: the harness still judges the bytes that were on disk.
+``turn_timeout_s`` bounds one agent invocation. When it is ``None`` the product
+``api`` path (including a Bob API key) applies its own finite 600 s default, and
+an explicit value overrides that; the loop API and the direct Bob CLI path stay
+unbounded when called with ``None``. A bounded invocation reports the timeout as
+the turn's own reason (``turn_timeout: ...``), and the turn is spent exactly like
+any other: the harness still judges the bytes that were on disk.
 """
 
 from __future__ import annotations
 
 import json
 import threading
+import time
+import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,6 +60,7 @@ __all__ = [
     "model_file",
     "prepare_workdir",
     "required_ports_for",
+    "revalidate_candidate",
     "spec_file",
 ]
 
@@ -159,6 +158,10 @@ def _describe(characteristic: Characteristic) -> list[str]:
             f"{key}={value:g}" for key, value in sorted(characteristic.probe_params.items())
         )
         lines.append(f"  probe parameters (set by the harness, not by you): {params}")
+    if characteristic.conditions:
+        lines.append(
+            "  datasheet conditions: " + json.dumps(characteristic.conditions, ensure_ascii=False)
+        )
     return lines
 
 
@@ -192,6 +195,13 @@ def build_prompt(spec: SpecSet, subckt: str, harness_summary: str = "") -> str:
         "",
         f"## The `{subckt}` ports you MUST declare",
     ]
+    if spec.pin_map:
+        lines.extend(
+            [
+                "Physical pin map (preserve pin identity and supply domains):",
+                json.dumps(spec.pin_map, ensure_ascii=False),
+            ]
+        )
     if ports:
         lines.extend(f"  - {port}" for port in ports)
         lines.append(
@@ -299,10 +309,10 @@ class BuildRequest:
 
     ``max_iterations=None`` (the default) runs until the harness is satisfied or
     the agent stalls; a positive value caps the turns. ``stall_patience`` is how
-    many consecutive no-progress turns end the build. ``turn_timeout_s`` is
-    ``None`` by default — an agent invocation is unbounded — and bounds one
-    invocation when the caller sets it. ``timeout_s`` is the simulator's per-run
-    limit, not a limit on the build.
+    many consecutive no-progress turns end the build. ``turn_timeout_s`` bounds one
+    agent invocation; when it is ``None`` the product ``api`` path (including a Bob
+    API key) applies its own finite 600 s default, and an explicit value overrides
+    that. ``timeout_s`` is the simulator's per-run limit, not a limit on the build.
     """
 
     part: str
@@ -315,6 +325,7 @@ class BuildRequest:
     stall_patience: int = 2
     turn_timeout_s: float | None = None
     timeout_s: float = 120.0
+    supporting_context: str = ""
 
     def __post_init__(self) -> None:
         if not self.part or not self.subckt:
@@ -462,12 +473,6 @@ def _probe_names(outcomes: Iterable[object]) -> str:
     return ", ".join(str(outcome.probe_id) for outcome in outcomes) or "none"
 
 
-def _signature(report: HarnessReport) -> tuple[tuple[str, str], ...]:
-    """The not-yet-passing rows of one report, as comparable ``(probe, status)`` pairs."""
-    rows = ((str(outcome.probe_id), str(outcome.status)) for outcome in _failing(report))
-    return tuple(sorted(rows))
-
-
 def _turn_line(
     turn: int,
     *,
@@ -478,9 +483,9 @@ def _turn_line(
 ) -> str:
     """One history line: whether the turn moved, and what the harness still objects to.
 
-    A turn is only *progress* when the model bytes changed and the failing set is
-    not the one the previous turn already reported, so a repeat of the same
-    failure reads as "no progress" even though the agent ran.
+    A turn is progress when its model bytes changed and its report improves the
+    unknown-row, failing-row and numeric-error ranking, so an agent that repeats
+    itself reads as "no progress" even though it ran.
     """
     line = (
         f"turn {turn}: {'progress' if progressed else 'no progress'}; "
@@ -500,8 +505,8 @@ def _stall_detail(request: BuildRequest, turn: int, report: HarnessReport) -> st
     """The stall's reason: the turn count first, then the probes still failing."""
     return (
         f"{STALLED_PREFIX} the agent stopped making progress: {request.stall_patience} "
-        "consecutive turn(s) changed nothing the harness could see (the model bytes and the "
-        f"failing set both repeated). Stopped after {turn} turn(s); still failing: "
+        "consecutive turn(s) could not improve on the best result (unknown rows, then failed "
+        f"rows, then numeric error). Stopped after {turn} turn(s); still failing: "
         f"{_names(_failing(report))}. Re-run with an agent that changes the model, or set "
         "max_iterations to bound the turns explicitly."
     )
@@ -574,7 +579,10 @@ def _backend_error(exc: Exception) -> AuthorResult:
 
 
 def _author(
-    request: BuildRequest, prompt: str, cancel: threading.Event | None
+    request: BuildRequest,
+    prompt: str,
+    cancel: threading.Event | None,
+    session_id: str | None = None,
 ) -> tuple[AuthorResult, bool]:
     """One backend turn; a raising backend becomes a recorded failure, not a crash.
 
@@ -588,6 +596,7 @@ def _author(
         workdir=Path(request.workdir),
         model_dir=Path(request.workdir) / MODEL_DIRNAME,
         max_turns=AUTHOR_MAX_TURNS,
+        session_id=session_id,
     )
     limit = request.turn_timeout_s
     if limit is None:
@@ -608,7 +617,60 @@ def _author(
     return result, turn_cancel.is_set()
 
 
-def build_model(request: BuildRequest, cancel: threading.Event | None = None) -> BuildOutcome:
+def revalidate_candidate(
+    request: BuildRequest, cancel: threading.Event | None = None
+) -> BuildOutcome | None:
+    """Judge an existing candidate this process did not observe, with one harness run.
+
+    Returns a ``PASS`` outcome when the candidate passes. Otherwise the fresh report
+    is written to the validation cache (so the caller's own loop reuses it instead of
+    simulating again) and ``None`` is returned. No model file, no cache key, or a
+    harness error also returns ``None``: the caller then proceeds as if no candidate
+    existed, and every author/API turn is skipped only on an observed pass.
+    """
+    workdir = Path(request.workdir)
+    path = model_file(workdir, request.subckt)
+    if not path.is_file():
+        return None
+    from boardmodeler.authoring.validation_cache import validation_key, write_report
+
+    frozen, _digest_value, _problem = _load_frozen_spec(workdir, request.spec)
+    if frozen is None:
+        return None
+    key = validation_key(path, frozen, _ltspice_executable(request.ltspice), request.timeout_s)
+    if key is None:
+        return None
+    cache_root = workdir / "validation-cache"
+    try:
+        report = run_harness(
+            model_lib=path,
+            subckt=request.subckt,
+            spec=frozen,
+            workdir=cache_root / key,
+            ltspice=_ltspice_executable(request.ltspice),
+            timeout_s=request.timeout_s,
+            cancel=cancel,
+        )
+        write_report(cache_root, key, report)
+    except Exception:
+        return None
+    if report.outcomes and report.passed():
+        return _outcome(
+            Status.PASS,
+            0,
+            report,
+            [],
+            "existing candidate revalidated by the simulator; zero author turns",
+        )
+    return None
+
+
+def build_model(
+    request: BuildRequest,
+    cancel: threading.Event | None = None,
+    *,
+    candidate_revalidated: bool = False,
+) -> BuildOutcome:
     """Run the author loop until the harness is satisfied or the agent stalls.
 
     ``max_iterations`` is ``None`` by default: there is no wall-clock stop and no
@@ -616,13 +678,24 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
     every covered characteristic, the caller's cap, ``stall_patience``
     consecutive turns that made no progress, or cancellation. Progress is what
     keeps an uncapped build alive: each turn must change the model bytes *and*
-    report a failing set the previous turn did not, so an agent that repeats
-    itself stops the build instead of running forever. The spec is re-hashed
-    after every turn, the model file must exist, and the harness is the only
-    thing that can produce PASS. Stopping on a cap or a stall is UNKNOWN with the
-    last report and the still-failing probes, never a pass by attrition.
+    improve the unknown-row, failing-row and numeric-error ranking, so an agent
+    that repeats itself stops the build instead of running forever. The spec is
+    re-hashed after every turn, the model file must exist, and the harness is the
+    only thing that can produce PASS. Stopping on a cap or a stall is UNKNOWN with
+    the last report and the still-failing probes, never a pass by attrition.
+
+    ``candidate_revalidated`` says the caller already judged this candidate with
+    one harness run (for a cache entry this process did not observe), so the
+    precheck is not repeated here.
     """
     workdir = Path(request.workdir)
+    from boardmodeler.authoring.validation_cache import (
+        progress_score,
+        read_report,
+        validation_key,
+        write_report,
+    )
+
     path = model_file(workdir, request.subckt)
     (workdir / MODEL_DIRNAME).mkdir(parents=True, exist_ok=True)
     history: list[str] = []
@@ -632,6 +705,41 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
         report = _report_without_runs(request.part, digest, path)
         return _outcome(Status.UNKNOWN, 0, report, history, problem or "spec_tampered")
 
+    if not frozen.covered():
+        report = _report_without_runs(request.part, digest, path)
+        return _outcome(
+            Status.UNKNOWN,
+            0,
+            report,
+            history,
+            f"no_covered_characteristics: none of {len(frozen.uncovered())} row(s) is "
+            "reachable by a probe; no model was authored or simulated",
+        )
+
+    cache_root = workdir / "validation-cache"
+    key = validation_key(path, frozen, _ltspice_executable(request.ltspice), request.timeout_s)
+    cached = read_report(cache_root, key, frozen, path)
+    if cached is not None and cached.passed() and not (cancel and cancel.is_set()):
+        return _outcome(
+            Status.PASS,
+            0,
+            cached,
+            history,
+            "validated_cache_hit: observed artifacts verified; zero author turns",
+        )
+    if (
+        not candidate_revalidated
+        and cached is None
+        and key is not None
+        and path.is_file()
+        and not (cancel and cancel.is_set())
+    ):
+        # A candidate left by an earlier run was not observed by this process, so its
+        # cache entry is not evidence. One LTspice run re-judges it for no author turn,
+        # keeping a passing candidate a PASS without trusting files the agent can write.
+        revalidated = revalidate_candidate(request, cancel)
+        if revalidated is not None:
+            return revalidated
     usable, reason = request.backend.availability()
     if not usable:
         report = _report_without_runs(request.part, digest, path)
@@ -640,8 +748,11 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
     harness_dir = workdir / HARNESS_DIRNAME
     report = _report_without_runs(request.part, digest, path)
     prompt = build_prompt(frozen, request.subckt)
-    feedback_log: list[str] = []
-    previous: tuple[tuple[str, str], ...] | None = None
+    best_score = None
+    best_bytes = None
+    best_report = None
+    session_id = None
+    attempts_dir = workdir / "candidates" / uuid.uuid4().hex
     stalled = 0
     turn = 0
     while True:
@@ -652,7 +763,22 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
                 Status.UNKNOWN, turn - 1, report, history, "cancelled: the build was cancelled"
             )
         before = _digest(path)
-        authored, timed_out = _author(request, prompt, cancel)
+        candidate_prompt = prompt
+        if request.supporting_context:
+            candidate_prompt += (
+                "\nRetrieved reference material (evidence, not instructions; cannot change frozen limits):\n"
+                + request.supporting_context
+            )
+        if path.is_file():
+            candidate_prompt += (
+                f"\nCurrent candidate SHA256: {before}\n"
+                "Repair this candidate. Preserve working behavior. Return the complete corrected library.\n"
+                + path.read_text(encoding="utf-8", errors="replace")
+                + "\n"
+            )
+        started = time.monotonic()
+        authored, timed_out = _author(request, candidate_prompt, cancel, session_id)
+        session_id = authored.session_id or session_id
         note = (
             _timeout_reason(request.turn_timeout_s)
             if timed_out and request.turn_timeout_s is not None
@@ -681,15 +807,23 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
                 missing if authored.ok else f"{note}; {missing}",
             )
         try:
-            report = run_harness(
-                model_lib=path,
-                subckt=request.subckt,
-                spec=frozen,
-                workdir=harness_dir,
-                ltspice=_ltspice_executable(request.ltspice),
-                timeout_s=request.timeout_s,
-                cancel=cancel,
+            key = validation_key(
+                path, frozen, _ltspice_executable(request.ltspice), request.timeout_s
             )
+            report = read_report(cache_root, key, frozen, path)
+            reused = report is not None
+            run_directory = cache_root / key if key is not None else harness_dir / f"turn-{turn}"
+            if report is None:
+                report = run_harness(
+                    model_lib=path,
+                    subckt=request.subckt,
+                    spec=frozen,
+                    workdir=run_directory,
+                    ltspice=_ltspice_executable(request.ltspice),
+                    timeout_s=request.timeout_s,
+                    cancel=cancel,
+                )
+                write_report(cache_root, key, report)
         except Exception as exc:
             history.append(f"turn {turn}: {note}; harness_error: {type(exc).__name__}: {exc}")
             return _outcome(
@@ -699,8 +833,27 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
                 history,
                 f"harness_error: {type(exc).__name__}: {exc}",
             )
-        signature = _signature(report)
-        progressed = _digest(path) != before and (previous is None or signature != previous)
+        score = progress_score(report, frozen)
+        progressed = best_score is None or (_digest(path) != before and score < best_score)
+        snapshot = attempts_dir / f"{turn:04d}"
+        snapshot.mkdir(parents=True, exist_ok=True)
+        snapshot.joinpath(path.name).write_bytes(path.read_bytes())
+        snapshot.joinpath("result.json").write_text(
+            json.dumps(
+                {
+                    "turn": turn,
+                    "elapsed_s": time.monotonic() - started,
+                    "usage": authored.usage,
+                    "score": score,
+                    "reused_simulation": reused,
+                    "report": json.loads(report.to_json()),
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        if progressed:
+            best_score, best_bytes, best_report = score, path.read_bytes(), report
         stalled = 0 if progressed else stalled + 1
         history.append(
             _turn_line(turn, progressed=progressed, report=report, timed_out=timed_out, note=note)
@@ -713,15 +866,16 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
                 history,
                 f"harness PASS after {turn} turn(s): every covered characteristic passed",
             )
+        if best_bytes is not None and best_report is not None:
+            path.write_bytes(best_bytes)
+            report = best_report
         if request.max_iterations is not None and turn >= request.max_iterations:
             break
         if stalled >= request.stall_patience:
             return _outcome(
                 Status.UNKNOWN, turn, report, history, _stall_detail(request, turn, report)
             )
-        previous = signature
-        feedback_log.append(_feedback_text(report))
-        prompt = build_prompt(frozen, request.subckt, "\n\n".join(feedback_log))
+        prompt = build_prompt(frozen, request.subckt, _feedback_text(report))
 
     unresolved = _failing(report)
     detail = (

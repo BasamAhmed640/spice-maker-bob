@@ -1,3 +1,37 @@
+# Faster model creation and I/O validation — 2026-09-19
+
+Implemented the shared selected-key extraction/author path, batched extraction with one
+bounded semantic repair, current-model repair context, numeric progress ranking, retained
+best candidate, immutable attempt snapshots, and artifact-checked validation reuse. Bob
+prompts use stdin and repairs resume the exact task. Conditions and pin maps reach the
+frozen spec; distinct operating points produce distinct tests. Nine electrical I/O probes
+and an explicitly unvalidated vendor IBIS/AMI/Touchstone import path are available.
+Both editions share source/tests with an explicit Bob-only build flavor.
+
+Observed checks before the publishing gate:
+
+- `uv run pytest -q -m "not ltspice and not network"`: 1009 passed, 4 skipped
+  (git-ignored vendor originals), before the final extraction-repair regression was added.
+- General: focused real-simulator/integration/controller suite: 43 passed in 37.85 s.
+- Bob: `uv run pytest -q tests/authoring/test_fast_io.py`: 7 passed in 12.61 s.
+- `uv run python -m tools.benchmark_authoring`: nine synthetic I/O probes in real
+  LTspice, first validation 5.5378 s / one scripted author turn; repeated validation
+  0.0632 s / zero author turns. This excludes API latency and device qualification.
+- Bounded live DeepSeek extraction of an explicitly synthetic one-page PDF: 40.16 s,
+  four pins, two requirements, no validation issues; repeat used all four cached tasks.
+  Earlier live format/classification failures led to the combined schema and bounded
+  correction; no invalid result is accepted as a valid model specification.
+- Both Velopack packages built successfully; each download ZIP contains the original
+  Setup.exe bytes under Install.exe, checksum and readme. Splash GIFs have 90 frames.
+
+An initial broad suite found fixture/schema integration failures, now repaired, and a
+pre-existing timing-dependent baseline rewrite; unchanged baseline bytes are now retained.
+See the publishing gate/CI for the final committed revision. High-speed electrical and
+protocol simulation, arbitrary-device accuracy and temperature qualification are not
+claimed by these checks. No Bob live inference result is claimed.
+
+---
+
 # STATUS
 
 Updated at every phase boundary. **"Observed" means the exact command was run and
@@ -39,8 +73,8 @@ ever recorded without an observed simulator artifact.
 |Cost of a repeat run|extraction cached: second run over the same datasheet → **0** provider calls (4 cache hits)|
 |Binder|deterministic: two runs write byte-identical `bindings.json`, and its map equals the reviewed `probes.json` exactly|
 |Suites|`uv run pytest -q -m "not ltspice"` → **796 passed, 1 skipped, 0 failed**; `tests/authoring tests/pipeline/test_make_model.py tests/gui` → **128 passed** (real LTspice runs included)|
-|Termination|**no wall clock**: `max_iterations=None` by default (runs until satisfied), 2 consecutive no-progress turns end as `UNKNOWN` naming the stall and the probes still failing, agent invocations unbounded unless a caller sets `turn_timeout_s`. Progress = the model bytes changed **and** the failing set is not identical to the previous turn's. Observed: an agent improving over six turns reaches PASS (`iterations=6`, no hidden cap); a repeating agent stops after exactly two no-progress turns|
-|Web reinforcement|one bounded search per part before the agent starts; candidates come from the agent, every candidate is fetched by our own client (TLS default, 1 MiB cap, redirect cap, text/pdf only, unreachable → recorded with its reason); only text we retrieved is stored, verbatim with sha256, in `spec/supporting.json`, and the card lists it under "Supporting material (searched, not evidence for the verdicts)". The stage cannot change a status or fail a build; `--no-reinforce` / the setup switch disable it. The search is cancel-aware and carries its own `reinforce_timeout_s` (default 300 s); expiry records `unavailable` with the budget reason and the build continues — the author loop itself stays unbounded|
+|Termination|**no build deadline**: `max_iterations=None` by default (runs until satisfied), 2 consecutive no-progress turns end as `UNKNOWN` naming the stall and the probes still failing. The loop API leaves agent invocations unbounded unless a caller sets `turn_timeout_s`; the product `api` path (including a Bob API key) applies a finite 600 s per-turn default, overridable per run, while a direct `--backend bob` CLI turn stays unbounded absent an override. Progress = the model bytes changed **and** the unknown-row/failing-row/numeric-error ranking improved. Observed: an agent improving over six turns reaches PASS (`iterations=6`, no hidden cap); a repeating agent stops after exactly two no-progress turns|
+|Web reinforcement|one bounded search per part before the agent starts; candidates come from the agent, every candidate is fetched by our own client (TLS default, 1 MiB cap, redirect cap, text/pdf only, unreachable → recorded with its reason); only text we retrieved is stored, verbatim with sha256, in `spec/supporting.json`, and the card lists it under "Supporting material (searched, not evidence for the verdicts)". The stage cannot change a status or fail a build; `--no-reinforce` / the setup switch disable it. The search is cancel-aware and carries its own `reinforce_timeout_s` (default 45 s); expiry records `unavailable` with the budget reason and the build continues — the author loop itself stays unbounded|
 |Sweep|`uv run pytest -q tests/authoring` → 163 passed; `tests/pipeline/test_make_model.py` → 20 passed; `tests/ui tests/gui` → 50 passed; `-m "not ltspice"` → 855 passed, 1 skipped, 0 failed|
 |Model maker window (`boardmodeler ui`)|part number · datasheet · model folder · GO with the progress detail, plus SETUP and CHECK ENVIRONMENT buttons; stage table and datasheet-row table. Fixed 900×600; controls styled from the shared `RETRO_STYLESHEET` (no window rule can repaint a button)|
 |Setup page (`boardmodeler setup` / SETUP)|one page of persistent settings: LTspice path + RUN SMOKE TEST, the agent provider and its API key, MODEL FOLDER, LTspice user library shown read-only, web reinforcement. Sized to its content; no fixed-height dead space. `boardmodeler setup --json` prints the same settings (see the next section for the provider row and the key label)|
@@ -284,6 +318,13 @@ test for this defect).
 
 ### De-branding and the Bob-specific transport (2026-09-18, third pass)
 
+**Superseded (2026-09-19):** the shared core now carries the HTTP agent transport and the
+full provider catalog again, and this tree selects Bob with `build_flavor.BOB_ONLY`; the
+rows below record the earlier third pass, not current behavior. Current: `authoring/api_backend.py`
+with `build_api_backend`, the catalog's `openai`/`anthropic`/`google` wires, and
+`model build --backend api --model --max-tokens` are present, and the production catalog is
+filtered to Bob at import.
+
 The owner asked this tree to stop presenting itself as a trimmed build, and to carry no other
 provider's API-key handling at all.
 
@@ -310,3 +351,18 @@ uv run boardmodeler export --project build/demo --out build/demo-export
 
 1. Keep `docs/DECISIONS.md` current; every decision that constrains later work is
    recorded there with its rationale and rejected alternatives.
+
+## 2026-09-20 — direct delivery verification
+
+Both the model card and result totals now count individual characteristic verdicts;
+shared simulator cases retain aggregate probe counts. Partial measurements cannot
+promote unavailable runs to PASS. Supply-current dash variants remain excluded from
+output-current probes. The cancellation-only unit test supplies a fake installation,
+so it passes on GitHub runners without changing missing-simulator product behavior.
+
+Observed checks: ruff check and format check passed; the offline suite passed 1048
+ tests with 4 skipped and 129 deselected in 24.48 s. A real CLI/LTspice artificial
+split-limit check produced one hashed waveform/log pair, a passing row and failing
+row, and matching model-card totals with zero API calls. This is synthetic test data,
+not a real device accuracy claim. The user requested direct tests/CI delivery to stop
+the repeated automated review cost; every committed review fix was preserved.

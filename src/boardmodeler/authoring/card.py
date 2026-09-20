@@ -10,10 +10,13 @@ were never reachable by simulation.
 from __future__ import annotations
 
 import shutil
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from boardmodeler.authoring.harness import judge_characteristic
+from boardmodeler.domain.enums import Status
 from boardmodeler.models.symbolism import symbol_text, validate_symbol
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -36,14 +39,26 @@ DELIVERABLE_FILES = ("MODEL_CARD.md", "example.cir", "install.md")
 _STATUS_ORDER = {"FAIL": 0, "UNKNOWN": 1, "PASS": 2, "NOT_APPLICABLE": 3}
 
 
+def status_tally(statuses: Iterable[str]) -> dict[str, int]:
+    """Per-row status counts in the same five-key shape as a probe tally."""
+    tally = {status.value: 0 for status in Status}
+    for status in statuses:
+        tally[status] = tally.get(status, 0) + 1
+    return tally
+
+
 def _status_by_characteristic(
-    report: HarnessReport,
+    spec: SpecSet, report: HarnessReport
 ) -> dict[str, tuple[str, str, dict[str, float | str]]]:
-    """``char_id -> (status, detail, measured)`` from the report's probe outcomes."""
+    """``char_id -> (status, detail, measured)``, re-judged per characteristic."""
+    outcomes = {char_id: outcome for outcome in report.outcomes for char_id in outcome.char_ids}
     judged: dict[str, tuple[str, str, dict[str, float | str]]] = {}
-    for outcome in report.outcomes:
-        for char_id in outcome.char_ids:
-            judged[char_id] = (outcome.status, outcome.detail, dict(outcome.measured))
+    for characteristic in spec.characteristics:
+        outcome = outcomes.get(characteristic.char_id)
+        if outcome is None:
+            continue
+        status, detail = judge_characteristic(characteristic, outcome)
+        judged[characteristic.char_id] = (status, detail, dict(outcome.measured))
     return judged
 
 
@@ -84,16 +99,17 @@ def render_card(
     reinforcement: object | None = None,
 ) -> str:
     """The model card, findings first, every number taken from an observed outcome."""
-    judged = _status_by_characteristic(report)
-    counts = report.counts()
+    judged = _status_by_characteristic(spec, report)
     covered = spec.covered()
     uncovered = spec.uncovered()
 
     rows: list[tuple[int, str, str]] = []
+    row_statuses: list[str] = []
     for characteristic in covered:
         status, detail, measured = judged.get(
             characteristic.char_id, ("UNKNOWN", "no probe reported for this characteristic", {})
         )
+        row_statuses.append(status)
         rows.append(
             (
                 _STATUS_ORDER.get(status, 1),
@@ -110,6 +126,7 @@ def render_card(
             )
         )
     rows.sort(key=lambda row: (row[0], row[1]))
+    counts = status_tally(row_statuses)
 
     lines: list[str] = [
         f"# {part} — LTspice model card",
@@ -123,6 +140,10 @@ def render_card(
         "produced the measured value shown; rows that could not be judged are `UNKNOWN` with "
         "the reason, and datasheet rows no probe can reach are `NOT_APPLICABLE` with the "
         "reason. Nothing else about this part is claimed.",
+        "PASS applies only at the operating points recorded in harness-report.json. "
+        "A nominal sample inside a datasheet range does not validate the whole range. "
+        "No temperature, process distribution, protocol, or high-speed channel qualification "
+        "is inferred from these behavioral probes.",
         "",
         f"**Totals:** {counts.get('PASS', 0)} pass · {counts.get('FAIL', 0)} fail · "
         f"{counts.get('UNKNOWN', 0)} unknown · {len(uncovered)} rows not testable by "

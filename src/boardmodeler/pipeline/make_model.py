@@ -54,10 +54,12 @@ The author loop runs until the agent is done, not until a clock stops it: there
 is no build deadline. ``max_iterations`` is ``None`` by default — no cap — and the
 loop stops on satisfaction, on ``max_iterations`` when a caller sets one, or after
 ``stall_patience`` consecutive turns that change nothing the harness can see; a
-capped or stalled run still reports every row the harness measured. Only
-``turn_timeout_s`` names a time, and it is ``None`` by default: set, it bounds one
-agent invocation, which is reported as that turn's own reason and consumes the
-turn. ``timeout_s`` bounds a single simulation run, not the build.
+capped or stalled run still reports every row the harness measured. The product
+``api`` path (including a Bob API key) applies a finite default of
+:data:`~boardmodeler.authoring.api_backend.DEFAULT_TIMEOUT_S` (600 s) to each
+turn when the caller leaves ``turn_timeout_s`` unset; an explicit value overrides
+it, and the loop API and direct Bob CLI path stay unbounded when called with
+``None``. ``timeout_s`` bounds a single simulation run, not the build.
 
 Nothing raises for an expected failure — a missing datasheet, a document the
 provider refuses, a missing key, absent LTspice, a tampered spec or a
@@ -78,20 +80,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from boardmodeler.authoring.api_backend import DEFAULT_TIMEOUT_S as DEFAULT_API_TIMEOUT_S
+from boardmodeler.authoring.api_backend import build_api_backend
 from boardmodeler.authoring.backends import (
     AuthorBackend,
+    BobShellBackend,
     ScriptedBackend,
     UnavailableBackend,
-    build_agent_backend,
 )
-from boardmodeler.authoring.card import write_deliverables, write_symbol_for
-from boardmodeler.authoring.harness import HarnessReport
+from boardmodeler.authoring.card import status_tally, write_deliverables, write_symbol_for
+from boardmodeler.authoring.harness import HarnessReport, judge_characteristic
 from boardmodeler.authoring.loop import (
     BuildOutcome,
     BuildRequest,
     build_model,
     model_file,
     prepare_workdir,
+    revalidate_candidate,
 )
 from boardmodeler.authoring.part_class import classify
 from boardmodeler.authoring.probes import PROBES
@@ -104,6 +109,7 @@ from boardmodeler.domain.enums import RequirementOrigin, Status
 from boardmodeler.domain.records import DocumentRecord, Requirement
 from boardmodeler.models.library import ModelStoreError, subckt_ports
 from boardmodeler.models.symbolism import symbol_pin_orders, symbol_text, validate_symbol
+from boardmodeler.providers.agent import AgentExtractionProvider
 from boardmodeler.providers.base import ProviderError
 from boardmodeler.providers.registry import select_provider
 from boardmodeler.requirements.model import validate_requirements
@@ -169,6 +175,9 @@ _JUDGE_UNITS: dict[str, str] = {
     "i_vin_a": "A",
     "pg_leak_a": "A",
     "t_ss_s": "s",
+    "io_voltage_v": "V",
+    "io_current_a": "A",
+    "io_time_s": "s",
 }
 
 
@@ -190,9 +199,10 @@ class MakeModelRequest:
 
     ``max_iterations=None`` (the default) has no cap: the author loop runs until
     the harness is satisfied or the agent stops making progress, which is what
-    ``stall_patience`` counts. ``turn_timeout_s`` is ``None`` by default — no time
-    limit on the agent — and bounds one agent invocation when set. ``timeout_s``
-    bounds a single simulation run. There is no build deadline.
+    ``stall_patience`` counts. ``turn_timeout_s`` bounds one agent invocation; when
+    it is ``None`` the product ``api`` path (including a Bob API key) applies its own
+    finite 600 s default, and an explicit value overrides that. ``timeout_s`` bounds
+    a single simulation run. There is no build deadline.
 
     ``backend_name`` names the author: ``"api"`` (the default) uses an API-key
     provider — ``provider`` is a provider id from
@@ -226,7 +236,7 @@ class MakeModelRequest:
     #: Budget for the supporting-material search only. ``None`` leaves it unbounded; the
     #: author loop is never bounded by this (``max_iterations``/``turn_timeout_s`` stay
     #: ``None``), so the search cannot weaken a tested claim.
-    reinforce_timeout_s: float | None = 300.0
+    reinforce_timeout_s: float | None = 45.0
 
 
 @dataclass(frozen=True)
@@ -431,6 +441,7 @@ class _Rule:
     any_of: tuple[str, ...] = ()
     all_of: tuple[str, ...] = ()
     none_of: tuple[str, ...] = ()
+    statement_none_of: tuple[str, ...] = ()
     reason: str = ""
 
 
@@ -485,6 +496,29 @@ _OPERATING_RANGE = (
     "supply split",
     "control supply",
     "pvpin",
+)
+
+_IO_RULES = (
+    _Rule(
+        "paired delays",
+        None,
+        all_of=("tplh", "tphl"),
+        reason="split rising and falling propagation delay into separate requirements",
+    ),
+    _Rule(
+        "power-off leakage",
+        "io_power_off_leakage",
+        any_of=("ioff", "power-off leakage"),
+        statement_none_of=("supply current", "supply-current"),
+    ),
+    _Rule("disabled output leakage", "io_leakage", any_of=("ioz", "three-state output leakage")),
+    _Rule("input leakage", "io_input_leakage", any_of=("input leakage current",)),
+    _Rule("output high", "io_voh", any_of=("voh", "high-level output voltage")),
+    _Rule("output low", "io_vol", any_of=("vol", "low-level output voltage")),
+    _Rule("rising propagation", "io_delay_rise", any_of=("tplh", "low-to-high propagation delay")),
+    _Rule("falling propagation", "io_delay_fall", any_of=("tphl", "high-to-low propagation delay")),
+    _Rule("output rise", "io_rise_time", any_of=("output rise time",)),
+    _Rule("output fall", "io_fall_time", any_of=("output fall time",)),
 )
 
 _RULES: tuple[_Rule, ...] = (
@@ -712,6 +746,7 @@ _RULES: tuple[_Rule, ...] = (
             "no load supply current",
             "supply current",
         ),
+        none_of=("ioff", "power-off", "leakage"),
     ),
     _Rule(
         name="voltage reference",
@@ -791,6 +826,106 @@ def _has_limits(requirement: Requirement) -> bool:
     return limits.min is not None or limits.typ is not None or limits.max is not None
 
 
+_DASH_VARIANTS = "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"
+_NON_INVERTING_SEPARATOR = re.compile(r"\bnon[\s\-]*inverting\b", re.IGNORECASE)
+_SIGNAL_NODE = re.compile(r"^\s*[vi]\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*$", re.IGNORECASE)
+_SIGNAL_BARE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*$")
+
+_POLARITY_NONINVERTING = re.compile(
+    r"\bnon-?inverting\s+(?:output|buffer)\b|"
+    r"\b(?:output|buffer)\s+is\s+non-?inverting\b|"
+    r"\bA\s+high\s+gives\s+Y\s+high\b|"
+    r"\bA\s+low\s+gives\s+Y\s+low\b",
+    re.IGNORECASE,
+)
+_POLARITY_INVERTING = re.compile(
+    r"(?<!non-)\binverting\s+(?:output|buffer)\b|"
+    r"\b(?:output|buffer)\s+is\s+inverting\b|"
+    r"\bA\s+high\s+gives\s+Y\s+low\b|"
+    r"\bA\s+low\s+gives\s+Y\s+high\b",
+    re.IGNORECASE,
+)
+
+
+def _polarity_text(text: str) -> str:
+    """Fold non/inverting separators so whitespace and dashed spellings read as one word."""
+    folded = "".join("-" if char in _DASH_VARIANTS else char for char in text)
+    return _NON_INVERTING_SEPARATOR.sub("non-inverting", folded)
+
+
+def _negative_text(text: str) -> str:
+    """Fold dash variants and separator whitespace so ``supply-current`` reads as two words."""
+    folded = "".join(" " if char in _DASH_VARIANTS or char == "-" else char for char in text)
+    return " ".join(folded.split())
+
+
+def _signal_names(signals: Sequence[str]) -> set[str]:
+    """Bare node identities for single-node ``V(...)``/``I(...)`` references.
+
+    The extractor writes node syntax (``V(Y)``) while datasheet prose writes the bare
+    name (``Y``), so both are reduced to the node identity. A differential or multi-node
+    expression is not one signal and is skipped: it cannot name this row's terminal.
+    """
+    names: set[str] = set()
+    for signal in signals:
+        text = str(signal).strip()
+        node = _SIGNAL_NODE.match(text)
+        if node is not None:
+            names.add(node.group(1).lower())
+            continue
+        bare = _SIGNAL_BARE.match(text)
+        if bare is not None:
+            names.add(bare.group(1).lower())
+    return names
+
+
+def _cited_polarity(
+    requirement: Requirement,
+    requirements: Sequence[Requirement],
+    blocked: Mapping[str, str],
+) -> tuple[float | None, str | None, str | None]:
+    """``(polarity, source_req_id, source_excerpt)`` the verified citations establish.
+
+    A row that needs ``io_inverting`` may cite the polarity on a neighbouring functional
+    row for the *same part and document*, but only when that row's citation is verified
+    and its verbatim excerpt names this row's signal *and* asserts the output/buffer
+    polarity (or an applicable input-to-output truth relation). An unverified citation,
+    a generated statement or section title, another part or document, an unrelated
+    signal, an input-pin-only description, and text stating both behaviours all leave
+    the question open, so the row stays a declared gap rather than guessing.
+    """
+    target_docs = {ref.doc_id for ref in requirement.evidence}
+    target_signals = _signal_names(requirement.signal_refs)
+    if not target_docs or not target_signals:
+        return None, None, None
+    hints: dict[float, tuple[str, str]] = {}
+    for source in requirements:
+        if source.req_id in blocked or source.applies_to != requirement.applies_to:
+            continue
+        if not target_signals & _signal_names(source.signal_refs):
+            continue
+        for ref in source.evidence:
+            if ref.doc_id not in target_docs:
+                continue
+            excerpt = _normalized(ref.excerpt or "")
+            if not excerpt:
+                continue
+            if not any(
+                re.search(rf"\b{re.escape(signal)}\b", excerpt, re.IGNORECASE)
+                for signal in target_signals
+            ):
+                continue
+            polarity_text = _polarity_text(excerpt)
+            if _POLARITY_NONINVERTING.search(polarity_text):
+                hints.setdefault(0.0, (source.req_id, excerpt))
+            if _POLARITY_INVERTING.search(polarity_text):
+                hints.setdefault(1.0, (source.req_id, excerpt))
+    if len(hints) == 1:
+        polarity, (source_req, excerpt) = next(iter(hints.items()))
+        return polarity, source_req, excerpt
+    return None, None, None
+
+
 def _unit_decline(requirement: Requirement, probe: str) -> str | None:
     """Why this row's unit cannot be judged by ``probe``, or ``None`` when it can."""
     limits = requirement.limits
@@ -829,6 +964,9 @@ def bind_requirements(
     """
     blocked = dict(unverified or {})
     entries: list[dict[str, Any]] = []
+    io_context = any(
+        _rule_matches(rule, _search_text(row)) for row in requirements for rule in _IO_RULES
+    )
     for requirement in requirements:
         req_id = requirement.req_id
         if req_id in blocked:
@@ -853,9 +991,14 @@ def bind_requirements(
             )
             continue
         text = _search_text(requirement)
+        statement = _negative_text(_normalized(requirement.statement))
         decline: str | None = None
-        for rule in _RULES:
+        for rule in (*_RULES, *_IO_RULES) if io_context else _RULES:
             if not _rule_matches(rule, text):
+                continue
+            if rule.statement_none_of and any(
+                _mentions(statement, phrase) for phrase in rule.statement_none_of
+            ):
                 continue
             if rule.probe is None:
                 decline = f"{rule.name}: {rule.reason}"
@@ -864,7 +1007,34 @@ def bind_requirements(
             if mismatch is not None:
                 decline = f"{rule.name}: {mismatch}"
                 break
-            entries.append({"req_id": req_id, "probe": rule.probe, "params": {}})
+            from boardmodeler.authoring.conditions import operating_params
+
+            seed = None
+            provenance = None
+            if rule.probe.startswith("io_"):
+                polarity, source_req, source_excerpt = _cited_polarity(
+                    requirement, requirements, blocked
+                )
+                if polarity is not None:
+                    seed = {"io_inverting": polarity}
+                    provenance = {
+                        "io_inverting": {
+                            "source_req": source_req,
+                            "excerpt": source_excerpt,
+                            "reason": (
+                                "output polarity compiled from a verified citation for this "
+                                "part and document"
+                            ),
+                        }
+                    }
+            params, problem = operating_params(requirement, PROBES[rule.probe], seed=seed)
+            if problem:
+                decline = problem
+                break
+            entry: dict[str, Any] = {"req_id": req_id, "probe": rule.probe, "params": params}
+            if provenance is not None:
+                entry["derived_conditions"] = provenance
+            entries.append(entry)
             break
         else:
             decline = (
@@ -896,20 +1066,24 @@ def build_backend(request: MakeModelRequest) -> AuthorBackend:
     own scripted backend.
     """
     name = str(request.backend_name or "").strip().lower()
-    if name in ("", "api", "bob"):
-        # The catalog's own provider, reached the documented way: the Bob CLI, with the
-        # key in the child environment. An id this build does not accept is refused by
-        # name inside the factory, never swapped for the provider it does accept.
-        return build_agent_backend(
+    if name in ("", "api"):
+        # ``turn_timeout_s`` bounds one agent invocation; when the caller leaves it
+        # unset the API-key path applies its own finite 600 s budget, retries included.
+        limit = float(request.turn_timeout_s) if request.turn_timeout_s else DEFAULT_API_TIMEOUT_S
+        return build_api_backend(
             provider_id=request.provider,
+            model=request.agent_model,
+            max_tokens=request.agent_max_tokens,
             team_id=request.team_id,
-            timeout_s=request.turn_timeout_s,
+            timeout_s=limit,
         )
+    if name == "bob":
+        return BobShellBackend(team_id=request.team_id, timeout_s=request.turn_timeout_s)
     if name in ("scripted", "fixture"):
         return _bundled_author(request)
     return UnavailableBackend(
         name or "unknown",
-        f"{name or 'unknown'}_backend_unavailable: unknown backend name; use 'bob', "
+        f"{name or 'unknown'}_backend_unavailable: unknown backend name; use 'api', 'bob', "
         "'scripted' or 'fixture'",
     )
 
@@ -1161,6 +1335,7 @@ class _Run:
         self.supplied: list[Requirement] = []
         self.declared: dict[str, Any] = {}
         self.requirements: list[Requirement] = []
+        self.pin_map: tuple[dict[str, Any], ...] = ()
         self.unverified: dict[str, str] = {}
         self.spec: SpecSet | None = None
         self.outcome: BuildOutcome | None = None
@@ -1265,7 +1440,7 @@ class _Run:
                         f"{issue.code}: {issue.message}" for issue in validation.errors[:3]
                     ),
                 )
-            self._verify_citations(trusted=True)
+            self._verify_citations()
             counts = self._row_counts()
             self.log.emit(
                 "extract",
@@ -1283,15 +1458,16 @@ class _Run:
 
         config = load_config()
         try:
-            selection = select_provider(
-                config,
-                # The extraction provider is the persisted configuration's own
-                # choice: ``request.provider`` names the *agent* provider now, and
-                # D-011's walk over ``provider_order`` is how extraction decides.
-                requested=None,
-                allow_bob_shell=False,
-                fixture_dir=self.cache_dir,
-            )
+            if self.request.backend_name in ("fixture", "scripted"):
+                extraction_provider = select_provider(
+                    config,
+                    requested="fixture",
+                    allow_bob_shell=False,
+                    fixture_dir=self.cache_dir,
+                ).provider
+            else:
+                self.backend = build_backend(self.request)
+                extraction_provider = AgentExtractionProvider(self.backend)
         except ProviderError as exc:
             raise _Stop(
                 "extract",
@@ -1312,12 +1488,22 @@ class _Run:
                 f"workspace_unusable: {self.workdir} could not be prepared: {exc}",
             ) from exc
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        policy = config.data_policy
+        # --allow-remote / the disclosed GUI GO action authorizes this chosen file,
+        # without falsely declaring an unclassified document to be public.
+        if self.request.allow_remote:
+            policy = policy.model_copy(
+                update={
+                    "deny_unknown_classification": False,
+                    "permitted_classifications": [*policy.permitted_classifications, "unknown"],
+                }
+            )
         try:
             result = extract_requirements(
                 project,
-                provider=selection.provider,
+                provider=extraction_provider,
                 cache_dir=self.cache_dir,
-                policy=config.data_policy,
+                policy=policy,
                 allow_remote=True if self.request.allow_remote else None,
                 cancel=cancel,
             )
@@ -1330,6 +1516,7 @@ class _Run:
                 f"provider_error: {type(exc).__name__}: {exc}",
             ) from exc
         self.requirements = apply_review(result.requirements, result.review)
+        self.pin_map = tuple(pin.model_dump(mode="json") for pin in result.pins)
         errors = [issue for issue in result.issues if issue.severity == "error"]
         if errors:
             raise _Stop(
@@ -1338,7 +1525,7 @@ class _Run:
                 "requirements_invalid: "
                 + "; ".join(f"{issue.code}: {issue.message}" for issue in errors[:3]),
             )
-        self._verify_citations(trusted=False)
+        self._verify_citations()
         counts = self._row_counts()
         counts["cache_hits"] = int(result.cache_hits)
         self.log.emit(
@@ -1367,16 +1554,12 @@ class _Run:
             return {}
         return {self.record.doc_id: self.record}
 
-    def _verify_citations(self, *, trusted: bool) -> None:
+    def _verify_citations(self) -> None:
         """Fill :attr:`unverified` (req_id -> reason) for this run's rows.
 
         With the cited document registered and readable, the excerpts are checked
-        against its own page text (``trusted=False`` is the extraction path, where
-        the review already ran; the check is deterministic, so it is re-run here
-        where the store resolves the path). Without it, a supplied extraction
-        result is taken at its own ``citation_verified`` word — it *is* the
-        extraction result the caller chose to supply — and the stage detail says
-        so.
+        against its own page text. Without it, a supplied extraction result cannot
+        verify its own citations; the document must be available.
         """
         documents = self._documents()
         if documents:
@@ -1393,17 +1576,6 @@ class _Run:
                 )
                 for req_id, verified in checks.items()
                 if not verified
-            }
-            return
-        if trusted:
-            self.unverified = {
-                requirement.req_id: (
-                    "the supplied extraction result marks this citation unverified and there is "
-                    "no registered document to check it against"
-                )
-                for requirement in self.requirements
-                if requirement.origin is RequirementOrigin.DOCUMENT
-                and not requirement.citation_verified
             }
             return
         self.unverified = {
@@ -1514,6 +1686,7 @@ class _Run:
                     json.loads(requirement.model_dump_json(by_alias=True))
                     for requirement in self.requirements
                 ],
+                "pin_map": list(self.pin_map),
             },
         )
         return path
@@ -1531,14 +1704,9 @@ class _Run:
 
     def author(self, cancel: threading.Event | None) -> None:
         self.log.emit("author", "running", f"checking the {self.request.backend_name!r} backend")
-        backend = build_backend(self.request)
+        backend = self.backend or build_backend(self.request)
         self.backend = backend
         self.backend_name = backend.name
-        usable, reason = backend.availability()
-        if not usable:
-            self.log.emit("author", "failed", reason)
-            self.status, self.detail = Status.BLOCKED.value, reason
-            return
         install = locate()
         if install is None:
             self.log.emit("author", "failed", LTSPICE_MISSING)
@@ -1548,12 +1716,16 @@ class _Run:
             self.status, self.detail = Status.UNKNOWN.value, "spec_missing: no specification"
             return
         prepare_workdir(spec=self.spec, subckt=self.request.subckt, workdir=self.workdir)
-        self._gather_supporting_material(cancel)
-        self.log.emit(
-            "judge",
-            "running",
-            "the harness runs after every agent turn; no turn has finished yet",
-        )
+        if not self.spec.covered():
+            detail = (
+                f"no_covered_characteristics: none of {len(self.spec.uncovered())} row(s) is "
+                "reachable by a probe; no model was authored or simulated"
+            )
+            self.log.emit("author", "skipped", detail)
+            self.status, self.detail = Status.UNKNOWN.value, detail
+            return
+        from boardmodeler.authoring.validation_cache import read_report, validation_key
+
         request = BuildRequest(
             part=self.request.part,
             subckt=self.request.subckt,
@@ -1566,6 +1738,45 @@ class _Run:
             turn_timeout_s=self.request.turn_timeout_s,
             timeout_s=self.request.timeout_s,
         )
+        path = model_file(self.workdir, self.request.subckt)
+        key = validation_key(path, self.spec, install.path, self.request.timeout_s)
+        cached = read_report(self.workdir / "validation-cache", key, self.spec, path)
+        prechecked = cached is None and not (cancel and cancel.is_set())
+        if prechecked:
+            # A fresh process has no receipt for an existing candidate. Re-judge it with
+            # one LTspice run before any remote reinforcement or author turn is spent.
+            revalidated = revalidate_candidate(request, cancel)
+            if revalidated is not None:
+                self.outcome = revalidated
+                self.report = revalidated.report
+                self.log.emit(
+                    "author",
+                    "ok",
+                    "existing candidate revalidated by the simulator; zero author turns",
+                    {"turns": 0},
+                )
+                self.log.emit("judge", "ok", "reused revalidated simulator evidence")
+                return
+        if cached is None or not cached.passed():
+            usable, reason = backend.availability()
+            if not usable:
+                self.log.emit("author", "failed", reason)
+                self.status, self.detail = Status.BLOCKED.value, reason
+                return
+            self._gather_supporting_material(cancel)
+            request = dataclasses.replace(
+                request,
+                supporting_context="\n".join(
+                    f"{source.url} (SHA256 {source.sha256}): {source.excerpt}"
+                    for source in (self.reinforcement.sources if self.reinforcement else ())
+                    if source.retrieved and source.sha256 and source.excerpt
+                ),
+            )
+        self.log.emit(
+            "judge",
+            "running",
+            "the harness runs after every agent turn; no turn has finished yet",
+        )
         if not _BUILD_LOCK.acquire(blocking=False):
             reason = (
                 "build_in_progress: another model build is running in this process; wait for it "
@@ -1576,7 +1787,7 @@ class _Run:
             return
         try:
             with _observe_reports(self._on_report):
-                outcome = build_model(request, cancel)
+                outcome = build_model(request, cancel, candidate_revalidated=prechecked)
         finally:
             _BUILD_LOCK.release()
         self.outcome = outcome
@@ -1588,7 +1799,9 @@ class _Run:
             f"{outcome.iterations} turn(s); {outcome.detail}",
             {"turns": int(outcome.iterations)},
         )
-        if self.turns == 0:
+        if self.turns == 0 and outcome.report.passed():
+            self.log.emit("judge", "ok", "reused matching, hash-verified simulator evidence")
+        elif self.turns == 0:
             self.log.emit("judge", "skipped", f"no harness turn ran: {outcome.detail}")
 
     def _gather_supporting_material(self, cancel: threading.Event | None) -> None:
@@ -1758,7 +1971,9 @@ class _Run:
     def rows(self) -> tuple[RowOutcome, ...]:
         if self.spec is None:
             return ()
-        outcomes = {outcome.probe_id: outcome for outcome in self.report.outcomes}
+        outcomes = {
+            char_id: outcome for outcome in self.report.outcomes for char_id in outcome.char_ids
+        }
         rows: list[RowOutcome] = []
         for characteristic in self.spec.characteristics:
             req_id = characteristic.char_id
@@ -1787,11 +2002,13 @@ class _Run:
                     )
                 )
                 continue
-            outcome = outcomes.get(characteristic.probe)
+            outcome = outcomes.get(req_id)
             measured = "-"
+            status = Status.UNKNOWN.value
             if outcome is not None:
+                status, _detail = judge_characteristic(characteristic, outcome)
                 measured = outcome.judged or "-"
-                if outcome.status == Status.UNKNOWN.value and outcome.unknown_reason:
+                if status == Status.UNKNOWN.value and outcome.unknown_reason:
                     measured = f"- ({outcome.unknown_reason})"
             rows.append(
                 RowOutcome(
@@ -1799,7 +2016,7 @@ class _Run:
                     statement=characteristic.statement,
                     required=required,
                     measured=measured,
-                    status=Status.UNKNOWN.value if outcome is None else outcome.status,
+                    status=status,
                     page=characteristic.source_page,
                 )
             )
@@ -1910,7 +2127,7 @@ def make_model(
         lib_path=run.lib_path,
         asy_path=run.asy_path,
         rows=rows,
-        counts=dict(run.report.counts()),
+        counts=status_tally(row.status for row in rows),
         stages=tuple(log.events),
         request=request,
     )

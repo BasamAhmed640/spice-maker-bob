@@ -189,6 +189,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     model_sub = model.add_subparsers(dest="model_command")
 
+    model_import = model_sub.add_parser(
+        "import", help="preserve a vendor IBIS/AMI/Touchstone source with provenance"
+    )
+    model_import.add_argument("--file", type=Path, required=True)
+    model_import.add_argument("--out", type=Path, required=True)
+    model_import.add_argument("--part", required=True)
+    model_import.add_argument("--source-url", required=True)
+    model_import.add_argument("--license-note", required=True)
+    model_import.add_argument("--json", action="store_true")
+
     model_build = model_sub.add_parser(
         "build",
         help="let an agent author the model, then judge it against the datasheet rows",
@@ -224,16 +234,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     model_build.add_argument(
         "--backend",
-        default="bob",
-        choices=["bob", "scripted", "fixture"],
-        help="which agent authors the model (bob = the IBM Bob CLI, "
-        "scripted/fixture = the bundled offline template)",
+        default="api",
+        choices=["api", "bob", "scripted", "fixture"],
+        help="which agent authors the model (api = an API key stored in SETUP, "
+        "bob = IBM Bob Shell, scripted/fixture = the bundled offline template)",
     )
     model_build.add_argument("--team-id", default=None, help="Bob team id for a general API key")
     model_build.add_argument(
         "--provider",
         default=None,
-        help="agent provider id (default: the configured provider, else this build's own)",
+        help="agent provider id for --backend api (default: the configured provider, "
+        "else this build's default)",
+    )
+    model_build.add_argument(
+        "--model",
+        default=None,
+        help="model id for --backend api (default: the provider's documented model)",
+    )
+    model_build.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        help="output-token budget for one --backend api turn (default: the config file's "
+        "agent_max_tokens, else 32768 - reasoning models spend part of it before writing)",
     )
     model_build.add_argument(
         "--allow-remote", action="store_true", help="permit sending the datasheet to the provider"
@@ -368,7 +391,7 @@ def _credentials_section() -> dict:
     so ``doctor`` cannot contradict a build that then succeeds.
     """
     try:
-        from boardmodeler.authoring import backends as api
+        api = importlib.import_module("boardmodeler.authoring.api_backend")
     except ImportError as exc:  # pragma: no cover - only before the module lands
         return {"available": None, "reason": "credentials_module_unavailable", "detail": str(exc)}
     return {
@@ -753,6 +776,26 @@ def _cmd_export(args: argparse.Namespace) -> int:
 
 
 def _cmd_model(args: argparse.Namespace) -> int:
+    if args.model_command == "import":
+        from boardmodeler.models.vendor_io import import_io_source
+
+        try:
+            result = import_io_source(
+                args.file,
+                args.out,
+                part=args.part,
+                source_url=args.source_url,
+                license_note=args.license_note,
+            )
+        except (OSError, ValueError) as exc:
+            print(json.dumps({"status": "BLOCKED", "detail": str(exc)}) if args.json else str(exc))
+            return 2
+        print(
+            json.dumps(result, indent=2)
+            if args.json
+            else f"Source preserved: {result['manifest']}\nElectrical validation: UNKNOWN. {result['next_step']}"
+        )
+        return 0
     action = getattr(args, "model_command", None)
     if action == "build":
         return _cmd_model_build(args)
@@ -760,7 +803,7 @@ def _cmd_model(args: argparse.Namespace) -> int:
         return _cmd_model_test(args)
     if action == "install":
         return _cmd_model_install(args)
-    print("error: specify a model subcommand: build, test or install")
+    print("error: specify a model subcommand: build, test, install or import")
     return 2
 
 
@@ -839,7 +882,8 @@ def _publish_model_files(
 
 
 def _cmd_model_build(args: argparse.Namespace) -> int:
-    from boardmodeler.authoring.backends import build_agent_backend
+    from boardmodeler.authoring.api_backend import build_api_backend
+    from boardmodeler.authoring.backends import BobShellBackend
     from boardmodeler.authoring.card import write_deliverables
     from boardmodeler.authoring.loop import BuildRequest, build_model, prepare_workdir
     from boardmodeler.authoring.spec import load_tps54320_spec
@@ -933,9 +977,16 @@ def _cmd_model_build(args: argparse.Namespace) -> int:
 
     workdir = out_dir / "build"
     prepare_workdir(spec=spec, subckt=subckt, workdir=workdir)
-    backend_name = str(args.backend or "bob").strip().lower()
-    if backend_name in ("api", "bob"):
-        backend = build_agent_backend(provider_id=args.provider, team_id=args.team_id)
+    backend_name = str(args.backend or "api").strip().lower()
+    if backend_name == "api":
+        backend = build_api_backend(
+            provider_id=args.provider,
+            model=args.model,
+            max_tokens=args.max_tokens,
+            team_id=args.team_id,
+        )
+    elif backend_name == "bob":
+        backend = BobShellBackend(team_id=args.team_id)
     else:
         return emit(
             {
@@ -944,7 +995,7 @@ def _cmd_model_build(args: argparse.Namespace) -> int:
                 "status": "BLOCKED",
                 "detail": (
                     f"{backend_name}_backend_unavailable: the offline author writes the bundled "
-                    "template only on the --datasheet path; use --backend bob here"
+                    "template only on the --datasheet path; use --backend api or --backend bob here"
                 ),
                 "history": [],
                 "probes": [],
@@ -1054,6 +1105,8 @@ def _cmd_model_build_from_datasheet(args: argparse.Namespace, *, subckt: str, em
         out_dir=args.out,
         backend_name=args.backend,
         provider=args.provider,
+        agent_model=args.model,
+        agent_max_tokens=args.max_tokens,
         team_id=args.team_id,
         max_iterations=args.iterations,
         timeout_s=args.timeout,

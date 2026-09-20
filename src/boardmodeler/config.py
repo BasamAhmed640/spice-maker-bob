@@ -107,8 +107,9 @@ class AppConfig(BaseModel):
     #: Model id for providers that take one from this application; ``None`` uses the
     #: provider's documented default.
     agent_model: str | None = None
-    #: Kept for config compatibility: the budget of one authoring reply is the Bob
-    #: CLI's own now that this build has no HTTP agent transport.
+    #: Output-token budget for one HTTP authoring reply; ``None`` uses
+    #: ``authoring.api_backend``'s default. Reasoning-class models spend part of this
+    #: budget before they write any file text, which is why it is generous and settable.
     agent_max_tokens: int | None = Field(default=None, ge=1)
     #: Search the web for supporting material while a model is being made (setup page).
     web_reinforcement: bool = True

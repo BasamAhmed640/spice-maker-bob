@@ -197,10 +197,10 @@ def test_choosing_a_provider_points_the_key_row_at_its_own_credential(
     assert SECRET not in isolated_config.read_text(encoding="utf-8")
 
 
-def test_a_single_provider_catalog_keeps_the_bob_page(
+def test_a_single_provider_catalog_keeps_the_bob_only_page(
     qtbot, isolated_config: Path, monkeypatch
 ) -> None:
-    """One catalog entry: no provider row, Bob's own key label, and a plain window title."""
+    """The Bob-only build is one catalog entry away: no provider row, Bob's own label."""
     from boardmodeler import agent_providers
 
     bob = agent_providers.by_id("bob")
@@ -218,7 +218,7 @@ def test_a_single_provider_catalog_keeps_the_bob_page(
     assert page.key_label.text() == "BOB API KEY"
     assert page.model_edit.isVisible() is False
     assert page.restricted_note is not None
-    assert page.restricted_note.text() == "IBM Bob is the provider this build uses."
+    assert "IBM Bob API only" in page.restricted_note.text()
     assert page.height() == page.sizeHint().height()
     assert page.width() == page.sizeHint().width()
 
@@ -226,7 +226,7 @@ def test_a_single_provider_catalog_keeps_the_bob_page(
 
     window = ModelMakerWindow()
     qtbot.addWidget(window)
-    assert window.windowTitle() == "Spice Maker — IC model maker"
+    assert window.windowTitle().endswith("· IBM Bob only")
 
 
 def test_an_unknown_provider_in_the_config_is_reported_never_replaced(
@@ -252,7 +252,7 @@ def test_an_unknown_provider_in_the_config_is_reported_never_replaced(
 
 
 def test_a_config_naming_another_provider_is_repairable_from_setup(
-    qtbot, isolated_config: Path
+    qtbot, isolated_config: Path, monkeypatch
 ) -> None:
     """One provider, and a config that names a provider this build lacks.
 
@@ -262,12 +262,17 @@ def test_a_config_naming_another_provider_is_repairable_from_setup(
     """
     from boardmodeler import agent_providers
     from boardmodeler.config import load_config, save_config
-    from boardmodeler.ui.setup_dialog import SetupDialog
+
+    bob = agent_providers.by_id("bob")
+    assert bob is not None
+    monkeypatch.setattr(agent_providers, "CATALOG", (bob,))
 
     config = load_config()
     config.agent_provider = "another-build-provider"
     save_config(config)
     assert load_config().agent_provider == "another-build-provider"
+
+    from boardmodeler.ui.setup_dialog import SetupDialog
 
     page = SetupDialog()
     qtbot.addWidget(page)

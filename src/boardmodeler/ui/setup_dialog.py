@@ -6,10 +6,10 @@ folder finished models land in, the LTspice user library and whether the web is 
 for supporting material. The main window carries none of it.
 
 The agent rows are built from :mod:`boardmodeler.agent_providers`: a build whose catalog
-holds one provider shows no provider row at all and keeps that provider's own key label.
-A configured provider this build does not accept is shown as such, in its own line, and
-is never swapped for the default: SAVE leaves the configured id alone until the user
-picks a provider here.
+holds one provider shows no provider row at all and keeps that provider's own key label,
+so a Bob-only build is this page exactly as it was. A configured provider this build does
+not accept is shown as such, in its own line, and is never swapped for the default: SAVE
+leaves the configured id alone until the user picks a provider here.
 
 The page is sized to its content — no fixed-height frame with dead space under it.
 """
@@ -60,7 +60,7 @@ def configured_provider(config: AppConfig) -> tuple[AgentProvider | None, str]:
 
     An id this build does not accept comes back as ``None`` plus the same
     ``api_provider_unavailable`` text
-    :func:`boardmodeler.authoring.backends.build_agent_backend` refuses with, so
+    :func:`boardmodeler.authoring.api_backend.build_api_backend` refuses with, so
     the page, the window and the engine cannot disagree about the refusal. An
     empty setting means this build's default provider.
     """
@@ -146,7 +146,7 @@ class SetupDialog(QDialog):
         self.use_note: QPushButton | None = None
         only = agent_providers.only_provider()
         if only is not None:
-            self.restricted_note = QLabel(f"{only.label} is the provider this build uses.")
+            self.restricted_note = QLabel(f"This build accepts the {only.label} API only.")
             self.restricted_note.setStyleSheet(_HINT)
             grid.addWidget(self.restricted_note, row, 1, 1, 3)
             row += 1
@@ -173,7 +173,7 @@ class SetupDialog(QDialog):
         self.provider_status: QLabel | None = None
         if self._provider_problem:
             guidance = (
-                f"store the {only.label} API key this build uses"
+                f"this build accepts the {only.label} API only"
                 if only is not None
                 else "pick a provider here and SAVE to replace it"
             )
@@ -268,7 +268,10 @@ class SetupDialog(QDialog):
         self._provider = provider
         self.key_label.setText(provider.key_label)
         self.key_edit.setPlaceholderText(f"paste your {provider.label} API key")
-        self.key_hint.setText(f"{provider.key_hint}\n{provider.docs}")
+        self.key_hint.setText(
+            f"{provider.key_hint}\n{provider.docs}\n"
+            "GO sends your chosen datasheet and model text to this provider."
+        )
         self.model_edit.setText(self._model_for(provider))
         self.model_label.setVisible(provider.model_editable)
         self.model_edit.setVisible(provider.model_editable)
@@ -352,6 +355,9 @@ class SetupDialog(QDialog):
             QMessageBox.warning(self, "Could not store the key", str(exc))
             return
         self.key_edit.clear()
+        # SAVE KEY must also save which provider owns it; otherwise GO can still
+        # use the previous provider until the unrelated SAVE button is pressed.
+        self._save()
         self._refresh_status()
         self.saved_label.setText(
             f"{self._provider.label} key stored in the Windows credential store"

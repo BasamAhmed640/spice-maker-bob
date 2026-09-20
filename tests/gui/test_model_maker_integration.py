@@ -25,27 +25,10 @@ FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "regulator" / "tps
 DATASHEET = FIXTURES / "originals" / "tps54320_datasheet.pdf"
 
 
-def _datasheet(tmp_path: Path) -> Path:
-    """The real datasheet when the git-ignored original is checked out, else a stand-in.
-
-    The extraction result under test is the committed ``requirements.json``; with the
-    supplied result the citations are taken as verified, so a stand-in page is enough to
-    exercise the chain on a fresh clone.
-    """
-    if DATASHEET.is_file():
-        return DATASHEET
-    from reportlab.pdfgen import canvas
-
-    path = tmp_path / "stand_in_datasheet.pdf"
-    sheet = canvas.Canvas(str(path))
-    sheet.drawString(72, 720, "Stand-in datasheet: the real original is not checked out.")
-    sheet.showPage()
-    sheet.save()
-    return path
-
-
 def test_a_real_build_reaches_the_window(qtbot, tmp_path: Path) -> None:
-    from boardmodeler.pipeline.make_model import MakeModelRequest, make_model
+    from tests.pipeline.test_make_model import make_request
+
+    from boardmodeler.pipeline.make_model import make_model
     from boardmodeler.simulation.ltspice import locate
 
     install = locate()
@@ -53,16 +36,7 @@ def test_a_real_build_reaches_the_window(qtbot, tmp_path: Path) -> None:
         pytest.skip("LTspice is not installed")
 
     stages: list[tuple[str, str]] = []
-    request = MakeModelRequest(
-        part="TPS54320",
-        subckt="BM_REG_BUCK",  # the scripted author writes the bundled template library
-        datasheet=_datasheet(tmp_path),
-        out_dir=tmp_path / "out",
-        backend_name="scripted",
-        requirements_json=FIXTURES / "requirements.json",
-        bindings_json=FIXTURES / "probes.json",
-        max_iterations=2,
-    )
+    request = make_request(tmp_path, max_iterations=2, backend_name="scripted", reinforce=False)
     result = make_model(request, progress=lambda event: stages.append((event.stage, event.status)))
 
     # The engine's own contract, before the window is involved.

@@ -123,7 +123,7 @@ def test_doctor_credentials_report_the_source_the_backend_reads(
     """A vendor variable the reason advertises must show up as a source, not 'missing'."""
     from boardmodeler import cli
     from boardmodeler.agent_providers import CATALOG, ids
-    from boardmodeler.authoring import backends as api_backend
+    from boardmodeler.authoring import api_backend
     from boardmodeler.security import credentials
 
     class EmptyKeyring:
