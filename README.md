@@ -20,14 +20,14 @@ feedback. A model card records measured behavior and every uncovered requirement
 ## Install on Windows
 
 On the **main** branch, choose **Code → Download ZIP**, extract the archive and run
-**Install.exe** beside this README. The included **1.1.9** installer retains the animated
+**Install.exe** beside this README. The included **1.1.10** installer retains the animated
 pepper setup. INSTALL.txt contains instructions; SHA256SUMS.txt authenticates the installer.
 Python is bundled. LTspice and IBM Bob Shell are separate prerequisites. This build is unsigned.
 
 Open IBM Bob Shell once to review and accept IBM's license. Then open SETUP, choose
 the LTspice executable, run its smoke test and save a Bob API key.
 Bob Shell uses an Inference-scoped key through the process environment; the key stays
-in Windows Credential Manager and is never passed on the command line. See the
+in a local file encrypted for your Windows user and is never passed on the command line. See the
 [Bob Shell setup documentation](https://bob.ibm.com/docs/shell/getting-started/install-and-setup).
 No interactive account login is required by this app.
 
@@ -89,7 +89,7 @@ uv run boardmodeler model test --out build/part --json
 The fixture/scripted backends remain clearly labeled deterministic test tools. No other
 AI catalog or author transport ships in this repository.
 
-Rebuild with `installer/build.ps1 -Version 1.1.9`. The build checks the frozen GUI before
+Rebuild with `installer/build.ps1 -Version 1.1.10`. The build checks the frozen GUI before
 packaging and refreshes Install.exe, INSTALL.txt and SHA256SUMS.txt at the repository
 root. These generated files must be committed for Code → Download ZIP to update.
 See [installer details](installer/README.md) and [current status](docs/STATUS.md).

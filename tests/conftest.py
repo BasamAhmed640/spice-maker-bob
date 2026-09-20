@@ -27,3 +27,10 @@ def ltspice_install() -> LtspiceInstall:
 @pytest.fixture(scope="session")
 def ltspice_exe(ltspice_install: LtspiceInstall) -> Path:
     return ltspice_install.path
+
+
+@pytest.fixture(autouse=True)
+def isolated_credential_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "boardmodeler.security.credentials.credential_path", lambda: tmp_path / "credentials.bin"
+    )

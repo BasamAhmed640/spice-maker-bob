@@ -133,7 +133,7 @@ def _bob_credentials(kind: ProviderKind) -> tuple[bool, str]:
     if os.environ.get(_BOB_ENV_VAR):
         return True, f"{_BOB_ENV_VAR} environment variable is set"
     return False, (
-        f"no keyring credential {credential_name!r} and neither "
+        f"no encrypted local credential {credential_name!r} and neither "
         f"{env_var_name(credential_name)} nor {_BOB_ENV_VAR} is set"
     )
 

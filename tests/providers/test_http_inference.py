@@ -133,14 +133,14 @@ class EmptyKeyring:
 
 @pytest.fixture
 def credential(monkeypatch: pytest.MonkeyPatch) -> str:
-    monkeypatch.setattr(credentials, "keyring", EmptyKeyring())
+    monkeypatch.setattr(credentials, "_read_saved", lambda: None)
     monkeypatch.setenv(ENV_VAR, SECRET)
     return SECRET
 
 
 @pytest.fixture
 def no_credential(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(credentials, "keyring", EmptyKeyring())
+    monkeypatch.setattr(credentials, "_read_saved", lambda: None)
     monkeypatch.delenv(ENV_VAR, raising=False)
     monkeypatch.delenv("BOB_API_KEY", raising=False)
 

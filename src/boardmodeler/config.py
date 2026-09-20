@@ -7,7 +7,7 @@ Precedence, highest first:
 3. the config file
 4. built-in defaults
 
-Nothing here writes secrets: credentials live in the OS keyring or the
+Nothing here writes secrets: credentials live in the encrypted local credential file or the
 ``BOARDMODELER_<NAME>_API_KEY`` environment variable (see ``security.credentials``).
 """
 
@@ -154,6 +154,8 @@ def save_config(config: AppConfig, path: Path | None = None) -> Path:
     target = path or config_path()
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(target.suffix + ".tmp")
-    tmp.write_text(config.model_dump_json(indent=2), encoding="utf-8")
+    payload = config.model_dump(mode="json", exclude_defaults=True)
+    payload["config_version"] = config.config_version
+    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     tmp.replace(target)
     return target

@@ -400,7 +400,7 @@ def test_settings_dialog_round_trip_and_smoke_result(qapp, tmp_path: Path, monke
     dialog.secret.setText("sk-top-secret")
     assert "sk-top-secret" not in json.dumps(dialog.values())
 
-    assert "stored in the OS keyring" in dialog.store_credential()
+    assert "stored in the encrypted local file" in dialog.store_credential()
     assert stored == [("http_inference", "sk-top-secret")]
     assert dialog.secret.text() == ""
 

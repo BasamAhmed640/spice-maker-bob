@@ -228,7 +228,7 @@ def test_build_provider_rejects_unknown_names() -> None:
 def test_select_provider_defaults_to_fixture_when_ordered_first(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_network: None
 ) -> None:
-    monkeypatch.setattr(credentials, "keyring", NoKeyring())
+    monkeypatch.setattr(credentials, "_read_saved", lambda: None)
     selection = select_provider(
         AppConfig(), requested=None, allow_bob_shell=False, fixture_dir=tmp_path
     )
@@ -242,7 +242,7 @@ def test_select_provider_bob_direct_without_credentials(
 ) -> None:
     monkeypatch.delenv("BOB_API_KEY", raising=False)
     monkeypatch.delenv("BOARDMODELER_BOB_DIRECT_API_KEY", raising=False)
-    monkeypatch.setattr(credentials, "keyring", NoKeyring())
+    monkeypatch.setattr(credentials, "_read_saved", lambda: None)
 
     with pytest.raises(ProviderError) as info:
         select_provider(AppConfig(), requested=ProviderKind.BOB_DIRECT, allow_bob_shell=False)
@@ -275,7 +275,7 @@ def test_walk_reports_every_rejection_when_nothing_is_usable(
 ) -> None:
     monkeypatch.delenv("BOB_API_KEY", raising=False)
     monkeypatch.delenv("BOARDMODELER_BOB_DIRECT_API_KEY", raising=False)
-    monkeypatch.setattr(credentials, "keyring", NoKeyring())
+    monkeypatch.setattr(credentials, "_read_saved", lambda: None)
     config = AppConfig(provider_order=[ProviderKind.BOB_DIRECT, ProviderKind.HTTP_INFERENCE])
 
     with pytest.raises(ProviderError) as info:

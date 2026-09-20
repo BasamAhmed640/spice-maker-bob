@@ -15,7 +15,6 @@ dependencies = [
     "numpy>=2.5,<3",
     "pypdf>=6.19,<7",
     "pypdfium2>=5.13,<6",
-    "keyring>=25.7,<26",
     "PySide6-Essentials>=6.11,<6.12",
 ]
 

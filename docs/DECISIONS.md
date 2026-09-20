@@ -99,3 +99,16 @@ quota, setup and incomplete replies remain UNVERIFIED. HTTP 401/403 are reported
 authentication/permission refusal, without echoing server text. Checks send no user
 documents and cannot change the provider, model or reasoning choice. Bob license
 acceptance is explicit and is never performed automatically by the application.
+
+
+## 2026-09-20 — one encrypted local credential per edition
+
+At the user's request, Windows Credential Manager is no longer read or written.
+Current-user DPAPI protects a single local credential file in SpiceMakerData or
+SpiceMakerBobData under LocalAppData, outside the installer-managed folders.
+Saving a provider replaces the prior saved credential. No plaintext fallback,
+machine-wide protection, hard-coded encryption key or automatic credential export
+is provided. Explicit environment variables still support CLI automation.
+Defaults are omitted from settings JSON; model evidence and caches remain separate.
+Existing vault entries require explicit user-authorized migration/removal; the app
+does not enumerate or delete a user's other saved credentials.

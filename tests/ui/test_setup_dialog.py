@@ -70,7 +70,7 @@ def test_the_api_key_goes_to_the_credential_store_and_never_to_the_config(
     )
     monkeypatch.setattr(
         "boardmodeler.security.credentials.describe_credential",
-        lambda name: "sourced from the keyring",
+        lambda name: "sourced from the encrypted local file",
     )
 
     dialog.key_edit.setText(SECRET)

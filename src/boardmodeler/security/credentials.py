@@ -1,174 +1,187 @@
-"""Credential access (D11, AGENTS rule 7).
+"""One encrypted local credential per edition and Windows user; no credential vault.
 
-Lookup precedence for one credential name:
-
-1. the OS keyring entry ``boardmodeler`` / ``provider:<name>:api_key``
-2. the ``BOARDMODELER_<NAME>_API_KEY`` environment variable (CI fallback)
-3. missing — returned as a :class:`Credential` with ``source=MISSING`` and the
-   observed reason, never as an exception
-
-Keyring failures (no backend, locked collection, unavailable vault, keyring not
-importable) degrade to the environment fallback with the failure recorded in
-``detail``; ``get_credential`` therefore never raises for a missing secret.
-Values are never logged, written into project files, or exported: only
-``source`` is reported, and :func:`redact` exists to scrub values that leak into
-provider error text.
+The application writes only DPAPI ciphertext in its LocalAppData directory. It never
+falls back to a plaintext file. Explicit environment variables remain available for
+CLI automation. Saving another provider replaces the previously stored credential.
 """
 
 from __future__ import annotations
 
+import ctypes
+import json
 import os
 import re
+import tempfile
+import threading
 from collections.abc import Iterable
-from dataclasses import dataclass
+from ctypes import wintypes
+from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from pathlib import Path
 
-try:  # a broken keyring install must not stop the application from starting
-    import keyring
-except Exception:  # pragma: no cover - import failure is environment-specific
-    keyring = None
+from boardmodeler.build_flavor import BOB_ONLY
 
-__all__ = [
-    "SERVICE_NAME",
-    "Credential",
-    "SecretSource",
-    "credential_key",
-    "delete_credential",
-    "describe_credential",
-    "env_var_name",
-    "get_credential",
-    "redact",
-    "set_credential",
-]
-
-SERVICE_NAME = "boardmodeler"
 REDACTED = "[REDACTED]"
 _NON_ALNUM = re.compile(r"[^A-Za-z0-9]")
+_APP_NAME = "SpiceMakerBob" if BOB_ONLY else "SpiceMaker"
+_ENTROPY = f"{_APP_NAME}:credential-file:v1".encode("ascii")
+_LOCK = threading.RLock()
+_MAX_FILE_BYTES = 65536
 
 
 class SecretSource(StrEnum):
-    """Where a credential value came from."""
-
-    KEYRING = "KEYRING"
+    LOCAL_FILE = "LOCAL_FILE"
     ENV = "ENV"
     MISSING = "MISSING"
 
 
 @dataclass(frozen=True)
 class Credential:
-    """One credential lookup result.
-
-    ``value`` is ``None`` unless a source supplied it; ``detail`` explains the
-    lookup outcome and never contains a secret value.
-    """
-
     name: str
-    value: str | None
+    value: str | None = field(repr=False)
     source: SecretSource
     detail: str
 
 
-def credential_key(name: str) -> str:
-    """Keyring key for provider ``name``."""
-    return f"provider:{name}:api_key"
+def credential_path() -> Path:
+    """An edition-specific local file, outside source, settings and model folders."""
+    local = os.environ.get("LOCALAPPDATA")
+    base = Path(local) if local else Path.home() / "AppData" / "Local"
+    return base / f"{_APP_NAME}Data" / "credentials.bin"
 
 
 def env_var_name(name: str) -> str:
-    """Environment fallback variable: ``BOARDMODELER_<NAME>_API_KEY``.
-
-    The name is upper-cased and every non-alphanumeric character becomes ``_``,
-    so ``bob-direct`` and ``bob_direct`` both map to
-    ``BOARDMODELER_BOB_DIRECT_API_KEY``.
-    """
     return f"BOARDMODELER_{_NON_ALNUM.sub('_', name).upper()}_API_KEY"
 
 
-def _require_keyring() -> Any:
-    if keyring is None:
+class _Blob(ctypes.Structure):
+    _fields_ = [("size", wintypes.DWORD), ("data", ctypes.POINTER(ctypes.c_ubyte))]
+
+
+def _dpapi(data: bytes, *, decrypt: bool = False) -> bytes:
+    """Current-user DPAPI, authenticated by Windows; no machine-wide flag or UI."""
+    if os.name != "nt":
         raise RuntimeError(
-            "the keyring package is not importable; cannot store credentials "
-            f"(set {env_var_name('<name>')} for CI instead)"
+            "Encrypted credential files require Windows; use an environment variable."
         )
-    return keyring
+    crypt = ctypes.WinDLL("crypt32", use_last_error=True)
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    operation = crypt.CryptUnprotectData if decrypt else crypt.CryptProtectData
+    operation.argtypes = [
+        ctypes.POINTER(_Blob),
+        ctypes.c_void_p,
+        ctypes.POINTER(_Blob),
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(_Blob),
+    ]
+    operation.restype = wintypes.BOOL
+    kernel.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel.LocalFree.restype = ctypes.c_void_p
+    buffer = ctypes.create_string_buffer(data)
+    entropy = ctypes.create_string_buffer(_ENTROPY)
+    incoming = _Blob(len(data), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ubyte)))
+    additional = _Blob(len(_ENTROPY), ctypes.cast(entropy, ctypes.POINTER(ctypes.c_ubyte)))
+    outgoing = _Blob()
+    try:
+        # CRYPTPROTECT_UI_FORBIDDEN=1; deliberately never CRYPTPROTECT_LOCAL_MACHINE.
+        if not operation(
+            ctypes.byref(incoming),
+            None,
+            ctypes.byref(additional),
+            None,
+            None,
+            1,
+            ctypes.byref(outgoing),
+        ):
+            raise RuntimeError("Windows could not protect or unlock this credential file.")
+        return ctypes.string_at(outgoing.data, outgoing.size)
+    finally:
+        ctypes.memset(buffer, 0, len(buffer))
+        if outgoing.data:
+            ctypes.memset(outgoing.data, 0, outgoing.size)
+            kernel.LocalFree(outgoing.data)
 
 
-def get_credential(name: str, *, keyring_backend: Any | None = None) -> Credential:
-    """Look up ``name`` without raising for a missing or broken keyring.
+def _read_saved() -> dict[str, object] | None:
+    path = credential_path()
+    if not path.exists():
+        return None
+    with path.open("rb") as stream:
+        encrypted = stream.read(_MAX_FILE_BYTES + 1)
+    if len(encrypted) > _MAX_FILE_BYTES:
+        raise ValueError("Credential file is too large.")
+    payload = json.loads(_dpapi(encrypted, decrypt=True))
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"v", "name", "key"}
+        or payload["v"] != 1
+        or not isinstance(payload["name"], str)
+        or not isinstance(payload["key"], str)
+        or not payload["key"].strip()
+    ):
+        raise ValueError("Credential file has an unsupported format.")
+    return payload
 
-    ``keyring_backend`` replaces the process keyring for this call (tests inject
-    fakes; production leaves it ``None``). Any exception from the backend is
-    captured in ``detail`` and the environment fallback is still consulted.
-    """
-    key = credential_key(name)
-    backend = keyring_backend if keyring_backend is not None else keyring
-    backend_error: str | None = None
-    value: str | None = None
-    if backend is None:
-        backend_error = "the keyring package is not importable in this environment"
-    else:
+
+def get_credential(name: str) -> Credential:
+    problem = "no saved key for this provider"
+    with _LOCK:
         try:
-            value = backend.get_password(SERVICE_NAME, key)
-        except Exception as exc:  # keyring backends raise platform-specific errors
-            backend_error = f"{type(exc).__name__}: {exc}"
-
-    if value:
-        return Credential(
-            name=name,
-            value=value,
-            source=SecretSource.KEYRING,
-            detail=f"keyring service={SERVICE_NAME!r} key={key!r}",
-        )
-
+            saved = _read_saved()
+            if saved and saved["name"] == name:
+                return Credential(
+                    name,
+                    str(saved["key"]),
+                    SecretSource.LOCAL_FILE,
+                    "encrypted local file for this Windows user",
+                )
+        except Exception:
+            # Never include exception text: decoders and OS errors can echo input.
+            problem = "saved key could not be unlocked; enter it again in SETUP"
     variable = env_var_name(name)
-    env_value = os.environ.get(variable)
-    if env_value:
-        detail = f"environment variable {variable}"
-        if backend_error:
-            detail += f" (keyring lookup failed: {backend_error})"
-        return Credential(name=name, value=env_value, source=SecretSource.ENV, detail=detail)
-
-    if backend_error:
-        detail = f"no keyring value for key {key!r} ({backend_error}) and {variable} is not set"
-    else:
-        detail = f"no keyring value for key {key!r} and {variable} is not set"
-    return Credential(name=name, value=None, source=SecretSource.MISSING, detail=detail)
+    if value := os.environ.get(variable):
+        return Credential(name, value, SecretSource.ENV, f"environment variable {variable}")
+    return Credential(name, None, SecretSource.MISSING, problem)
 
 
 def set_credential(name: str, value: str) -> None:
-    """Store ``name`` in the OS keyring.
-
-    Raises ``ValueError`` for an empty value and ``RuntimeError``/keyring errors
-    when no backend is usable — an explicit user action must fail loudly rather
-    than silently discard a secret.
-    """
-    if not value:
-        raise ValueError("refusing to store an empty credential value")
-    _require_keyring().set_password(SERVICE_NAME, credential_key(name), value)
+    """Replace the single saved credential atomically, writing ciphertext only."""
+    if not name.strip() or not value.strip() or len(value.encode("utf-8")) > 16384:
+        raise ValueError("Enter a non-empty API key of at most 16 KiB.")
+    with _LOCK:
+        payload = json.dumps({"v": 1, "name": name, "key": value}).encode("utf-8")
+        encrypted = _dpapi(payload)
+        if _dpapi(encrypted, decrypt=True) != payload:
+            raise RuntimeError("Credential encryption verification failed.")
+        path = credential_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=".credential-", suffix=".tmp", dir=path.parent)
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(encrypted)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
 
 
 def delete_credential(name: str) -> None:
-    """Delete ``name`` from the OS keyring.
-
-    A keyring that has no such entry raises ``keyring.errors.PasswordDeleteError``;
-    that is propagated rather than reported as success.
-    """
-    _require_keyring().delete_password(SERVICE_NAME, credential_key(name))
+    """Forget the selected local credential; never delete a different provider's key."""
+    with _LOCK:
+        saved = _read_saved()
+        if saved and saved["name"] == name:
+            credential_path().unlink(missing_ok=True)
 
 
 def describe_credential(name: str) -> str:
-    """Log/CLI-safe description of a credential: the source only, never the value."""
     credential = get_credential(name)
     return f"credential {name!r}: source={credential.source.value.lower()}"
 
 
 def redact(text: str, secrets: Iterable[str]) -> str:
-    """Replace every occurrence of each secret in ``text`` with ``[REDACTED]``.
-
-    Secrets are removed longest-first so one secret contained in another is
-    replaced as a unit, and empty/whitespace-only entries are ignored so they
-    cannot mangle the whole message.
-    """
     result = text
     for secret in sorted((s for s in secrets if s and s.strip()), key=len, reverse=True):
         result = result.replace(secret, REDACTED)

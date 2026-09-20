@@ -174,3 +174,24 @@ Both packaged 1.1.9 executables passed all seven TLV9002 real-LTspice checks;
 release ZIP installer bytes matched the tracked root installers and checksums.
 The Bob 1.1.9 installer completed with exit 0, and the installed application opened
 successfully with the same executable hash as the tested frozen build.
+
+
+## 2026-09-20 — minimal local credential storage (1.1.10 source)
+
+- Replaced the credential-vault dependency with current-user DPAPI ciphertext in
+  an edition-specific LocalAppData data folder. One selected key is retained.
+- Atomic ciphertext-only writes, validation, tampering rejection, environment
+  fallback and redacted diagnostics are covered. Settings omit default values.
+- `.venv/Scripts/python.exe -m pytest -q -m "not ltspice"`: **1,072 passed, 8 skipped, 159 deselected**.
+- After moving data outside installer-owned directories, focused security and
+  setup tests: **62 passed** in each edition. Ruff lint and format checks passed.
+- Real Windows encryption round trip and a fresh-process read passed. The general
+  live key check accepted the encrypted-file credential. Bob's key decrypted, but
+  its live check remains blocked by the user's pending IBM license acceptance.
+- The final 1.1.10 installer completed with exit 0. The encrypted credential survived
+  reinstall outside the installer-managed folder, and the installed frozen application
+  reported source=local_file. Its GUI startup check passed and all seven TLV9002
+  real-LTspice checks passed. Root Install.exe matches the release ZIP and SHA256SUMS.
+- With explicit user approval, three legacy Spice Maker vault credentials were removed
+  after fresh-process verification of the encrypted files. Other applications' entries
+  were not touched. A scan of release/source files found neither selected saved key.

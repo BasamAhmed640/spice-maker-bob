@@ -47,10 +47,10 @@ def test_keyring_takes_precedence_over_bob_environment(monkeypatch):
     monkeypatch.setenv("BOB_API_KEY", "test-environment-secret")
     credential = credential_for(
         agent_providers.default_provider(),
-        lambda name: Credential(name, "test-keyring-secret", SecretSource.KEYRING, ""),
+        lambda name: Credential(name, "test-keyring-secret", SecretSource.LOCAL_FILE, ""),
     )
     assert credential.value == "test-keyring-secret"
-    assert credential.source is SecretSource.KEYRING
+    assert credential.source is SecretSource.LOCAL_FILE
 
 
 def test_bob_environment_alias(monkeypatch):

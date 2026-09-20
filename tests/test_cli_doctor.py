@@ -130,7 +130,7 @@ def test_doctor_credentials_report_the_source_the_backend_reads(
         def get_password(self, service: str, key: str) -> None:
             return None
 
-    monkeypatch.setattr(credentials, "keyring", EmptyKeyring())
+    monkeypatch.setattr(credentials, "_read_saved", lambda: None)
     for provider in CATALOG:
         for variable in api_backend.env_sources(provider):
             monkeypatch.delenv(variable, raising=False)

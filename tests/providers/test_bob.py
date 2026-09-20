@@ -50,7 +50,7 @@ class EmptyKeyring:
 
 @pytest.fixture
 def no_bob_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(credentials, "keyring", EmptyKeyring())
+    monkeypatch.setattr(credentials, "_read_saved", lambda: None)
     for name in (
         BOB_API_KEY_ENV,
         "BOARDMODELER_BOB_DIRECT_API_KEY",
@@ -61,7 +61,7 @@ def no_bob_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def bob_credential(monkeypatch: pytest.MonkeyPatch) -> str:
-    monkeypatch.setattr(credentials, "keyring", EmptyKeyring())
+    monkeypatch.setattr(credentials, "_read_saved", lambda: None)
     monkeypatch.setenv(BOB_API_KEY_ENV, SECRET)
     return SECRET
 

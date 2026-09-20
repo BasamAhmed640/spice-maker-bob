@@ -279,6 +279,7 @@ class SetupDialog(QDialog):
         self.key_hint.setText(
             f"{provider.key_hint}\n{provider.docs}\n"
             "GO sends your chosen datasheet and model text to this provider.\n"
+            "One encrypted key is saved for this Windows user; a new provider replaces it.\n"
             "Saving a key runs a small connection check (may use a little API credit)."
         )
         self.model_edit.setText(self._model_for(provider))
@@ -363,7 +364,9 @@ class SetupDialog(QDialog):
             set_credential(self._provider.credential, value)
         except Exception:
             QMessageBox.warning(
-                self, "Could not store the key", "Windows credential storage failed."
+                self,
+                "Could not store the key",
+                "Could not encrypt or save the local credential file.",
             )
             return
         self.key_edit.clear()
@@ -372,7 +375,7 @@ class SetupDialog(QDialog):
         self._save()
         self._refresh_status()
         self.saved_label.setText(
-            f"{self._provider.label} key stored in the Windows credential store"
+            f"{self._provider.label} key stored in the encrypted local credential file"
         )
         self._start_key_check(value)
 

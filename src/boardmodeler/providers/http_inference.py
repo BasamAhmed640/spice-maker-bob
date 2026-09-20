@@ -6,7 +6,7 @@ parsed JSON object to the caller — which validates it against the D4 schemas
 (:mod:`boardmodeler.requirements.extract`). It never guesses an endpoint, never
 guesses a model string, and never reads a secret out of configuration text:
 ``ProviderConfig.endpoint``/``.model`` must have been observed in vendor
-documentation (D-005), and the API key comes from the OS keyring or
+documentation (D-005), and the API key comes from the encrypted local credential file or
 ``BOARDMODELER_<NAME>_API_KEY`` through :func:`boardmodeler.security.credentials.get_credential`.
 
 Transport, TLS, and secrets:
@@ -592,7 +592,7 @@ class HttpInferenceProvider:
             raise ProviderError(
                 "credential_missing",
                 f"provider {self.name!r} has no credential: {credential.detail}. "
-                "Store it in the OS keyring (boardmodeler / provider:<name>:api_key) or set "
+                "Store it in the encrypted local credential file (boardmodeler / provider:<name>:api_key) or set "
                 f"{env_var_name(self.name)}.",
             )
         header = self.provider_config.auth_header or "Authorization"

@@ -53,7 +53,7 @@ BOB_API_KEY_ENV = "BOB_API_KEY"
 """Environment variable Bob Shell reads its own credential from."""
 
 BOB_CREDENTIAL_NAME = "bob_shell"
-"""Name used with the repo keyring / ``BOARDMODELER_*_API_KEY`` helpers."""
+"""Name used with the repo encrypted file / ``BOARDMODELER_*_API_KEY`` helpers."""
 
 BOB_ALLOWED_BASENAMES = ("bob", "bob.exe", "bob.cmd", "bob.bat", "bob.ps1")
 """Basenames the subprocess guard accepts for the Bob Shell launcher."""
@@ -62,9 +62,7 @@ BOB_NOT_INSTALLED = (
     "bob_shell_not_installed: install from "
     "https://bob.ibm.com/docs/shell/getting-started/install-and-setup"
 )
-BOB_CREDENTIALS_UNAVAILABLE = (
-    "bob_credentials_unavailable: set BOB_API_KEY (Scope=Inference) or store it in the keyring"
-)
+BOB_CREDENTIALS_UNAVAILABLE = "bob_credentials_unavailable: set BOB_API_KEY (Scope=Inference) or store it in the encrypted local file"
 
 STDOUT_TAIL_LINES = 40
 """Lines of child output kept in :class:`AuthorResult.stdout_tail`."""
@@ -281,7 +279,7 @@ def run_bob_shell(
 class BobShellBackend:
     """The real backend: ``bob run --format json`` in the agent's workdir.
 
-    The credential is looked up through the repo helpers first (keyring entry,
+    The credential is looked up through the repo helpers first (encrypted local entry,
     then ``BOARDMODELER_BOB_SHELL_API_KEY``) and then as a plain ``BOB_API_KEY``
     environment variable. It is only ever placed in the child *environment*.
 

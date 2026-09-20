@@ -13,3 +13,7 @@ __pycache__/
 # Downloaded vendor documentation and vendor model packages are local-use only.
 fixtures/**/originals/
 projects/
+
+# Local encrypted credentials never belong in source archives.
+credentials.bin
+.credential-*.tmp
