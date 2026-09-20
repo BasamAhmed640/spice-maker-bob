@@ -470,12 +470,6 @@ def _probe_names(outcomes: Iterable[object]) -> str:
     return ", ".join(str(outcome.probe_id) for outcome in outcomes) or "none"
 
 
-def _signature(report: HarnessReport) -> tuple[tuple[str, str], ...]:
-    """The not-yet-passing rows of one report, as comparable ``(probe, status)`` pairs."""
-    rows = ((str(outcome.probe_id), str(outcome.status)) for outcome in _failing(report))
-    return tuple(sorted(rows))
-
-
 def _turn_line(
     turn: int,
     *,
@@ -486,9 +480,9 @@ def _turn_line(
 ) -> str:
     """One history line: whether the turn moved, and what the harness still objects to.
 
-    A turn is only *progress* when the model bytes changed and the failing set is
-    not the one the previous turn already reported, so a repeat of the same
-    failure reads as "no progress" even though the agent ran.
+    A turn is progress when its model bytes changed and its report improves the
+    unknown-row, failing-row and numeric-error ranking, so an agent that repeats
+    itself reads as "no progress" even though it ran.
     """
     line = (
         f"turn {turn}: {'progress' if progressed else 'no progress'}; "
@@ -508,8 +502,8 @@ def _stall_detail(request: BuildRequest, turn: int, report: HarnessReport) -> st
     """The stall's reason: the turn count first, then the probes still failing."""
     return (
         f"{STALLED_PREFIX} the agent stopped making progress: {request.stall_patience} "
-        "consecutive turn(s) changed nothing the harness could see (the model bytes and the "
-        f"failing set both repeated). Stopped after {turn} turn(s); still failing: "
+        "consecutive turn(s) could not improve on the best result (unknown rows, then failed "
+        f"rows, then numeric error). Stopped after {turn} turn(s); still failing: "
         f"{_names(_failing(report))}. Re-run with an agent that changes the model, or set "
         "max_iterations to bound the turns explicitly."
     )
@@ -628,11 +622,11 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
     every covered characteristic, the caller's cap, ``stall_patience``
     consecutive turns that made no progress, or cancellation. Progress is what
     keeps an uncapped build alive: each turn must change the model bytes *and*
-    report a failing set the previous turn did not, so an agent that repeats
-    itself stops the build instead of running forever. The spec is re-hashed
-    after every turn, the model file must exist, and the harness is the only
-    thing that can produce PASS. Stopping on a cap or a stall is UNKNOWN with the
-    last report and the still-failing probes, never a pass by attrition.
+    improve the unknown-row, failing-row and numeric-error ranking, so an agent
+    that repeats itself stops the build instead of running forever. The spec is
+    re-hashed after every turn, the model file must exist, and the harness is the
+    only thing that can produce PASS. Stopping on a cap or a stall is UNKNOWN with
+    the last report and the still-failing probes, never a pass by attrition.
     """
     workdir = Path(request.workdir)
     from boardmodeler.authoring.validation_cache import (
@@ -662,6 +656,32 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
             history,
             "validated_cache_hit: observed artifacts verified; zero author turns",
         )
+    if cached is None and key is not None and path.is_file() and not (cancel and cancel.is_set()):
+        # A candidate left by an earlier run was not observed by this process, so its
+        # cache entry is not evidence. One LTspice run re-judges it for no author turn,
+        # keeping a passing candidate a PASS without trusting files the agent can write.
+        try:
+            revalidated = run_harness(
+                model_lib=path,
+                subckt=request.subckt,
+                spec=frozen,
+                workdir=cache_root / key,
+                ltspice=_ltspice_executable(request.ltspice),
+                timeout_s=request.timeout_s,
+                cancel=cancel,
+            )
+            write_report(cache_root, key, revalidated)
+        except Exception as exc:
+            history.append(f"precheck: harness_error: {type(exc).__name__}: {exc}")
+            revalidated = None
+        if revalidated is not None and revalidated.outcomes and revalidated.passed():
+            return _outcome(
+                Status.PASS,
+                0,
+                revalidated,
+                history,
+                "existing candidate revalidated by the simulator; zero author turns",
+            )
     usable, reason = request.backend.availability()
     if not usable:
         report = _report_without_runs(request.part, digest, path)

@@ -12,6 +12,12 @@ from boardmodeler.domain.hashing import canonical_json_bytes, sha256_bytes, sha2
 
 CACHE_VERSION = 1
 
+#: Reports this process itself observed from the harness, per ``(cache root, key)``. The
+#: report, ``.raw`` and ``.log`` on disk are writable by the authoring agent, so a cache
+#: entry is reused only when this process produced it; a fresh process re-simulates the
+#: existing candidate instead of trusting files nobody can bind to their run.
+_OBSERVED: dict[tuple[str, str], object] = {}
+
 
 @lru_cache(maxsize=64)
 def _file_digest(path: str, size: int, mtime_ns: int) -> str:
@@ -27,8 +33,13 @@ def validation_key(model: Path, spec, simulator: Path, timeout_s: float) -> str 
     if not model.is_file() or not simulator.is_file():
         return None
     # External includes would require a transitive dependency graph. Until supported,
-    # refuse reuse rather than claim the top-level library hash covers those bytes.
-    if re.search(r"(?im)^\s*\.(?:include|inc|lib)\b", model.read_text(encoding="utf-8")):
+    # refuse reuse rather than claim the top-level library hash covers those bytes. An
+    # undecodable file is refused the same way: nothing can prove its bytes are covered.
+    try:
+        model_text = model.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return None
+    if re.search(r"(?im)^\s*\.(?:include|inc|lib)\b", model_text):
         return None
     package = Path(__file__).resolve().parents[1]
     if getattr(sys, "frozen", False):
@@ -66,9 +77,17 @@ def read_report(root: Path, key: str | None, spec, model: Path):
 
     if key is None:
         return None
+    observed = _OBSERVED.get((str(Path(root).resolve()), key))
+    if observed is None:
+        return None
     directory = root / key
     try:
         report = HarnessReport.from_json((directory / "report.json").read_text(encoding="utf-8"))
+        # The on-disk report must be the one this process observed, byte for byte in
+        # meaning: an entry written by anyone else (including the authoring agent) is not
+        # evidence, however well its neighboring checksums agree.
+        if report != observed:
+            return None
         if report.spec_digest != spec.digest() or report.model_sha256 != sha256_file(model):
             return None
         covered = {char.char_id for char in spec.covered()}
@@ -134,6 +153,7 @@ def write_report(root: Path, key: str | None, report) -> None:
     temporary = directory / "report.json.tmp"
     temporary.write_text(report.to_json(), encoding="utf-8")
     temporary.replace(directory / "report.json")
+    _OBSERVED[(str(Path(root).resolve()), key)] = report
 
 
 def progress_score(report, spec) -> tuple[int, int, float]:

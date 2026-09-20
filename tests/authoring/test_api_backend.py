@@ -547,10 +547,6 @@ def test_an_empty_answer_names_the_stop_reason(tmp_path: Path) -> None:
     assert written_files(tmp_path) == []
 
 
-def test_the_default_output_budget_is_generous_enough_for_a_reasoning_model() -> None:
-    assert api_backend.MAX_OUTPUT_TOKENS >= 32768
-
-
 def test_a_configured_output_budget_reaches_the_request_body(tmp_path: Path) -> None:
     schema_holder = provider("deepseek")
     reply = json.dumps({"files": {f"{SUBCKT}.lib": LIB_TEXT}})

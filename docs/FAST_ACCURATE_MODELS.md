@@ -15,11 +15,17 @@ an extraction task as an authoring task.
 
 Identical successful builds use the extraction cache and a validation cache keyed by
 model, specification, engine, Python/NumPy version, simulator executable and timeout.
-Before reuse, raw/log hashes, completed waveforms and measurements are checked against
-the frozen limits again. Changed or missing evidence causes a fresh simulation.
-UNKNOWN results and models with external includes are never reused. Keep the original
-build directory: cached artifacts use absolute paths. This accelerates repeats; it is
-not a guarantee about first-build provider latency or success on arbitrary parts.
+A cache entry is only reused inside the process that observed the harness run that
+produced it: the report, raw and log on disk are writable by the authoring agent, so a
+checksum stored beside them cannot bind them to a model. Before any in-process reuse,
+raw/log hashes, completed waveforms and measurements are checked against the frozen
+limits again, and the on-disk report must match the observed one. A fresh process finds
+no receipt, so it re-judges an existing candidate with one LTspice run before deciding
+PASS — still skipping every author/API turn. Changed or missing evidence causes a fresh
+simulation, and UNKNOWN results, models with external includes and files that are not
+valid UTF-8 are never reused. Keep the original build directory: cached artifacts use
+absolute paths. This accelerates repeats; it is not a guarantee about first-build
+provider latency or success on arbitrary parts.
 
 ## Electrical I/O coverage
 

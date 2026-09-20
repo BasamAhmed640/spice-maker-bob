@@ -619,3 +619,12 @@ The two repositories share implementation and tests; build_flavor.BOB_ONLY filte
 accepted catalog. Separate Velopack IDs keep installs distinct. Easy-download ZIPs wrap
 the unmodified animated installer as Install.exe; LTspice and Bob Shell remain external
 prerequisites. Publishing to each repository's main branch is explicitly user-authorized.
+
+**Addendum (review).** A cache entry beside the agent is not evidence: an author with
+filesystem access can write a fresh key, borrow genuine passing raw/log bytes and relabel
+the report. Reuse is therefore allowed only for a run the harness performed in this
+process, receipted in memory against the exact cache root and validation key; the on-disk
+report must equal that receipt and every artifact hash must still match. A fresh process
+finds no receipt, so an existing candidate is re-judged with one LTspice run before PASS
+— no author or API turn is spent. An undecodable model is never reused. This is not a
+hostile-process sandbox, and no claim of durable provenance is made.

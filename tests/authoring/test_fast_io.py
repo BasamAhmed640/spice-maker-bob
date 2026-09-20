@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -17,6 +18,7 @@ from boardmodeler.authoring.loop import BuildRequest, build_model
 from boardmodeler.authoring.probes import PROBES
 from boardmodeler.authoring.spec import Characteristic, SpecSet
 from boardmodeler.authoring.validation_cache import read_report, validation_key, write_report
+from boardmodeler.domain.hashing import sha256_file
 from boardmodeler.domain.records import Condition
 
 # Synthetic electrical test double, not a model of a vendor device.
@@ -142,6 +144,126 @@ def test_repeat_build_uses_real_evidence_without_author_or_simulator(
     # A damaged artifact is not made trustworthy by rewriting the report.
     write_report(cache, key, first.report)
     assert read_report(cache, key, spec, tmp_path / "model/IO.lib") is None
+
+
+def _forge_cache_entry(cache_root, key, model, report) -> None:
+    """Write a genuine passing report and its artifacts under ``key`` for ``model``.
+
+    This is exactly what an author with filesystem access can do. It relabels the model
+    hash, run directory and artifact paths, and keeps the measured values and hashes.
+    """
+    directory = cache_root / key
+    directory.mkdir(parents=True, exist_ok=True)
+    payload = json.loads(report.to_json())
+    payload["model_sha256"] = sha256_file(model)
+    for row in payload["outcomes"]:
+        row["run_dir"] = str(directory)
+        artifacts = {}
+        for filename, digest in row["artifacts"].items():
+            target = directory / Path(filename).name
+            target.write_bytes(Path(filename).read_bytes())
+            artifacts[str(target)] = digest
+        row["artifacts"] = artifacts
+    (directory / "report.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+@pytest.mark.ltspice
+def test_borrowed_passing_waveforms_do_not_validate_a_different_model(
+    tmp_path, ltspice_exe, monkeypatch
+):
+    from boardmodeler.authoring import validation_cache
+
+    spec = replace(io_spec(), characteristics=io_spec().characteristics[:1])
+
+    def write_good(turn, workdir, prompt):
+        (workdir / "model/IO.lib").write_text(BUFFER)
+
+    template = BuildRequest(
+        part=spec.part,
+        subckt="IO",
+        spec=spec,
+        workdir=tmp_path / "good",
+        ltspice=ltspice_exe,
+        backend=ScriptedBackend(write_good),
+    )
+    good = build_model(template)
+    assert good.status == "PASS", good.report.feedback()
+
+    bad_dir = tmp_path / "bad"
+    (bad_dir / "model").mkdir(parents=True)
+    bad_model = bad_dir / "model/IO.lib"
+    bad_model.write_text(BUFFER.replace("/25", "/250"))
+    bad_key = validation_key(bad_model, spec, ltspice_exe, template.timeout_s)
+    assert bad_key is not None
+    _forge_cache_entry(bad_dir / "validation-cache", bad_key, bad_model, good.report)
+
+    # No process observed this entry, so it is refused and the model is re-judged.
+    monkeypatch.setattr(validation_cache, "_OBSERVED", {})
+    assert read_report(bad_dir / "validation-cache", bad_key, spec, bad_model) is None
+
+    def keep_bad(turn, workdir, prompt):
+        (workdir / "model/IO.lib").write_text(BUFFER.replace("/25", "/250"))
+
+    result = build_model(
+        replace(template, workdir=bad_dir, backend=ScriptedBackend(keep_bad), max_iterations=1)
+    )
+    assert result.status != "PASS", result.report.feedback()
+    assert result.report.failing(), result.report.feedback()
+
+
+@pytest.mark.ltspice
+def test_an_author_forged_cache_entry_is_ignored(tmp_path, ltspice_exe, monkeypatch):
+    from boardmodeler.authoring import validation_cache
+
+    spec = replace(io_spec(), characteristics=io_spec().characteristics[:1])
+
+    def write_good(turn, workdir, prompt):
+        (workdir / "model/IO.lib").write_text(BUFFER)
+
+    template = BuildRequest(
+        part=spec.part,
+        subckt="IO",
+        spec=spec,
+        workdir=tmp_path / "good",
+        ltspice=ltspice_exe,
+        backend=ScriptedBackend(write_good),
+    )
+    good = build_model(template)
+    assert good.status == "PASS", good.report.feedback()
+
+    author_dir = tmp_path / "author"
+    (author_dir / "model").mkdir(parents=True)
+
+    def forge(turn, workdir, prompt):
+        model = workdir / "model/IO.lib"
+        model.write_text(BUFFER.replace("/25", "/250"))
+        key = validation_key(model, spec, ltspice_exe, template.timeout_s)
+        assert key is not None
+        _forge_cache_entry(workdir / "validation-cache", key, model, good.report)
+
+    monkeypatch.setattr(validation_cache, "_OBSERVED", {})
+    result = build_model(
+        BuildRequest(
+            part=spec.part,
+            subckt="IO",
+            spec=spec,
+            workdir=author_dir,
+            ltspice=ltspice_exe,
+            backend=ScriptedBackend(forge),
+            max_iterations=1,
+        )
+    )
+    assert result.status != "PASS", result.report.feedback()
+    assert result.report.failing(), result.report.feedback()
+
+
+def test_an_undecodable_model_is_never_reused(tmp_path: Path) -> None:
+    """A model that is not UTF-8 cannot be shown to have no external includes."""
+    model = tmp_path / "IO.lib"
+    model.write_bytes(b".subckt IO A B\n\xff\xfe data\n.ends IO\n")
+    simulator = tmp_path / "LTspice.exe"
+    simulator.write_bytes(b"")
+    assert validation_key(model, SimpleNamespace(), simulator, 120.0) is None
 
 
 @pytest.mark.ltspice
