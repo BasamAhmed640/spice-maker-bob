@@ -450,6 +450,7 @@ def test_the_scripted_backend_writes_nothing_for_a_subcircuit_it_cannot_author(
 def test_scenario_e_cancellation_before_the_first_turn_is_unknown_with_the_stage_list(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    monkeypatch.setattr(engine, "locate", lambda explicit=None: fake_ltspice(tmp_path))
     backend = use_backend(monkeypatch, ScriptedBackend(template_script()))
     cancel = threading.Event()
     cancel.set()

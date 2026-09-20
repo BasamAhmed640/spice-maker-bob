@@ -38,16 +38,16 @@ Separate datasheet operating points produce separate decks, never one merged cor
 Conditions use SI-valued `parameter_overrides`: `io_vcc`, `io_input_high`, `io_load_a`,
 `io_cap_f`, `io_test_v`, `io_inverting` (0/1), `io_oe_active_high` (0/1). The binder
 requires the applicable supply, load and polarity conditions; missing/contradictory
-conditions remain untestable. A row may take its output polarity from a *verified*
-verbatim citation on a neighbouring row for the same part and document when that excerpt
-asserts an output/buffer polarity (or an input-to-output truth relation) and names this
-row's signal; dash, lost-hyphen and line-break variants are normalized, an input-pin-only
-description does not qualify, and the binding records the source requirement and excerpt
-under `derived_conditions`. An unverified citation, another part/document, an unrelated
-signal or conflicting evidence leaves the row a declared gap. A power-off leakage row must
-cite `VCC = 0 V`; a powered condition is refused rather than silently measured at zero, and
-a row explicitly about supply current stays a gap instead of being measured as output
-leakage. Timing binding also requires the input edge (`io_edge_s`)
+conditions remain untestable. Power-off leakage is measured only at the cited
+`VCC = 0 V`; a powered condition is a different measurement and stays untestable, the
+renderer refuses it for direct probe calls, and a supply-current row that merely mentions
+`IOFF` is not broadened to the output-leakage probe. A row may take its output polarity from
+a *verified* verbatim citation on a neighbouring row for the same part and document when
+that excerpt names this row's signal (single-node `V(...)`/`I(...)` references match the
+bare node name); the binding records the source requirement and excerpt under
+`derived_conditions`, and an unverified citation, another part/document, an unrelated or
+differential signal, an input-pin-only description or conflicting evidence leaves the
+row a declared gap. Timing binding also requires the input edge (`io_edge_s`)
 and rise/fall-time binding requires the low/high fractions (`io_low_frac`, `io_high_frac`).
 Propagation delay binding requires the cited input/output fractions (`io_input_frac`, `io_output_frac`). Every actual deck parameter is in the report.
 Nominal 25 C behavior does not qualify a full temperature range. PASS applies only to
@@ -88,3 +88,8 @@ is byte-identical to the normal Setup.exe, so the existing pepper animation is p
 Python is bundled; LTspice and Bob Shell remain separate prerequisites. The two editions
 use separate package IDs/install directories. GitHub's Windows download workflow can
 rebuild the ZIP from source. Builds are unsigned unless a signing step is configured.
+
+Several limits can share a simulation at the same operating point. Each row is judged
+individually from that measured value, and the model card and results.json totals count
+rows. Harness and authoring-progress counts refer to simulator cases. A missing outcome
+is UNKNOWN; a partial measurement does not make an unavailable run pass.

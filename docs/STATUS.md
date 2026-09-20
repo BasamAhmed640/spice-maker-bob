@@ -351,3 +351,18 @@ uv run boardmodeler export --project build/demo --out build/demo-export
 
 1. Keep `docs/DECISIONS.md` current; every decision that constrains later work is
    recorded there with its rationale and rejected alternatives.
+
+## 2026-09-20 — direct delivery verification
+
+Both the model card and result totals now count individual characteristic verdicts;
+shared simulator cases retain aggregate probe counts. Partial measurements cannot
+promote unavailable runs to PASS. Supply-current dash variants remain excluded from
+output-current probes. The cancellation-only unit test supplies a fake installation,
+so it passes on GitHub runners without changing missing-simulator product behavior.
+
+Observed checks: ruff check and format check passed; the offline suite passed 1048
+ tests with 4 skipped and 129 deselected in 24.48 s. A real CLI/LTspice artificial
+split-limit check produced one hashed waveform/log pair, a passing row and failing
+row, and matching model-card totals with zero API calls. This is synthetic test data,
+not a real device accuracy claim. The user requested direct tests/CI delivery to stop
+the repeated automated review cost; every committed review fix was preserved.

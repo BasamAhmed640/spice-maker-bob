@@ -637,3 +637,8 @@ report must equal that receipt and every artifact hash must still match. A fresh
 finds no receipt, so an existing candidate is re-judged with one LTspice run before PASS
 — no author or API turn is spent. An undecodable model is never reused. This is not a
 hostile-process sandbox, and no claim of durable provenance is made.
+
+Per-characteristic verdicts and totals are derived from the existing frozen spec and
+observed measurement. No extra simulation or persisted report field is required.
+Harness and authoring progress remain probe counts; results.json and model-card
+summaries count rows. Missing outcomes are UNKNOWN and unsupported rows remain gaps.
