@@ -306,3 +306,20 @@ def test_extra_declared_ports_do_not_change_the_measurement(
     result = run_batch(ltspice_exe, deck, run_dir, timeout_s=120.0)
     assert result.exit_code == 0, result.observed()
     assert PROBES["vref"].measure(result.raw_path, {})["v_fb"] == pytest.approx(0.8, abs=3e-3)
+
+
+def test_importing_io_probes_first_does_not_hit_the_registry_cycle() -> None:
+    """A fresh interpreter that imports the I/O probes first must still start.
+
+    ``probes`` registers ``io_probes`` at import; ``io_probes`` must not import the
+    registry eagerly or the two modules deadlock on a partially initialized module.
+    """
+    import subprocess
+    import sys
+
+    completed = subprocess.run(
+        [sys.executable, "-c", "import boardmodeler.authoring.io_probes"],
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr

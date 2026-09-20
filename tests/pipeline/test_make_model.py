@@ -539,6 +539,275 @@ def test_a_row_no_probe_can_answer_gets_a_concrete_reason() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# (f2) cited polarity: verified, scoped evidence or a declared gap
+
+
+def _synthetic_io_rows(**overrides: object) -> list[Requirement]:
+    doc = str(overrides.get("doc_id", "DOC_SYNTH_IO"))
+    part = str(overrides.get("applies_to", "SYNTH_IO"))
+    polarity_excerpt = str(
+        overrides.get(
+            "polarity_excerpt",
+            "Output is noninverting: A high gives Y high; A low gives Y low.",
+        )
+    )
+    rows = [
+        {
+            "req_id": "REQ-VOH",
+            "applies_to": str(overrides.get("voh_part", part)),
+            "kind": "ELECTRICAL",
+            "class": "DOCUMENTED_LIMIT",
+            "criticality": "IMPORTANT",
+            "origin": "DOCUMENT",
+            "statement": (
+                "High-level output voltage VOH is a minimum of 3.20 V at VCC = 3.3 V, "
+                "IOH = -2 mA, TA = 25 C."
+            ),
+            "limits": {"min": 3.2, "unit": "V"},
+            "conditions": [
+                {
+                    "text": "VCC = 3.3 V, IOH = -2 mA, TA = 25 C",
+                    "parameter_overrides": {"io_vcc": 3.3, "io_load_a": -0.002},
+                }
+            ],
+            "signal_refs": ["Y"],
+            "evidence": [
+                {
+                    "doc_id": str(overrides.get("voh_doc", doc)),
+                    "excerpt": (
+                        "High-level output voltage VOH: minimum 3.20 V at VCC = 3.3 V, "
+                        "IOH = -2 mA, TA = 25 C."
+                    ),
+                    "extraction": "embedded_text",
+                }
+            ],
+            "citation_verified": True,
+        },
+        {
+            "req_id": "REQ-POL",
+            "applies_to": str(overrides.get("polarity_part", part)),
+            "kind": "FUNCTIONAL",
+            "class": "UNKNOWN",
+            "criticality": "IMPORTANT",
+            "origin": "DOCUMENT",
+            "statement": "Output is noninverting: A high gives Y high; A low gives Y low.",
+            "limits": None,
+            "conditions": [],
+            "signal_refs": overrides.get("polarity_signals", ["A", "Y"]),
+            "evidence": [
+                {
+                    "doc_id": str(overrides.get("polarity_doc", doc)),
+                    "excerpt": polarity_excerpt,
+                    "extraction": "embedded_text",
+                }
+            ],
+            "citation_verified": True,
+        },
+    ]
+    return [Requirement.model_validate(row) for row in rows]
+
+
+def _voh_entry(rows: list[Requirement], **kwargs: object) -> dict:
+    return next(
+        entry for entry in bind_requirements(rows, **kwargs) if entry["req_id"] == "REQ-VOH"
+    )
+
+
+def test_cited_polarity_binds_a_same_part_verified_voh_row() -> None:
+    entry = _voh_entry(_synthetic_io_rows())
+    assert entry["probe"] == "io_voh"
+    assert entry["params"]["io_inverting"] == 0.0
+    assert entry["params"]["io_load_a"] == pytest.approx(0.002)
+    assert entry["params"]["io_vcc"] == pytest.approx(3.3)
+    provenance = entry["derived_conditions"]["io_inverting"]
+    assert provenance["source_req"] == "REQ-POL"
+    assert "noninverting" in provenance["excerpt"]
+
+
+def test_a_rejected_polarity_citation_leaves_the_row_a_gap() -> None:
+    entry = _voh_entry(_synthetic_io_rows(), unverified={"REQ-POL": "excerpt absent"})
+    assert entry["probe"] is None
+    assert "condition_missing" in entry["not_testable_reason"]
+    assert "io_inverting" in entry["not_testable_reason"]
+
+
+def test_polarity_needs_a_verbatim_excerpt_not_a_statement() -> None:
+    entry = _voh_entry(_synthetic_io_rows(polarity_excerpt=""))
+    assert entry["probe"] is None
+
+
+def test_polarity_from_another_part_or_document_does_not_seed() -> None:
+    assert _voh_entry(_synthetic_io_rows(polarity_part="OTHER_PART"))["probe"] is None
+    assert _voh_entry(_synthetic_io_rows(polarity_doc="DOC_OTHER"))["probe"] is None
+
+
+def test_polarity_for_an_unrelated_signal_does_not_seed() -> None:
+    entry = _voh_entry(_synthetic_io_rows(polarity_signals=["A", "B"]))
+    assert entry["probe"] is None
+
+
+def test_a_non_logic_mention_of_noninverting_does_not_seed_polarity() -> None:
+    entry = _voh_entry(
+        _synthetic_io_rows(
+            polarity_excerpt="The noninverting amplifier drives Y but states no truth table."
+        )
+    )
+    assert entry["probe"] is None
+
+
+def test_conflicting_polarity_evidence_leaves_the_row_a_gap() -> None:
+    rows = _synthetic_io_rows()
+    polarity = rows[1]
+    conflict = polarity.model_copy(
+        update={
+            "req_id": "REQ-POL2",
+            "statement": "Output is inverting: A high gives Y low.",
+            "evidence": [
+                polarity.evidence[0].model_copy(
+                    update={
+                        "excerpt": "Output is inverting: A high gives Y low; A low gives Y high."
+                    }
+                )
+            ],
+        }
+    )
+    rows.append(conflict)
+    assert _voh_entry(rows)["probe"] is None
+
+
+def test_a_shutdown_current_row_that_mentions_ioff_is_not_buffer_leakage() -> None:
+    """The regulator shutdown rule wins over the buffer power-off-leakage alias."""
+    row = Requirement.model_validate(
+        {
+            "req_id": "REQ-SHUT",
+            "applies_to": "SYNTH_REG",
+            "kind": "ELECTRICAL",
+            "class": "DOCUMENTED_LIMIT",
+            "criticality": "IMPORTANT",
+            "origin": "DOCUMENT",
+            "statement": "Shutdown current IOFF is at most 1 uA at VIN = 12 V.",
+            "limits": {"max": 1e-6, "unit": "A"},
+            "conditions": [{"text": "VIN = 12 V", "parameter_overrides": {}}],
+            "signal_refs": [],
+            "evidence": [
+                {
+                    "doc_id": "DOC_SYNTH",
+                    "excerpt": "Shutdown current IOFF is at most 1 uA at VIN = 12 V.",
+                    "extraction": "embedded_text",
+                }
+            ],
+            "citation_verified": True,
+        }
+    )
+    entry = bind_requirements([row])[0]
+    assert entry["probe"] == "shutdown_current"
+
+
+# --------------------------------------------------------------------------- #
+# (f3) the product path's finite per-turn default
+
+
+def test_the_default_api_backend_bounds_a_turn_even_for_the_bob_cli(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from boardmodeler.authoring import api_backend as api_module
+    from boardmodeler.authoring.api_backend import DEFAULT_TIMEOUT_S
+    from boardmodeler.authoring.backends import BobShellBackend
+    from boardmodeler.config import AppConfig
+
+    monkeypatch.setattr(
+        api_module, "load_config", lambda path=None: AppConfig(agent_provider="bob")
+    )
+
+    backend = engine.build_backend(make_request(tmp_path, backend_name="api"))
+
+    assert isinstance(backend, BobShellBackend)
+    assert backend.timeout_s == DEFAULT_TIMEOUT_S
+
+
+def test_an_explicit_turn_timeout_overrides_the_api_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from boardmodeler.authoring import api_backend as api_module
+    from boardmodeler.authoring.backends import BobShellBackend
+    from boardmodeler.config import AppConfig
+
+    monkeypatch.setattr(
+        api_module, "load_config", lambda path=None: AppConfig(agent_provider="bob")
+    )
+
+    backend = engine.build_backend(make_request(tmp_path, backend_name="api", turn_timeout_s=42.0))
+
+    assert isinstance(backend, BobShellBackend)
+    assert backend.timeout_s == 42.0
+
+
+def _zero_coverage_inputs(tmp_path: Path) -> tuple[Path, Path]:
+    requirements = {
+        "document": {"doc_id": "DOC_SYNTH"},
+        "requirements": [
+            {
+                "req_id": "REQ-HYST",
+                "applies_to": "SYNTH_REG",
+                "kind": "ELECTRICAL",
+                "class": "DOCUMENTED_LIMIT",
+                "criticality": "IMPORTANT",
+                "origin": "TEST_FIXTURE",
+                "statement": "The hysteresis is 100 mV.",
+                "limits": {"max": 0.1, "unit": "V"},
+                "conditions": [],
+                "signal_refs": [],
+                "evidence": [
+                    {
+                        "doc_id": "DOC_SYNTH",
+                        "excerpt": "hysteresis 100 mV",
+                        "extraction": "synthetic_fixture",
+                    }
+                ],
+            }
+        ],
+        "pin_map": [],
+    }
+    bindings = {
+        "part": "SYNTH_REG",
+        "subckt": "SYNTH_REG",
+        "doc_id": "DOC_SYNTH",
+        "bindings": [
+            {"req_id": "REQ-HYST", "probe": None, "not_testable_reason": "derived hysteresis"}
+        ],
+    }
+    requirements_path = tmp_path / "zero-req.json"
+    bindings_path = tmp_path / "zero-bind.json"
+    requirements_path.write_text(json.dumps(requirements), encoding="utf-8")
+    bindings_path.write_text(json.dumps(bindings), encoding="utf-8")
+    return requirements_path, bindings_path
+
+
+def test_a_zero_coverage_spec_skips_author_reinforcement_and_simulation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    requirements_path, bindings_path = _zero_coverage_inputs(tmp_path)
+
+    def forbidden_script(turn, workdir, prompt):
+        pytest.fail("zero covered rows must not invoke the author")
+
+    use_backend(monkeypatch, ScriptedBackend(forbidden_script))
+    monkeypatch.setattr(engine, "locate", lambda explicit=None: fake_ltspice(tmp_path))
+    monkeypatch.setattr(engine, "reinforce", lambda **kwargs: pytest.fail("no reinforcement"))
+
+    result, _events, _wall = run(
+        tmp_path,
+        requirements_json=requirements_path,
+        bindings_json=bindings_path,
+        reinforce=True,
+    )
+
+    assert result.status == "UNKNOWN"
+    assert "no_covered_characteristics" in result.detail
+    assert result.rows and all(row.status == "NOT_APPLICABLE" for row in result.rows)
+
+
+# --------------------------------------------------------------------------- #
 # (g) one judge event per turn, in order, matching the final report
 
 
@@ -904,6 +1173,31 @@ def test_the_reinforcement_stage_runs_on_the_backend_the_author_loop_uses(
 
     assert seen == [backend], "the author loop's backend must be the one reinforced with"
     assert result.status == "UNKNOWN"
+
+
+@pytest.mark.ltspice
+def test_a_fresh_process_revalidates_before_reinforcement_or_the_author(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, ltspice_exe: Path
+) -> None:
+    """A process-local cache miss must re-judge the passing candidate, not call out."""
+    from boardmodeler.authoring import validation_cache
+
+    pdf = tmp_path / "fixed_datasheet.pdf"
+    shutil.copyfile(datasheet_for(tmp_path), pdf)
+    use_backend(monkeypatch, ScriptedBackend(template_script()))
+    first, _events, _wall = run(tmp_path, datasheet=pdf, reinforce=False)
+    assert first.status == "PASS", first.detail
+
+    def forbidden_script(turn, workdir, prompt):
+        pytest.fail("a passing candidate must be revalidated before the author")
+
+    use_backend(monkeypatch, ScriptedBackend(forbidden_script))
+    monkeypatch.setattr(engine, "reinforce", lambda **kwargs: pytest.fail("no reinforcement"))
+    monkeypatch.setattr(validation_cache, "_OBSERVED", {})
+
+    second, _events2, _wall2 = run(tmp_path, datasheet=pdf, reinforce=True)
+
+    assert second.status == "PASS", second.detail
 
 
 def test_the_saved_result_round_trips_including_the_turn_bounds(tmp_path: Path) -> None:

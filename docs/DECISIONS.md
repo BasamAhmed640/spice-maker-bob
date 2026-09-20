@@ -459,8 +459,10 @@ satisfaction or on the agent stalling, and nothing else:
 * `UNKNOWN` — a caller-set `max_iterations` was reached. `None` is the default: no cap;
 * `UNKNOWN(cancelled)`.
 
-`turn_timeout_s` defaults to `None` (an agent invocation is unbounded); setting it is the
-caller's choice, not the tool's policy. The probe set, the per-probe timeout and the number
+`turn_timeout_s` defaults to `None` at the loop API (an agent invocation is unbounded
+there); the product `api`/`bob` path applies a finite 600 s per-turn budget when the caller
+leaves it unset, and an explicit value overrides that. This is the tool's own policy for the
+product path, not a harness reduction. The probe set, the per-probe timeout and the number
 of judged rows are never reduced for speed — that is the half of the old rule that stands:
 bound the agent's repetitions, never the harness's diligence.
 

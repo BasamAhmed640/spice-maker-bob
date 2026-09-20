@@ -9,20 +9,17 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from boardmodeler.authoring.probes import (
-    ProbeError,
-    ProbeSpec,
-    _deck,
-    _fmt,
-    _load,
-    model_ports,
-)
+if TYPE_CHECKING:  # pragma: no cover - typing only, avoids a runtime import cycle
+    from boardmodeler.authoring.probes import ProbeSpec
 
 
 def _render(spec: ProbeSpec, p: Mapping[str, float], model: Path, subckt: str) -> str:
+    from boardmodeler.authoring.probes import _deck, _fmt, model_ports
+
     identifier = spec.probe_id
     supply = 0.0 if identifier == "io_power_off_leakage" else p["io_vcc"]
     high = identifier != "io_vol"
@@ -74,6 +71,8 @@ def _render(spec: ProbeSpec, p: Mapping[str, float], model: Path, subckt: str) -
 
 
 def _cross(t, y, threshold: float, rising: bool, start: float) -> float:
+    from boardmodeler.authoring.probes import ProbeError
+
     edges = (
         ((y[:-1] < threshold) & (y[1:] >= threshold))
         if rising
@@ -90,6 +89,8 @@ def _cross(t, y, threshold: float, rising: bool, start: float) -> float:
 
 
 def _measure(identifier: str, raw: Path, p: Mapping[str, float]) -> dict[str, float]:
+    from boardmodeler.authoring.probes import ProbeError, _load
+
     waves = _load(raw, p)
     if identifier in ("io_voh", "io_vol"):
         values = waves.y("V(y)")[waves.t >= p["tstop_s"] * 0.9]
@@ -135,6 +136,8 @@ def _measure(identifier: str, raw: Path, p: Mapping[str, float]) -> dict[str, fl
 
 
 def register(registry: dict[str, ProbeSpec]) -> None:
+    from boardmodeler.authoring.probes import ProbeSpec
+
     defaults = {
         "io_vcc": 3.3,
         "io_input_high": 3.3,

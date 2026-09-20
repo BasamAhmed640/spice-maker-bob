@@ -266,6 +266,82 @@ def test_an_undecodable_model_is_never_reused(tmp_path: Path) -> None:
     assert validation_key(model, SimpleNamespace(), simulator, 120.0) is None
 
 
+def test_an_undecodable_existing_candidate_still_reaches_the_author(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A vendor-encoded candidate is offered to the agent as text, never a traceback."""
+    from boardmodeler.authoring import loop as loop_module
+    from boardmodeler.authoring.harness import HarnessReport
+
+    spec = replace(io_spec(), characteristics=io_spec().characteristics[:1])
+    model_dir = tmp_path / "model"
+    model_dir.mkdir()
+    model_dir.joinpath("IO.lib").write_bytes(
+        b".subckt IO VCC A Y GND OE\n\xff\xfe vendor bytes\n.ends IO\n"
+    )
+    prompts: list[str] = []
+
+    def script(turn, workdir, prompt):
+        prompts.append(prompt)
+        (workdir / "model/IO.lib").write_text(BUFFER)
+
+    def canned_harness(*, model_lib, subckt, spec, workdir, ltspice, timeout_s=120.0, cancel=None):
+        return HarnessReport(
+            part=spec.part,
+            model_sha256=sha256_file(model_lib),
+            spec_digest=spec.digest(),
+            outcomes=(),
+        )
+
+    monkeypatch.setattr(loop_module, "run_harness", canned_harness)
+    result = build_model(
+        BuildRequest(
+            part=spec.part,
+            subckt="IO",
+            spec=spec,
+            workdir=tmp_path,
+            ltspice=tmp_path / "LTspice.exe",
+            backend=ScriptedBackend(script),
+            max_iterations=1,
+        )
+    )
+    assert result.status == "UNKNOWN"
+    assert prompts and "Current candidate SHA256" in prompts[0]
+    assert "\ufffd" in prompts[0], "the undecodable bytes must be shown, not dropped"
+
+
+def test_a_spec_with_no_covered_rows_never_invokes_the_author(tmp_path: Path, monkeypatch) -> None:
+    from boardmodeler.authoring import loop as loop_module
+
+    spec = replace(
+        io_spec(),
+        characteristics=tuple(replace(char, probe=None) for char in io_spec().characteristics),
+    )
+    calls: list[int] = []
+
+    def script(turn, workdir, prompt):
+        calls.append(turn)
+        (workdir / "model/IO.lib").write_text(BUFFER)
+
+    def forbidden(**kwargs):
+        pytest.fail("a spec with no covered rows must not simulate")
+
+    monkeypatch.setattr(loop_module, "run_harness", forbidden)
+    result = build_model(
+        BuildRequest(
+            part=spec.part,
+            subckt="IO",
+            spec=spec,
+            workdir=tmp_path,
+            ltspice=tmp_path / "LTspice.exe",
+            backend=ScriptedBackend(script),
+        )
+    )
+    assert result.status == "UNKNOWN"
+    assert "no_covered_characteristics" in result.detail
+    assert calls == []
+
+
 @pytest.mark.ltspice
 def test_numerical_improvement_continues_even_when_same_rows_fail(tmp_path, ltspice_exe):
     spec = replace(io_spec(), characteristics=io_spec().characteristics[:2])

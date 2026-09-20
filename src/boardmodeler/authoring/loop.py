@@ -58,6 +58,7 @@ __all__ = [
     "model_file",
     "prepare_workdir",
     "required_ports_for",
+    "revalidate_candidate",
     "spec_file",
 ]
 
@@ -614,6 +615,54 @@ def _author(
     return result, turn_cancel.is_set()
 
 
+def revalidate_candidate(
+    request: BuildRequest, cancel: threading.Event | None = None
+) -> BuildOutcome | None:
+    """Judge an existing candidate this process did not observe, with one harness run.
+
+    Returns a ``PASS`` outcome when the candidate passes. Otherwise the fresh report
+    is written to the validation cache (so the caller's own loop reuses it instead of
+    simulating again) and ``None`` is returned. No model file, no cache key, or a
+    harness error also returns ``None``: the caller then proceeds as if no candidate
+    existed, and every author/API turn is skipped only on an observed pass.
+    """
+    workdir = Path(request.workdir)
+    path = model_file(workdir, request.subckt)
+    if not path.is_file():
+        return None
+    from boardmodeler.authoring.validation_cache import validation_key, write_report
+
+    frozen, _digest_value, _problem = _load_frozen_spec(workdir, request.spec)
+    if frozen is None:
+        return None
+    key = validation_key(path, frozen, _ltspice_executable(request.ltspice), request.timeout_s)
+    if key is None:
+        return None
+    cache_root = workdir / "validation-cache"
+    try:
+        report = run_harness(
+            model_lib=path,
+            subckt=request.subckt,
+            spec=frozen,
+            workdir=cache_root / key,
+            ltspice=_ltspice_executable(request.ltspice),
+            timeout_s=request.timeout_s,
+            cancel=cancel,
+        )
+        write_report(cache_root, key, report)
+    except Exception:
+        return None
+    if report.outcomes and report.passed():
+        return _outcome(
+            Status.PASS,
+            0,
+            report,
+            [],
+            "existing candidate revalidated by the simulator; zero author turns",
+        )
+    return None
+
+
 def build_model(request: BuildRequest, cancel: threading.Event | None = None) -> BuildOutcome:
     """Run the author loop until the harness is satisfied or the agent stalls.
 
@@ -645,6 +694,17 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
         report = _report_without_runs(request.part, digest, path)
         return _outcome(Status.UNKNOWN, 0, report, history, problem or "spec_tampered")
 
+    if not frozen.covered():
+        report = _report_without_runs(request.part, digest, path)
+        return _outcome(
+            Status.UNKNOWN,
+            0,
+            report,
+            history,
+            f"no_covered_characteristics: none of {len(frozen.uncovered())} row(s) is "
+            "reachable by a probe; no model was authored or simulated",
+        )
+
     cache_root = workdir / "validation-cache"
     key = validation_key(path, frozen, _ltspice_executable(request.ltspice), request.timeout_s)
     cached = read_report(cache_root, key, frozen, path)
@@ -660,28 +720,9 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
         # A candidate left by an earlier run was not observed by this process, so its
         # cache entry is not evidence. One LTspice run re-judges it for no author turn,
         # keeping a passing candidate a PASS without trusting files the agent can write.
-        try:
-            revalidated = run_harness(
-                model_lib=path,
-                subckt=request.subckt,
-                spec=frozen,
-                workdir=cache_root / key,
-                ltspice=_ltspice_executable(request.ltspice),
-                timeout_s=request.timeout_s,
-                cancel=cancel,
-            )
-            write_report(cache_root, key, revalidated)
-        except Exception as exc:
-            history.append(f"precheck: harness_error: {type(exc).__name__}: {exc}")
-            revalidated = None
-        if revalidated is not None and revalidated.outcomes and revalidated.passed():
-            return _outcome(
-                Status.PASS,
-                0,
-                revalidated,
-                history,
-                "existing candidate revalidated by the simulator; zero author turns",
-            )
+        revalidated = revalidate_candidate(request, cancel)
+        if revalidated is not None:
+            return revalidated
     usable, reason = request.backend.availability()
     if not usable:
         report = _report_without_runs(request.part, digest, path)
@@ -715,7 +756,7 @@ def build_model(request: BuildRequest, cancel: threading.Event | None = None) ->
             candidate_prompt += (
                 f"\nCurrent candidate SHA256: {before}\n"
                 "Repair this candidate. Preserve working behavior. Return the complete corrected library.\n"
-                + path.read_text(encoding="utf-8")
+                + path.read_text(encoding="utf-8", errors="replace")
                 + "\n"
             )
         started = time.monotonic()

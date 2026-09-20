@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Mapping
 
 ALIASES = {
     "vin": "vin_dc",
@@ -43,8 +44,21 @@ _VALUE = re.compile(
 _SCALES = {"": 1, "p": 1e-12, "n": 1e-9, "u": 1e-6, "µ": 1e-6, "μ": 1e-6, "m": 1e-3, "k": 1e3}
 
 
-def operating_params(requirement, probe) -> tuple[dict[str, float], str | None]:
+_MAGNITUDE_KEYS = {"io_load_a", "ioh", "iol"}
+
+
+def _magnitude(key: str, value: float) -> float:
+    """Output currents are magnitudes: ``IOH = -2 mA`` and ``io_load_a = 0.002`` agree."""
+    return abs(value) if key.lower() in _MAGNITUDE_KEYS else value
+
+
+def operating_params(
+    requirement, probe, *, seed: Mapping[str, float] | None = None
+) -> tuple[dict[str, float], str | None]:
     allowed = probe.merged_params({})
+    for key, _value in (seed or {}).items():
+        if key not in allowed:
+            raise ValueError(f"probe {probe.probe_id} has no parameter {key!r}")
     aliases = dict(ALIASES)
     if probe.probe_id.startswith("io_"):
         aliases.update(
@@ -57,7 +71,7 @@ def operating_params(requirement, probe) -> tuple[dict[str, float], str | None]:
                 "iol": "io_load_a",
             }
         )
-    params = {}
+    params = dict(seed or {})
     bounds = []
     for condition in requirement.conditions:
         values = {}
@@ -66,9 +80,7 @@ def operating_params(requirement, probe) -> tuple[dict[str, float], str | None]:
             if unit.lower().lstrip("°") != _UNITS[name.lower()]:
                 return {}, f"condition_unit_invalid: {name} cannot use {unit}"
             key = aliases.get(name.lower(), name.lower())
-            number = float(value) * _SCALES[prefix.lower()]
-            if name.lower() in ("ioh", "iol"):
-                number = abs(number)
+            number = _magnitude(key, float(value) * _SCALES[prefix.lower()])
             values[key] = number
         for key, value in condition.parameter_overrides.items():
             bound = re.fullmatch(r"(.+)_(min|max)", key, re.IGNORECASE)
@@ -77,9 +89,7 @@ def operating_params(requirement, probe) -> tuple[dict[str, float], str | None]:
                 bounds.append((base, bound[2].lower(), value, key))
                 continue
             mapped = aliases.get(key.lower(), key)
-            number = float(value)
-            if key.lower() in ("ioh", "iol"):
-                number = abs(number)
+            number = _magnitude(mapped, float(value))
             if mapped in values and values[mapped] != number:
                 return {}, f"condition_conflict: {mapped} disagrees with the cited operating point"
             values[mapped] = number
