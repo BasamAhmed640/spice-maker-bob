@@ -728,10 +728,11 @@ def _io_row(
     minimum: float | None = None,
     maximum: float | None = None,
     conditions: list[Condition] | None = None,
+    section: str | None = None,
 ) -> Requirement:
     """One datasheet-shaped row copied from the fixture's first requirement."""
     base = fixture_requirements()[0]
-    evidence = base.evidence[0].model_copy(update={"excerpt": statement})
+    evidence = base.evidence[0].model_copy(update={"excerpt": statement, "section": section})
     return base.model_copy(
         deep=True,
         update={
@@ -772,19 +773,38 @@ def test_shutdown_ioff_binds_to_the_regulator_and_power_off_leakage_to_the_io_pr
     assert entries["REQ_BARE"]["probe"] == "io_power_off_leakage"
 
 
-def test_a_supply_current_row_never_falls_through_to_output_leakage() -> None:
+@pytest.mark.parametrize(
+    "separator",
+    ["supply current", "supply-current", "supply\u2013current", "supply \u2014 current"],
+)
+@pytest.mark.parametrize("vcc", ["0", "3.3"])
+def test_a_supply_current_row_never_falls_through_to_output_leakage(separator, vcc) -> None:
     """A supply-current limit is not measured as output leakage by claiming IOFF."""
-    for vcc in ("3.3", "0"):
-        powered = _io_row(
-            f"REQ_OFF_{vcc}",
-            f"Off-state supply current IOFF is at most 1 uA at VCC = {vcc} V",
-            "A",
-            maximum=1e-6,
-            conditions=[Condition(text=f"VCC = {vcc} V", parameter_overrides={"io_test_v": 3.3})],
-        )
-        entry = bind_requirements([powered])[0]
-        assert entry["probe"] is None, vcc
-        assert "no deterministic probe" in entry["not_testable_reason"], vcc
+    row = _io_row(
+        "REQ_OFF",
+        f"Off-state {separator} IOFF is at most 1 uA at VCC = {vcc} V",
+        "A",
+        maximum=1e-6,
+        conditions=[Condition(text=f"VCC = {vcc} V", parameter_overrides={"io_test_v": 3.3})],
+    )
+    entry = bind_requirements([row])[0]
+    assert entry["probe"] is None, (separator, vcc)
+    assert "no deterministic probe" in entry["not_testable_reason"], (separator, vcc)
+
+
+def test_a_valid_output_leakage_row_under_a_supply_current_heading_still_binds() -> None:
+    """The exclusion looks at the statement, not a section/table heading."""
+    row = _io_row(
+        "REQ_LEAK_HEADING",
+        "Power-off leakage current IOFF at VCC = 0 V",
+        "A",
+        maximum=5e-6,
+        conditions=[Condition(text="VCC = 0 V", parameter_overrides={"io_test_v": 3.3})],
+        section="Supply current",
+    )
+    entry = bind_requirements([row])[0]
+    assert entry["probe"] == "io_power_off_leakage"
+    assert entry["params"]["io_vcc"] == 0.0
 
 
 # --------------------------------------------------------------------------- #

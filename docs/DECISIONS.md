@@ -474,7 +474,7 @@ URL and hash; an agent's claim we could not fetch is kept as `retrieved=false` w
 reason. Nothing in it can change a status — the datasheet rows stay the only oracle — so it
 can inform a reader without ever upgrading a model's claims. The search is cancel-aware
 (the build's cancellation event reaches the agent turn) and carries its own budget
-(`reinforce_timeout_s`, default 300 s, `None` unbounded); when that budget expires the stage
+(`reinforce_timeout_s`, default 45 s, `None` unbounded); when that budget expires the stage
 records `unavailable` with the reason and the build continues. This budget applies to the
 search only: the author loop stays unbounded. The fetcher refuses any
 destination that is not a public internet host (loopback, private, link-local, multicast

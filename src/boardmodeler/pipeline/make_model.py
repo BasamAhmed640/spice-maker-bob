@@ -441,6 +441,7 @@ class _Rule:
     any_of: tuple[str, ...] = ()
     all_of: tuple[str, ...] = ()
     none_of: tuple[str, ...] = ()
+    statement_none_of: tuple[str, ...] = ()
     reason: str = ""
 
 
@@ -508,7 +509,7 @@ _IO_RULES = (
         "power-off leakage",
         "io_power_off_leakage",
         any_of=("ioff", "power-off leakage"),
-        none_of=("supply current",),
+        statement_none_of=("supply current", "supply-current"),
     ),
     _Rule("disabled output leakage", "io_leakage", any_of=("ioz", "three-state output leakage")),
     _Rule("input leakage", "io_input_leakage", any_of=("input leakage current",)),
@@ -852,6 +853,12 @@ def _polarity_text(text: str) -> str:
     return _NON_INVERTING_SEPARATOR.sub("non-inverting", folded)
 
 
+def _negative_text(text: str) -> str:
+    """Fold dash variants and separator whitespace so ``supply-current`` reads as two words."""
+    folded = "".join(" " if char in _DASH_VARIANTS or char == "-" else char for char in text)
+    return " ".join(folded.split())
+
+
 def _signal_names(signals: Sequence[str]) -> set[str]:
     """Bare node identities for single-node ``V(...)``/``I(...)`` references.
 
@@ -984,9 +991,14 @@ def bind_requirements(
             )
             continue
         text = _search_text(requirement)
+        statement = _negative_text(_normalized(requirement.statement))
         decline: str | None = None
         for rule in (*_RULES, *_IO_RULES) if io_context else _RULES:
             if not _rule_matches(rule, text):
+                continue
+            if rule.statement_none_of and any(
+                _mentions(statement, phrase) for phrase in rule.statement_none_of
+            ):
                 continue
             if rule.probe is None:
                 decline = f"{rule.name}: {rule.reason}"
