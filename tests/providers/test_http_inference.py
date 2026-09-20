@@ -3,7 +3,7 @@
 No test in this module talks to the internet: the transport-dependent behaviour
 is exercised against a mock HTTP server bound to ``127.0.0.1``, and everything
 else against an injected transport. The properties pinned here are the ones the
-pipeline's honesty rests on — an authenticated OpenAI-compatible request, the
+pipeline's honesty rests on — an authenticated JSON chat-completion request, the
 configured endpoint/model only, bounded retries, no secret in any error text, and
 an explicit failure (never a fabricated payload) for every bad response.
 """
@@ -404,30 +404,3 @@ def test_health_requires_a_credential(endpoint: MockEndpoint, no_credential: Non
 
 # --------------------------------------------------------------------------- #
 # endpoint strings are never invented (D-005)
-
-
-@pytest.mark.network
-def test_deepseek_documentation_still_names_the_configured_strings() -> None:
-    """Verify the advertised endpoint/model strings against the vendor's own docs.
-
-    This is the only place a real HTTP request may happen, and it is doubly
-    gated: the test is marked ``network`` *and* it skips unless
-    ``BOARDMODELER_NETWORK_TESTS`` is set, so a normal ``pytest`` run stays
-    offline. Its outcome is what goes into ``docs/DECISIONS.md`` D-005 — the
-    adapter's configuration is never guessed.
-    """
-    import os
-    import urllib.error
-    import urllib.request
-
-    if not os.environ.get("BOARDMODELER_NETWORK_TESTS"):
-        pytest.skip("set BOARDMODELER_NETWORK_TESTS=1 to verify endpoint strings online")
-
-    try:
-        with urllib.request.urlopen("https://api-docs.deepseek.com/", timeout=20) as response:
-            page = response.read().decode("utf-8", errors="replace")
-    except (urllib.error.URLError, OSError) as exc:
-        pytest.skip(f"the documentation site is unreachable: {type(exc).__name__}: {exc}")
-
-    assert "api.deepseek.com" in page
-    assert "chat/completions" in page

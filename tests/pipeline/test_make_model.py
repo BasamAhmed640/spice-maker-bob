@@ -1462,49 +1462,24 @@ def test_the_default_api_backend_still_honours_a_bob_team_id(
     assert backend.team_id == "team-api"
 
 
-def test_the_api_backend_is_built_from_the_catalog_entry_and_the_config(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from boardmodeler.agent_providers import CATALOG, ids
+def test_the_api_backend_is_built_from_the_catalog_entry_and_the_config(monkeypatch, tmp_path):
     from boardmodeler.authoring import api_backend as api_module
-    from boardmodeler.authoring.api_backend import ApiKeyBackend
+    from boardmodeler.authoring.backends import BobShellBackend
     from boardmodeler.config import AppConfig
 
     monkeypatch.setattr(api_module, "load_config", lambda path=None: AppConfig())
-    entry = next((provider for provider in CATALOG if provider.wire in api_module.HTTP_WIRES), None)
-    if entry is None:
-        # No entry in this build speaks an HTTP wire, so no request can build an
-        # ApiKeyBackend from one: the honest outcome is the refusal that names the catalog.
-        refused = engine.build_backend(
-            make_request(tmp_path, backend_name="api", provider="not-in-this-build")
-        )
-        usable, reason = refused.availability()
-        assert usable is False
-        assert reason.startswith("api_provider_unavailable:")
-        assert all(f"'{name}'" in reason for name in ids())
-        return
-
-    override = "make-model-override"
-    request = make_request(
-        tmp_path,
-        backend_name="api",
-        provider=entry.id,
-        agent_model=override,
-        agent_max_tokens=1024,
+    backend = engine.build_backend(make_request(tmp_path, backend_name="api", provider="bob"))
+    assert isinstance(backend, BobShellBackend)
+    refused = engine.build_backend(
+        make_request(tmp_path, backend_name="api", provider="unaccepted")
     )
-
-    backend = engine.build_backend(request)
-
-    assert isinstance(backend, ApiKeyBackend)
-    assert backend.name == entry.id and backend.provider.id == entry.id
-    assert backend.model == override
-    assert backend.max_output_tokens == 1024
+    usable, reason = refused.availability()
+    assert not usable and "IBM Bob only" in reason and "unaccepted" not in reason
 
 
 def test_an_unknown_agent_provider_is_blocked_rather_than_substituted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from boardmodeler.agent_providers import ids
     from boardmodeler.authoring import api_backend as api_module
     from boardmodeler.config import AppConfig
 
@@ -1514,8 +1489,8 @@ def test_an_unknown_agent_provider_is_blocked_rather_than_substituted(
 
     usable, reason = backend.availability()
     assert usable is False
-    assert reason.startswith("api_provider_unavailable:") and "'magic'" in reason
-    assert all(f"'{name}'" in reason for name in ids())
+    assert reason.startswith("api_provider_unavailable:") and "magic" not in reason
+    assert "IBM Bob only" in reason
 
 
 def test_the_reinforcement_stage_runs_on_the_backend_the_author_loop_uses(

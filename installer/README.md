@@ -12,14 +12,16 @@ on its SETUP page) and smoke-tested there, and `doctor` reports plainly when it 
 ## Startup verification
 
 Version 1.1.1 isolates PyInstaller's PATH to Python and Windows directories. A build
-machine's unrelated PDF/image tools must not supply DLLs to the application: a Poppler
-ICU DLL named `icuuc.dll` lacks the unversioned symbols Qt expects from Windows ICU.
+machine's unrelated tools must not supply incompatible DLLs to the application. The
+old bundled ICU library lacked the unversioned symbols Qt expected; its original
+provenance was not established.
 
 The build now launches the actual frozen GUI from an empty working directory with a
 minimal PATH. It requires a visible, responsive Qt model-maker window, saves
 `build/gui-startup.png`, and closes that test process. An error dialog or timeout fails
-the build before Velopack creates an installer. This check also runs in the Windows
-download workflow; a CLI-only smoke check is insufficient.
+the build before Velopack creates an installer. The Windows download workflow is
+configured to call this same script when manually dispatched; that wiring alone is
+not evidence that a CI packaging run has occurred. A CLI-only check is insufficient.
 
 ## Build it
 
@@ -33,7 +35,7 @@ dotnet tool install -g vpk --version 1.2.0           # needs the .NET SDK; keep 
 Then, from the repository root:
 
 ```powershell
-.\installer\build.ps1 -Version 1.1.2
+.\installer\build.ps1 -Version 1.1.3
 ```
 
 The script renders the splash/icon from `render_assets.py`, freezes the app from
@@ -91,7 +93,7 @@ warns on first run.
 The repository tracks the real **Install.exe** at its root, alongside **INSTALL.txt**
 and **SHA256SUMS.txt**. GitHub's **Code → Download ZIP** on main includes these files.
 After extracting the archive, users run Install.exe directly from the repository folder.
-Each edition carries its own verified v1.1.2 setup executable, including the animation.
+Each edition carries its own verified v1.1.3 setup executable, including the animation.
 
 After a successful build, build.ps1 refreshes all three root files. Commit those files
 with a release update to keep the Code menu download current. The installer is stored
@@ -105,4 +107,4 @@ so it retains the animated pepper splash. Python is included in the frozen app. 
 is no Python installation step for end users. LTspice and Bob Shell remain separate.
 The Bob edition selects package ID SpiceMakerBob and the title Spice Maker Bob from
 build_flavor.BOB_ONLY; the general edition uses SpiceMaker. Builds are unsigned.
-The Windows download GitHub workflow provides a reproducible build entry point.
+The Windows download GitHub workflow provides a scripted build entry point; binary reproducibility is not claimed.

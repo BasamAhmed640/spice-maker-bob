@@ -343,14 +343,10 @@ class ModelMakerWindow(QMainWindow):
         if not usable:
             self.setup_hint.setText("no agent key — press SETUP")
             if provider is None:
-                advice = (
-                    "Press SETUP and choose one of the providers this build accepts, or fix "
-                    "the provider name in the config file."
-                )
+                advice = "Press SETUP, select USE IBM BOB, then SAVE."
             else:
                 advice = (
-                    f"Press SETUP and store your {provider.label} API key "
-                    f"({provider.key_hint}), or pick another provider there."
+                    f"Press SETUP and store your {provider.label} API key ({provider.key_hint})."
                 )
             QMessageBox.warning(
                 self,

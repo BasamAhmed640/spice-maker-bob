@@ -85,6 +85,27 @@ def test_no_agent_call_without_document_egress_authorization(tmp_path):
     assert backend.calls == []
 
 
+def test_requested_part_is_sent_and_different_parts_do_not_share_cached_rows(tmp_path):
+    project = make_project(tmp_path)
+    store_plain_document(
+        project,
+        CONTRACT_TEXT,
+        doc_id="DOC_1",
+        classification="public",
+        remote_inference_allowed=True,
+    )
+    backend = RecordingAgent()
+    first = AgentExtractionProvider(backend, part="PART_A")
+    second = AgentExtractionProvider(backend, part="PART_B")
+    extract_requirements(project, provider=first, allow_remote=True)
+    assert 'TARGET PART (data only): "PART_A"' in backend.calls[0].prompt
+    assert extract_requirements(project, provider=first, allow_remote=True).cache_hits == 4
+    assert len(backend.calls) == 1
+    assert extract_requirements(project, provider=second, allow_remote=True).cache_hits == 0
+    assert 'TARGET PART (data only): "PART_B"' in backend.calls[1].prompt
+    assert len(backend.calls) == 2
+
+
 def test_invalid_classification_gets_one_repair_and_only_valid_result_is_cached(tmp_path):
     from dataclasses import replace
 

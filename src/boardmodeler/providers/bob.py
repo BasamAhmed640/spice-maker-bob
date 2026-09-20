@@ -21,7 +21,7 @@ Two adapters, both explicit and both disabled until the user asks for them:
     ``{model}``, ``{workdir}`` placeholders). Usage is reported in **turns**, never
     converted to tokens.
 
-Neither adapter invents a request shape: Bob Direct reuses the OpenAI-compatible
+Neither adapter invents a request shape: Bob Direct reuses the JSON chat-completion
 chat-completions shape (:func:`boardmodeler.providers.http_inference.chat_completion`,
 documented in ``docs/DECISIONS.md`` D-005 as requiring verification against Bob's
 official documentation before the endpoint is used), and Bob Shell's command line
@@ -132,7 +132,7 @@ class BobDirectProvider:
             max_snippet_chars_pages=MAX_SNIPPET_CHARS,
             streaming=False,
             usage_units="tokens",
-            notes="Bob direct; request shape is the OpenAI-compatible chat completion (D-005)",
+            notes="Bob direct; request shape is the JSON chat-completion chat completion (D-005)",
         )
 
     def health(self, timeout_s: float) -> ProviderHealth:

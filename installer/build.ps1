@@ -19,7 +19,7 @@
 
   One-time setup:
     uv sync --all-extras          # pyinstaller + pillow + velopack into .venv
-    dotnet tool install -g vpk    # needs the .NET SDK; keep vpk on the same version
+    dotnet tool install -g vpk --version 1.2.0 # needs the .NET SDK; keep vpk on the same version
                                   # as the velopack Python package
 
   Run from the project root (the repo root, where pyproject.toml lives):
@@ -35,7 +35,10 @@ $repo = Split-Path $PSScriptRoot -Parent
 $assets = Join-Path $PSScriptRoot "assets"
 $exe = "SpiceMaker"                   # must match NAME in installer\SpiceMaker.spec
 $python = Join-Path $repo ".venv\Scripts\python.exe"
-if (-not (Test-Path $python)) { $python = "python" }
+if (-not (Test-Path -LiteralPath $python)) { throw "Run uv sync --frozen --all-extras first; the project Python environment is required." }
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must be x.y.z" }
+& $python -c "import sys; assert sys.version_info[:2] == (3, 14), 'Python 3.14 is required'"
+if ($LASTEXITCODE -ne 0) { throw "The build requires Python 3.14" }
 $bobOnly = (& $python -c "from boardmodeler.build_flavor import BOB_ONLY; print(int(BOB_ONLY))") -eq "1"
 if (-not $Name) { $Name = if ($bobOnly) { "Spice Maker Bob" } else { "Spice Maker" } }
 if (-not $PackId) { $PackId = if ($bobOnly) { "SpiceMakerBob" } else { "SpiceMaker" } }
@@ -55,7 +58,7 @@ try {
 
     Invoke-Step "Freeze the app with PyInstaller" {
         # The spec carries every analysis option (entry script, icon, data files, the
-        # run-time provider imports), so the output is identical on any checkout.
+        # run-time provider imports), so each checkout uses the same declared build inputs.
         & $python "$PSScriptRoot\freeze.py"
     }
 
@@ -67,9 +70,15 @@ try {
     Invoke-Step "Package with Velopack" {
         # vpk refuses a version that is already in releases\; rebuilding a version
         # replaces that version's artifacts instead of failing.
-        Get-ChildItem "releases" -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name.Contains($Version) } |
-            Remove-Item -Force
+        $releaseRoot = [IO.Path]::GetFullPath((Join-Path $repo "releases"))
+        $versionPattern = '^' + [regex]::Escape("$PackId-$Version-") + '(full\.nupkg|delta\.nupkg|Windows-x64\.zip)$'
+        foreach ($artifact in (Get-ChildItem -LiteralPath $releaseRoot -File -ErrorAction SilentlyContinue)) {
+            if ($artifact.Name -match $versionPattern) {
+                $resolvedArtifact = [IO.Path]::GetFullPath($artifact.FullName)
+                if ([IO.Path]::GetDirectoryName($resolvedArtifact) -ne $releaseRoot) { throw "Artifact escapes releases directory" }
+                Remove-Item -LiteralPath $resolvedArtifact -Force
+            }
+        }
         vpk pack `
             --packId $PackId `
             --packTitle $Name `

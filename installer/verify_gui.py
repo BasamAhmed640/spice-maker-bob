@@ -27,6 +27,9 @@ def verify(executable: Path, screenshot: Path, timeout: float = 30) -> dict[str,
     user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
     user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
     user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+    user32.RedrawWindow.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT]
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     user32.SendMessageTimeoutW.argtypes = [
         wintypes.HWND,
@@ -79,6 +82,9 @@ def verify(executable: Path, screenshot: Path, timeout: float = 30) -> dict[str,
                         raise RuntimeError(f"Application opened an error dialog: {title}")
                     if title.startswith("Spice Maker") and kind.startswith("Qt"):
                         handle = hwnd
+                        user32.ShowWindow(hwnd, 9)  # Restore the test-owned window.
+                        user32.SetForegroundWindow(hwnd)
+                        user32.RedrawWindow(hwnd, None, None, 0x185)
                         time.sleep(1)
                         reply = ctypes.c_size_t()
                         if not user32.SendMessageTimeoutW(

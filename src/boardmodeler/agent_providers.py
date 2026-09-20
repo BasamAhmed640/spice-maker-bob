@@ -1,69 +1,18 @@
-"""The agent providers this build accepts: raw API keys, no login flows.
+"""IBM Bob is the only agent shipped by this edition.
 
-The list is **data, not code**. A build ships the catalog it sells, and every consumer
-(the setup page's provider row, the backend factory, ``doctor``) reads the catalog
-instead of naming a provider itself. The Bob-only build sets ``build_flavor.BOB_ONLY``,
-which filters :data:`CATALOG` down to the Bob entry rather than forking the code: with a
-single entry the setup page shows no provider row and keeps the ``BOB API KEY`` label,
-and the backend factory can only ever return Bob.
-
-Every entry declares the transport it needs (``wire``), so an unsupported shape is
-refused with a reason instead of being coerced:
-
-``bob-shell``
-    The Bob CLI (Bob Shell), the documented consumer of a Bob *Inference* API key: the
-    key is passed to the child process through ``BOB_API_KEY``, never in argv. No login
-    step, no endpoint in this file. ``https://bob.ibm.com/docs/shell/getting-started/install-and-setup``
-``openai``
-    ``POST <endpoint>/chat/completions``, ``Authorization: Bearer <key>`` — the shape
-    OpenAI documents and several vendors implement. OpenCode Zen is the same shape on
-    its own host; the models it serves from ``/responses`` and ``/messages`` are not
-    reachable through this wire, and the MODEL row in SETUP is where that choice lives.
-``anthropic``
-    ``POST <endpoint>/messages`` with ``x-api-key`` and ``anthropic-version``.
-``google``
-    ``POST <endpoint>/models/<model>:generateContent`` with ``x-goog-api-key``.
-
-Endpoints and default model ids are the vendors' own documented values and are never
-guessed (D-005); each entry carries the documentation URL it came from. A model id can
-be overridden per machine in SETUP or with ``--model``, because these strings do drift.
+The catalog is intentionally Bob-only in source, packaging and every UI surface.
+Bob Shell consumes the inference key through the environment, never command arguments.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from boardmodeler.build_flavor import BOB_ONLY
-
-__all__ = [
-    "CATALOG",
-    "DEFAULT_PROVIDER_ID",
-    "AgentProvider",
-    "by_id",
-    "default_provider",
-    "ids",
-    "only_provider",
-    "require",
-]
-
-#: Wires this build knows how to speak. A catalog entry naming anything else is a
-#: build defect, and ``by_id``/``require`` say so instead of picking a fallback.
-WIRES: tuple[str, ...] = ("bob-shell", "openai", "anthropic", "google")
+WIRES = ("bob-shell",)
 
 
 @dataclass(frozen=True)
 class AgentProvider:
-    """One accepted way to reach an agent, and how its key is stored.
-
-    ``credential`` is the name used with :mod:`boardmodeler.security.credentials`
-    (keyring entry ``provider:<credential>:api_key``, environment fallback
-    ``BOARDMODELER_<CREDENTIAL>_API_KEY``); ``env_aliases`` are additional plain
-    environment variables the same key is read from, for people who already export
-    the vendor's own variable. ``key_label`` and ``key_hint`` are the setup page's
-    label and hint, so a Bob-only build keeps exactly today's wording.
-    """
-
     id: str
     label: str
     wire: str
@@ -74,40 +23,16 @@ class AgentProvider:
     endpoint: str | None = None
     model: str | None = None
     env_aliases: tuple[str, ...] = ()
-    #: Documented conversation header for providers that require session affinity.
-    session_header: str | None = None
-    #: On the ``openai`` wire, whether the entry's model is a reasoning model: it
-    #: rejects ``temperature`` and takes its output budget as
-    #: ``max_completion_tokens`` rather than ``max_tokens``. OpenAI's own reasoning
-    #: models do; most OpenAI-compatible vendors still take the classic parameters,
-    #: so this is per entry rather than per wire.
-    reasoning: bool = False
-    #: Extra fields merged into the request body for this entry, in the vendor's own
-    #: documented spelling. This exists because a vendor knob can decide whether the
-    #: task is possible at all: DeepSeek's ``{"thinking": {"type": "enabled"},
-    #: "reasoning_effort": "low"}`` is the setting measured to produce a model the
-    #: harness can judge (0 PASS with thinking off, 4 PASS / 0 FAIL at low effort), and
-    #: the same switch will occasionally spend the whole output budget reasoning.
-    extra_body: Mapping[str, object] = field(default_factory=dict)
-    #: Used *instead of* :attr:`extra_body` for one re-ask inside the same turn when the
-    #: reply carries no text because the model stopped at its output budget: the entry's
-    #: own documented way of making it answer at all (DeepSeek: thinking off, ~10 s).
-    #: Empty means the entry has no such second setting and the turn fails honestly.
-    retry_body: Mapping[str, object] = field(default_factory=dict)
 
     @property
     def uses_cli(self) -> bool:
-        """Whether the key is consumed by a local CLI process rather than HTTP."""
-        return self.wire == "bob-shell"
+        return True
 
     @property
     def model_editable(self) -> bool:
-        """Whether this provider takes a model id from this application at all."""
-        return not self.uses_cli
+        return False
 
 
-#: The providers a build accepts, default first. ``build_flavor.BOB_ONLY`` filters
-#: this tuple for a restricted build; nothing else in the code names a provider.
 CATALOG: tuple[AgentProvider, ...] = (
     AgentProvider(
         id="bob",
@@ -119,146 +44,8 @@ CATALOG: tuple[AgentProvider, ...] = (
         docs="https://bob.ibm.com/docs/shell/getting-started/install-and-setup",
         env_aliases=("BOB_API_KEY",),
     ),
-    AgentProvider(
-        id="deepseek",
-        label="DeepSeek",
-        wire="openai",
-        credential="deepseek",
-        key_label="DEEPSEEK API KEY",
-        key_hint="platform.deepseek.com → API keys  ·  stored in the Windows credential store",
-        docs="https://api-docs.deepseek.com/",
-        endpoint="https://api.deepseek.com",
-        model="deepseek-flash",
-        env_aliases=("DEEPSEEK_API_KEY",),
-        # Maximum documented effort, retained for extraction and every repair.
-        # No fallback may silently disable thinking when the output budget is spent.
-        extra_body={"thinking": {"type": "enabled"}, "reasoning_effort": "max"},
-    ),
-    AgentProvider(
-        id="openai",
-        label="OpenAI",
-        wire="openai",
-        credential="openai",
-        key_label="OPENAI API KEY",
-        key_hint="platform.openai.com → API keys  ·  stored in the Windows credential store",
-        docs="https://developers.openai.com/api/docs/guides/text",
-        endpoint="https://api.openai.com/v1",
-        model="gpt-6-astra",
-        env_aliases=("OPENAI_API_KEY",),
-        reasoning=True,
-        extra_body={"reasoning_effort": "max"},
-    ),
-    AgentProvider(
-        id="anthropic",
-        label="Anthropic",
-        wire="anthropic",
-        credential="anthropic",
-        key_label="ANTHROPIC API KEY",
-        key_hint="console.anthropic.com → API keys  ·  stored in the Windows credential store",
-        docs="https://platform.claude.com/docs/en/get-started",
-        endpoint="https://api.anthropic.com/v1",
-        model="claude-opus-5",
-        env_aliases=("ANTHROPIC_API_KEY",),
-        extra_body={"thinking": {"type": "adaptive"}, "output_config": {"effort": "max"}},
-    ),
-    AgentProvider(
-        id="google",
-        label="Google Gemini",
-        wire="google",
-        credential="google",
-        key_label="GEMINI API KEY",
-        key_hint="aistudio.google.com → API keys  ·  stored in the Windows credential store",
-        docs="https://ai.google.dev/gemini-api/docs/text-generation",
-        endpoint="https://generativelanguage.googleapis.com/v1beta",
-        model="gemini-3.8-flash",
-        env_aliases=("GEMINI_API_KEY", "GOOGLE_API_KEY"),
-        extra_body={"generationConfig": {"thinkingConfig": {"thinkingLevel": "high"}}},
-    ),
-    AgentProvider(
-        id="openrouter",
-        label="OpenRouter",
-        wire="openai",
-        credential="openrouter",
-        key_label="OPENROUTER API KEY",
-        key_hint="openrouter.ai → keys  ·  stored in the Windows credential store",
-        docs="https://openrouter.ai/docs/quickstart",
-        endpoint="https://openrouter.ai/api/v1",
-        model="~openai/gpt-sol-latest",
-        env_aliases=("OPENROUTER_API_KEY",),
-        extra_body={"reasoning": {"effort": "max"}},
-    ),
-    AgentProvider(
-        id="xai",
-        label="xAI",
-        wire="openai",
-        credential="xai",
-        key_label="XAI API KEY",
-        key_hint="console.x.ai → API keys  ·  stored in the Windows credential store",
-        docs="https://docs.x.ai/developers/models",
-        endpoint="https://api.x.ai/v1",
-        model="grok-4.6",
-        env_aliases=("XAI_API_KEY",),
-        extra_body={"reasoning_effort": "xhigh"},
-    ),
-    AgentProvider(
-        id="groq",
-        label="Groq",
-        wire="openai",
-        credential="groq",
-        key_label="GROQ API KEY",
-        key_hint="console.groq.com → API keys  ·  stored in the Windows credential store",
-        docs="https://console.groq.com/docs/api-reference",
-        endpoint="https://api.groq.com/openai/v1",
-        model="llama-3.3-70b-versatile",
-        env_aliases=("GROQ_API_KEY",),
-    ),
-    AgentProvider(
-        id="opencode",
-        label="OpenCode Zen (pay as you go)",
-        wire="openai",
-        credential="opencode",
-        key_label="OPENCODE API KEY",
-        key_hint="opencode.ai/auth → API key with Zen credit; select OpenCode Go for a Go subscription",
-        docs="https://opencode.ai/docs/zen",
-        endpoint="https://opencode.ai/zen/v1",
-        model="deepseek-v4-flash",
-        env_aliases=("OPENCODE_API_KEY",),
-        session_header="x-opencode-session",
-        extra_body={"thinking": {"type": "enabled"}, "reasoning_effort": "max"},
-    ),
-    AgentProvider(
-        id="opencode_go",
-        label="OpenCode Go (subscription)",
-        wire="openai",
-        credential="opencode",
-        key_label="OPENCODE GO API KEY",
-        key_hint="opencode.ai/auth → API key for your Go subscription",
-        docs="https://opencode.ai/docs/go/",
-        endpoint="https://opencode.ai/zen/go/v1",
-        model="deepseek-v4.1-flash",
-        env_aliases=("OPENCODE_API_KEY",),
-        session_header="x-opencode-session",
-        extra_body={"thinking": {"type": "enabled"}, "reasoning_effort": "max"},
-    ),
-    AgentProvider(
-        id="mistral",
-        label="Mistral",
-        wire="openai",
-        credential="mistral",
-        key_label="MISTRAL API KEY",
-        key_hint="console.mistral.ai → API keys  ·  stored in the Windows credential store",
-        docs="https://docs.mistral.ai/getting-started/quickstarts/developer/first-api-request",
-        endpoint="https://api.mistral.ai/v1",
-        model="mistral-large-latest",
-        env_aliases=("MISTRAL_API_KEY",),
-    ),
 )
 
-if BOB_ONLY:
-    CATALOG = tuple(entry for entry in CATALOG if entry.id == "bob")
-
-
-#: The provider a build expects when the user has not chosen one. Bob, always.
 DEFAULT_PROVIDER_ID = "bob"
 
 
@@ -282,9 +69,7 @@ def require(provider_id: str | None) -> AgentProvider:
     """As :func:`by_id`, but raise for a provider this build does not accept."""
     provider = by_id(provider_id)
     if provider is None:
-        raise ValueError(
-            f"provider {provider_id!r} is not accepted by this build; accepted: {list(ids())}"
-        )
+        raise ValueError("This edition accepts IBM Bob only.")
     return provider
 
 

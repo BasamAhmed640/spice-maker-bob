@@ -70,10 +70,9 @@ def configured_provider(config: AppConfig) -> tuple[AgentProvider | None, str]:
     provider = agent_providers.by_id(wanted)
     if provider is not None:
         return provider, ""
-    accepted = ", ".join(repr(name) for name in agent_providers.ids()) or "none"
-    return None, (
-        f"api_provider_unavailable: {wanted!r} is not a provider this build accepts; "
-        f"use one of {accepted}"
+    return (
+        None,
+        "api_provider_unavailable: this edition accepts IBM Bob only; select USE IBM BOB and SAVE",
     )
 
 
@@ -91,10 +90,10 @@ def describe_settings(config: AppConfig) -> dict[str, object]:
         "ltspice_user_lib": str(ltspice_user_lib()),
         # The id the config names, never a substitute; the flag says whether this
         # build accepts it, so a caller sees the refusal instead of another provider.
-        "agent_provider": str(config.agent_provider or "").strip() or shown.id,
+        "agent_provider": provider.id if provider else None,
         "agent_provider_accepted": provider is not None,
         "agent_provider_problem": reason,
-        "agent_model": config.agent_model or shown.model,
+        "agent_model": None,
         "agent_api_key": describe_credential(shown.credential),
         "accepted_providers": list(agent_providers.ids()),
     }
@@ -178,8 +177,7 @@ class SetupDialog(QDialog):
                 else "pick a provider here and SAVE to replace it"
             )
             self.provider_status = QLabel(
-                f"config names {str(self._config.agent_provider).strip()!r}, which this build "
-                f"does not accept —\n{guidance}"
+                f"The saved agent selection is incompatible with this Bob edition.\n{guidance}"
             )
             self.provider_status.setStyleSheet(_HINT)
             grid.addWidget(self.provider_status, row, 1, 1, 3)

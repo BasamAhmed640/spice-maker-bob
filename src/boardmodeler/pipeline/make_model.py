@@ -1468,7 +1468,7 @@ class _Run:
                 ).provider
             else:
                 self.backend = build_backend(self.request)
-                extraction_provider = AgentExtractionProvider(self.backend)
+                extraction_provider = AgentExtractionProvider(self.backend, part=self.request.part)
         except ProviderError as exc:
             raise _Stop(
                 "extract",

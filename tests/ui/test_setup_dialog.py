@@ -233,7 +233,6 @@ def test_an_unknown_provider_in_the_config_is_reported_never_replaced(
     isolated_config: Path,
 ) -> None:
     """A hand-edited config naming a provider this build lacks is refused, not laundered."""
-    from boardmodeler import agent_providers
     from boardmodeler.config import load_config
     from boardmodeler.ui.setup_dialog import configured_provider, describe_settings
 
@@ -243,11 +242,11 @@ def test_an_unknown_provider_in_the_config_is_reported_never_replaced(
     provider, reason = configured_provider(config)
 
     assert provider is None, "a provider this build lacks must never be swapped for another"
-    assert reason.startswith("api_provider_unavailable:") and "not-a-provider" in reason
-    assert all(f"'{name}'" in reason for name in agent_providers.ids())
+    assert reason.startswith("api_provider_unavailable:") and "not-a-provider" not in reason
+    assert "IBM Bob only" in reason
 
     described = describe_settings(config)
-    assert described["agent_provider"] == "not-a-provider", "the configured id is kept as written"
+    assert described["agent_provider"] is None, "incompatible agent names are not displayed"
     assert described["agent_provider_accepted"] is False
 
 

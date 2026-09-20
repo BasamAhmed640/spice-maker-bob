@@ -1,4 +1,4 @@
-"""OpenAI-compatible HTTP inference provider (D11, A8).
+"""JSON chat-completion HTTP inference provider (D11, A8).
 
 The adapter is deliberately boring: it POSTs the chat-completions request shape
 that :func:`build_chat_body` produces, reads the assistant message, and hands the
@@ -387,9 +387,14 @@ def extract_json_object(text: str, *, secrets: Sequence[str] = ()) -> dict[str, 
     try:
         document = json.loads(stripped)
     except json.JSONDecodeError as exc:
+        # Redact the whole reply before taking an excerpt: slicing a secret first
+        # leaves a fragment that exact-match redaction cannot recognize.
+        safe_text = redact(stripped, secrets)
+        safe_pos = len(redact(stripped[: exc.pos], secrets))
         raise ProviderError(
             "response_not_json",
-            f"the assistant message is not a JSON object: {redact(stripped[:200], secrets)}",
+            f"invalid JSON at line {exc.lineno}, column {exc.colno}: {exc.msg}; "
+            f"near {safe_text[max(0, safe_pos - 80) : safe_pos + 120]!r}",
         ) from exc
     if not isinstance(document, dict):
         raise ProviderError(
@@ -404,7 +409,7 @@ def extract_json_object(text: str, *, secrets: Sequence[str] = ()) -> dict[str, 
 
 
 class HttpInferenceProvider:
-    """A configured OpenAI-compatible chat-completions endpoint."""
+    """A configured JSON chat-completion chat-completions endpoint."""
 
     def __init__(
         self,
@@ -447,7 +452,7 @@ class HttpInferenceProvider:
             streaming=False,
             usage_units="tokens",
             notes=(
-                "OpenAI-compatible chat completions with response_format=json_object; "
+                "JSON chat-completion chat completions with response_format=json_object; "
                 "the payload is validated against the D4 schemas by the caller"
             ),
         )

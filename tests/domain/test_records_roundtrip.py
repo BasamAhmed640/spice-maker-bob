@@ -300,8 +300,8 @@ def _cases() -> list[tuple[str, type[BaseModel], dict[str, Any]]]:
             {
                 "provider": "http_inference",
                 "kind": ProviderKind.HTTP_INFERENCE,
-                "model": "deepseek-chat",
-                "endpoint": "https://api.deepseek.com/v1/chat/completions",
+                "model": "bob-test-model",
+                "endpoint": "https://bob.example.invalid/v1/chat/completions",
                 "usage_units": "tokens",
                 "usage": {"prompt_tokens": 8123.0, "completion_tokens": 940.0},
                 "detail": {"policy": "public-only"},
@@ -312,7 +312,7 @@ def _cases() -> list[tuple[str, type[BaseModel], dict[str, Any]]]:
             DataDisclosure,
             {
                 "provider": "http_inference",
-                "endpoint": "https://api.deepseek.com/v1/chat/completions",
+                "endpoint": "https://bob.example.invalid/v1/chat/completions",
                 "doc_ids": ["doc_tps54320"],
                 "page_ranges": {"doc_tps54320": [6, 7, 8]},
                 "chars": 24180,

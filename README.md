@@ -1,228 +1,81 @@
-# Spice Maker
+# Spice Maker Bob
 
-**Install on Windows:** click **Code → Download ZIP** with the **main** branch
-selected. Extract the ZIP, open the extracted repository folder, and double-click
-**Install.exe** beside this README. The installer is included in the ZIP.
+**IBM Bob is the only AI in this edition, in both the UI and the application source.**
+Bob reads a datasheet, authors an LTspice model and repairs it using actual simulator
+feedback. A model card records measured behavior and every uncovered requirement.
 
-The included v1.1.2 installer fixes the QtWidgets startup crash and keeps the animated
-pepper setup. Python is bundled; LTspice and, when using IBM Bob, Bob Shell are separate
-prerequisites. See INSTALL.txt for instructions and SHA256SUMS.txt for the installer hash.
+## Install on Windows
 
-**Give it a datasheet and a part number; agents author an LTspice model; real simulator
-runs judge it against the datasheet's own rows; you get a `.lib`, a symbol and a card
-saying exactly what was tested.** That is the product. Everything below the fold is
-supporting machinery, and the board/circuit/UI layers date from an earlier, wider spec.
+On the **main** branch, choose **Code → Download ZIP**, extract the archive and run
+**Install.exe** beside this README. The included **1.1.3** installer retains the animated
+pepper setup. INSTALL.txt contains instructions; SHA256SUMS.txt authenticates the installer.
+Python is bundled. LTspice and IBM Bob Shell are separate prerequisites. This build is unsigned.
 
-```powershell
-uv sync --all-extras
-uv run boardmodeler doctor            # confirms LTspice is usable (real smoke test)
-uv run boardmodeler model build `
-    --part TPS54320 --subckt TPS54320 `
-    --requirements fixtures/regulator/tps54320/requirements.json `
-    --bindings     fixtures/regulator/tps54320/probes.json `
-    --out build/tps54320
-uv run boardmodeler model test --out build/tps54320     # re-judge any time
-uv run boardmodeler model install --out build/tps54320 --user-lib --apply
-```
+Open SETUP, choose the LTspice executable, run its smoke test and save a Bob API key.
+Bob Shell uses an Inference-scoped key through the process environment; the key stays
+in Windows Credential Manager and is never passed on the command line. See the
+[Bob Shell setup documentation](https://bob.ibm.com/docs/shell/getting-started/install-and-setup).
+No interactive account login is required by this app.
 
-**Before the first run:** open **SETUP** in the window and paste an agent API key — that is
-the whole authentication story; there is no login anywhere in this application. **IBM Bob** is
-the provider this build uses and needs Bob Shell installed
-(`powershell -c "irm -Uri https://bob.ibm.com/download/bobshell.ps1 | iex"`, Node ≥ 24) plus a key from
-bob.ibm.com → API keys with **Scope = Inference** (an *Inference* key needs no team id; a
-*general* key does). The key goes to the Windows credential store — never to a config file, a project
-directory, a manifest or a log line. Setup is one page and holds only what persists: the LTspice
-path (with a smoke test), the agent provider and key, the model id when the provider takes one,
-the folder finished models go to, the read-only LTspice user library path, and the
-web-reinforcement switch. Installing a finished model is always the window's **Install into
-LTspice** action, which copies into the per-user library. The main window holds nothing but the
-part number, the datasheet, the save location, **GO** and the progress detail. Without an agent
-the run stops immediately with `BLOCKED` naming what is missing — it never substitutes another
-provider. The selected key now handles extraction and authoring. Four extraction tasks
-share one request, repairs receive the current model, and verified repeat builds reuse
-hashed simulator evidence without more author turns. The TPS54320 fixture has 38 rows:
-9 bind to 8 regulator probes and 29 remain explicitly untested.
+If existing settings are incompatible, click **USE IBM BOB** and **SAVE** in SETUP.
+The app refuses incompatible settings until that explicit choice; it never silently
+substitutes an agent or displays the incompatible agent's name.
 
-The new electrical I/O probes cover output levels, leakage and transitions at recorded
-operating points. Vendor IBIS/AMI/Touchstone sources can also be imported with provenance;
-high-speed channel/protocol validation remains external. See
-[coverage, conditions, caching and limitations](docs/FAST_ACCURATE_MODELS.md).
+## Make and test a model
 
-## API calls and reasoning
+Enter the exact part number, select its PDF and a save folder, then press **GO**.
+The selected datasheet and model text are sent to Bob. SETUP also holds the persistent
+model-folder and supporting-web-search preference. CANCEL requests cancellation;
+results provide Open model folder, Run tests again and Install into LTspice actions.
+Bob controls model selection and reasoning. This application does not invent a maximum
+thinking flag that Bob Shell has not documented.
 
-OpenCode **Go (subscription)** and **Zen (pay as you go)** are separate provider choices.
-Select Go for a Go subscription; its endpoint is `/zen/go/v1`, and Zen credit is never
-used as an automatic fallback. Both choices use the existing OpenCode credential slot.
-The Bob edition continues to accept only IBM Bob.
+The extraction prompt includes the exact requested part. The same family PDF's cached
+rows cannot be silently reused for a different part suffix. A repeated PDF can grant or
+revoke remote permission without changing its content identity. Invalid extraction JSON
+gets bounded repair; failures identify the parse location with secrets redacted before
+any diagnostic excerpt is shortened.
 
-Extraction, model authoring and JSON repair use the selected provider's highest
-configured reasoning setting: `max` for DeepSeek, OpenAI, Claude Opus and OpenRouter;
-`high` for Gemini; `xhigh` for Grok 4.6. OpenCode's default DeepSeek model uses `max`.
-An exhausted thinking budget is reported without silently disabling thinking. Models
-without an exposed reasoning control (including the current Groq/Mistral defaults) and
-Bob Shell retain their provider-controlled behavior; they cannot be labeled max.
-These settings apply to the documented default models and compatible overrides.
+The frozen specification owns limits, citations and conditions. Bob may change model
+files, not weaken the tests. Repairs receive the current model and observed results,
+retain the best candidate and stop at the iteration/stall limit. Repeated valid builds
+can skip authoring calls; a fresh process re-establishes simulator evidence.
 
-## Install
+## What is actually validated
 
-Use **Code → Download ZIP** on **main**. Extract the archive, then double-click
-**Install.exe** in the extracted repository folder. The pepper animation plays during
-setup. The same folder contains INSTALL.txt and SHA256SUMS.txt.
+There are 11 regulator/supply probes and 9 electrical I/O probes. Each PASS needs an
+observed LTspice artifact and the cited operating conditions. Different supply, load,
+temperature or timing conditions remain separate. Missing signals, unverified citations,
+unsupported behavior and incomplete runs cannot become PASS.
 
-Open SETUP once to select LTspice and save your API key. Python is bundled; LTspice and,
-when using Bob, Bob Shell must be installed separately. This installer is unsigned.
+The TPS54320 fixture has 38 rows: 9 bind to 8 regulator probes and 29 remain explicitly
+untested. Fixture success establishes the harness, not every real device. Acceptance by
+the broad analogue classifier does not establish op-amp gain, offset, bandwidth or slew
+coverage. No complete LM358 qualification is claimed. Full temperature/statistical
+behavior needs its own modeled dependence and evidence.
 
-To rebuild, run `installer\build.ps1 -Version 1.1.2`; see
-[installer details](installer/README.md). The build refreshes the root installer,
-instructions and checksum so committing those files updates Code → Download ZIP.
+Vendor IBIS/AMI/Touchstone sources can be imported with provenance. These reduced probes
+do not qualify high-speed channel, eye, BER or protocol behavior; compatible external
+validation is required. See [coverage and limitations](docs/FAST_ACCURATE_MODELS.md).
 
-## The agent provider
-
-The agent provider list is data (`src/boardmodeler/agent_providers.py`), and this build
-ships the IBM Bob entry:
-
-|What|How it behaves|
-|---|---|
-|Catalog|one entry, IBM Bob — the SETUP page shows no provider row and asks for `BOB API KEY`|
-|A config naming any other provider|falls back to Bob (`doctor` reports it; nothing is silently substituted at build time)|
-|How Bob is reached|the Bob CLI, `bob run --format json --max-turns N <prompt>`, with the key in the child's environment only|
-
-What each piece guarantees:
-
-* **The spec is frozen before the agent starts.** Limits, tolerances, probe bindings and
-  citations live in `spec/characteristics.json`; the agent may write only
-  `model/<SUBCKT>.lib` and `.asy`. A changed spec aborts the build as `UNKNOWN(spec_tampered)`.
-* **The harness owns the verdicts.** One probe deck per bound characteristic runs in real
-  LTspice; the measured value is compared to the cited limit. A probe that cannot answer
-  its question (no crossing, signal not saved, run truncated, port missing) is `UNKNOWN`
-  with the reason — never `PASS`.
-* **Unreachable rows stay visible.** Datasheet rows no probe can exercise (internal
-  oscillator behavior, thermal response, package facts) are listed on `MODEL_CARD.md` with
-  a `not_testable_reason`, so a reader sees the size of the claim, not a summary of it.
-
-The older paths — circuit checking, the board demonstration, the desktop UI — remain in
-the tree and are described further down; they are not on the model-authoring path.
-
-## Honesty invariants
-
-These are enforced in code, not by convention, and they are the reason to trust a
-report:
-
-* No `PASS` without an observed simulator artifact. A missing measurement, an
-  uncovered assertion window, or a signal that never appears becomes `UNKNOWN`.
-* A requirement whose behaviour the model's capability probe did not establish as
-  `supported` is gated to `UNKNOWN` — an average vendor model cannot silently
-  "pass" start-up.
-* Every cited requirement is verified against the text of the page it cites; an
-  invented citation fails verification and its dependent tests evaluate to
-  `UNKNOWN`.
-* A "must not occur" requirement additionally requires the run to have reached the
-  end of its window with the signal observable: the absence of a crossing is not a
-  pass on its own.
-* Repair is capped and constrained: it may only touch `models/candidates/<n>/`, and
-  relaxing a tolerance, deleting a test, editing evidence, or editing the circuit
-  raises `RepairViolation` and stops the loop.
-* Nothing is ever written into the LTspice installation, and vendor model bytes are
-  never copied into an export.
-
-## Setup
+## Development
 
 ```powershell
-uv sync --all-extras              # Python 3.14 venv with every dependency
-uv run boardmodeler doctor --json # LTspice discovery + smoke test, reader backend, OCR, credentials
-uv run boardmodeler setup         # optional: record the LTspice path, provider, and data policy
-uv run boardmodeler ui            # optional: the desktop application
+uv sync --frozen --all-extras
+uv run pytest -q -m "not ltspice"
+uv run pytest -q -m "ltspice"
+uv run ruff check .
+uv run ruff format --check .
+uv run boardmodeler doctor --json
+uv run boardmodeler model build --part PART --datasheet datasheet.pdf --out build/part --allow-remote
+uv run boardmodeler model test --out build/part --json
 ```
 
-`doctor` reports the real smoke-test measurement (an RC step's analytic 0.632 V,
-±2 %), not just "found": if the simulator is absent or its outputs unusable, that is
-what it says.
+`--backend api` is a compatibility alias for the Bob API-key adapter in this edition.
+The fixture/scripted backends remain clearly labeled deterministic test tools. No other
+AI catalog or author transport ships in this repository.
 
-## Workflows
-
-### The integrated board demonstration
-
-A complete board — 12 V input, buck to 3V3, LDO to 1V8, reset circuit, straps,
-sideband, and an unmodelled PCIe switch kept explicitly outside dynamic coverage —
-is built from committed fixtures and checked end to end:
-
-```powershell
-uv run boardmodeler demo build --out build/demo
-uv run boardmodeler circuit check --project build/demo --json --out build/demo-results.json
-uv run boardmodeler run mutations --project build/demo --report build/mutation-report.json
-```
-
-`demo build` reports its requirement, test-case, and static-finding counts;
-`circuit check` prints one line per test with its status; `run mutations` injects
-each fault into its own copy, runs the check, and records whether the fault was
-detected — hashing the original project before and after to prove the mutation did
-not leak into it.
-
-### Testing a circuit
-
-```powershell
-uv run boardmodeler run tests --project <project-dir> --scope circuit_compliance --json
-uv run boardmodeler circuit check --project <project-dir> --circuit <schematic.asc> --fault-matrix
-```
-
-### Extracting from documents
-
-```powershell
-uv run boardmodeler extract --project <project-dir> --doc <datasheet.pdf> [--allow-remote]
-```
-
-`--allow-remote` is required for any provider that leaves the machine, and it is
-checked against each document's own `remote_inference_allowed` flag and
-classification; the disclosure (provider, endpoint, pages, characters) is printed
-and recorded in the run manifest. The default provider is the offline fixture
-replay, so repeat runs make zero requests.
-
-### Exporting a model
-
-```powershell
-uv run boardmodeler export --project build/demo --out build/demo-export
-```
-
-The export carries only relative paths, hashes every file into `manifest.json`,
-records the vendor model's hash while refusing to copy vendor bytes, and lists every
-requirement with no dynamic test in `coverage.json`.
-
-## Limits we state rather than hide
-
-* **OCR is unavailable on this machine** (`tesseract` absent). Pages that need OCR
-  produce an explicit evidence gap; OCR text is never presented as embedded text.
-* **The ported TI vendor model is evidence, not a workhorse.** It simulates, but a
-  2.1 ms application run hit a 600 s cap, so the dynamic tests and the demo use the
-  generated behavioural template while the vendor model's capability record states
-  exactly which behaviours its probes established (see `docs/DECISIONS.md` D-010).
-* **Real PCIe-switch qualification is `BLOCKED`.** No public documentation exists for
-  the device class the synthetic fixture stands in for, so the fixture is labelled
-  `origin=TEST_FIXTURE` everywhere and cannot be presented as device data.
-* **No temperature or statistical claims.** Without modelled temperature dependence
-  there is no temperature validation, and no distributions are inferred from
-  min/max limits.
-
-## Layout
-
-|Path|Contents|
-|---|---|
-|`src/boardmodeler/domain/`|Record schemas (pydantic), enums, hashing, ids, constrained expression AST|
-|`src/boardmodeler/simulation/`|LTspice batch invocation, log parsing, `.raw` readers, backend selection|
-|`src/boardmodeler/verification/`|Assertion evaluation, vacuous-pass guards, corners, scenarios, engine|
-|`src/boardmodeler/schematic/`|`.asc` parse/generate, SPICE netlist parsing, neutral CSV model, static checks, mutations|
-|`src/boardmodeler/models/`|Vendor-original store, behavioural templates, capability probes, symbol generation|
-|`src/boardmodeler/requirements/`|Requirement extraction, validation, source-consistency review|
-|`src/boardmodeler/documents/`|PDF text/page extraction, document store, OCR interface, chunking|
-|`src/boardmodeler/providers/`|Fixture / HTTP inference / Bob providers behind one protocol|
-|`src/boardmodeler/pipeline/`|Stage chain, baseline freeze, bounded repair, child-process worker|
-|`src/boardmodeler/reporting/`|Export, model card, HTML report|
-|`src/boardmodeler/security/`|Credentials, path guards, subprocess guard, data policy|
-|`src/boardmodeler/ui/`|PySide6 desktop application (thin client over the same pipeline)|
-|`fixtures/`|Committed test fixtures (synthetic switch contract, demo board)|
-|`docs/`|`PLAN.md`, `STATUS.md`, `DECISIONS.md`, `INTERFACES.md`|
-
-## Rules
-
-See `AGENTS.md` — the short version: run `uv run pytest -q` before claiming
-anything works, never write into the LTspice installation, never record a result
-that was not observed, and label every synthetic fixture as synthetic.
+Rebuild with `installer/build.ps1 -Version 1.1.3`. The build checks the frozen GUI before
+packaging and refreshes Install.exe, INSTALL.txt and SHA256SUMS.txt at the repository
+root. These generated files must be committed for Code → Download ZIP to update.
+See [installer details](installer/README.md) and [current status](docs/STATUS.md).

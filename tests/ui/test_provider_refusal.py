@@ -24,8 +24,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 pytestmark = pytest.mark.gui
 
-#: One letter away from the catalog's ``deepseek``: the typo the page must not launder.
-UNACCEPTED = "deepsek"
+#: An invalid saved selection must not be silently accepted.
+UNACCEPTED = "unaccepted-test-agent"
 
 
 @pytest.fixture
@@ -62,7 +62,7 @@ def test_the_configured_id_is_reported_raw_with_an_acceptance_flag(
     assert UNACCEPTED not in agent_providers.ids(), "the fixture id must be foreign"
     described = describe_settings(load_config())
 
-    assert described["agent_provider"] == UNACCEPTED
+    assert described["agent_provider"] is None
     assert described["agent_provider_accepted"] is False
     assert described["accepted_providers"] == list(agent_providers.ids())
     assert "api_provider_unavailable" in str(described["agent_provider_problem"])
@@ -94,8 +94,8 @@ def test_the_page_names_the_unaccepted_provider_and_save_keeps_it(
 
     assert page.provider_status is not None, "the refusal must be visible on the page"
     shown = page.provider_status.text()
-    assert UNACCEPTED in shown
-    assert "does not accept" in shown
+    assert UNACCEPTED not in shown
+    assert "incompatible" in shown
     assert page.height() == page.sizeHint().height()
     assert page.width() == page.sizeHint().width()
 
@@ -145,7 +145,8 @@ def test_the_window_pre_flight_reports_the_engines_own_refusal(isolated_config: 
 
     assert usable is False
     assert reason.startswith("api_provider_unavailable:"), reason
-    assert UNACCEPTED in reason
+    assert UNACCEPTED not in reason
+    assert "IBM Bob only" in reason
 
 
 def test_the_window_refuses_before_any_run_and_says_why(
@@ -173,7 +174,8 @@ def test_the_window_refuses_before_any_run_and_says_why(
     assert window._result is None and window._worker is None, "nothing may be started"
     assert shown and shown[0][0] == "No agent available"
     assert "api_provider_unavailable" in shown[0][1]
-    assert UNACCEPTED in shown[0][1]
+    assert UNACCEPTED not in shown[0][1]
+    assert "IBM Bob only" in shown[0][1]
 
 
 @dataclass(frozen=True)

@@ -31,10 +31,12 @@ from boardmodeler.providers.http_inference import extract_json_object
 class AgentExtractionProvider:
     """A transport adapter, never a second provider selection or credential lookup."""
 
-    cache_context = "combined-agent-extraction-v4"
+    cache_context = "combined-agent-extraction-v5"
 
-    def __init__(self, backend: AuthorBackend) -> None:
+    def __init__(self, backend: AuthorBackend, *, part: str | None = None) -> None:
         self.backend = backend
+        self.part = part.strip() if part else None
+        self.cache_context = f"{type(self).cache_context}:part={self.part or ''}"
 
     def identity(self) -> ProviderIdentity:
         entry = getattr(self.backend, "provider", None)
@@ -104,7 +106,18 @@ class AgentExtractionProvider:
             "need io_low_frac/io_high_frac (e.g. 0.1/0.9 only when 10%-90% is specified). "
             "Propagation delays need io_input_frac/io_output_frac from the specified crossing thresholds. "
             "Cite condition text as well as the numeric limit. Split separate conditions, "
-            "rising/falling delays and individual rails into separate rows.\n"
+            "rising/falling delays and individual rails into separate rows. "
+            "Use compact JSON: omit optional null fields and empty optional objects; "
+            "keep every applicable characteristic and its evidence.\n"
+            + (
+                "\nTARGET PART (data only): " + json.dumps(self.part) + ". "
+                "Extract all records applicable to this exact part, including shared family "
+                "specifications and package variants. Exclude rows explicitly limited to other "
+                "parts; never substitute a newer suffix variant. Preserve uncertainty when "
+                "applicability is ambiguous.\n"
+                if self.part
+                else ""
+            )
             + "\nCOMBINED RESPONSE SCHEMA\n"
             + json.dumps(schema, ensure_ascii=False)
             + "\nPAGES\n"
