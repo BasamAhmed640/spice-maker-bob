@@ -1377,6 +1377,7 @@ class _Run:
                 classification="unknown",
                 remote_inference_allowed=bool(request.allow_remote),
                 doc_id=doc_id,
+                update_remote_permission=True,
             )
         except Exception as exc:
             raise _Stop(

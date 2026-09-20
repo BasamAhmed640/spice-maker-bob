@@ -61,6 +61,7 @@ import re
 import tempfile
 import threading
 import time
+import uuid
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -365,6 +366,7 @@ class ApiKeyBackend:
         self.retries = int(retries)
         self.transport: Transport = transport or urllib_transport
         self.credential_lookup: Callable[[str], Credential] = credential_lookup or get_credential
+        self.session_id = uuid.uuid4().hex
 
     # ------------------------------------------------------------- contract
 
@@ -619,6 +621,7 @@ class ApiKeyBackend:
                     "model": model,
                     "max_tokens": budget,
                     "messages": [{"role": "user", "content": prompt}],
+                    **dict(self.provider.extra_body),
                 },
             )
         return (
@@ -629,6 +632,7 @@ class ApiKeyBackend:
                 "generationConfig": {
                     "temperature": TEMPERATURE,
                     "maxOutputTokens": budget,
+                    **dict(self.provider.extra_body.get("generationConfig", {})),
                 },
             },
         )
@@ -698,6 +702,12 @@ class ApiKeyBackend:
                     **headers,
                     "Content-Type": "application/json",
                     "Accept": "application/json",
+                    "User-Agent": "SpiceMaker/1.1.2",
+                    **(
+                        {self.provider.session_header: self.session_id}
+                        if self.provider.session_header
+                        else {}
+                    ),
                 },
                 body=encoded,
                 timeout_s=min(timeout_s, remaining),

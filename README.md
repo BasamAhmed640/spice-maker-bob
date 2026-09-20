@@ -4,7 +4,7 @@
 selected. Extract the ZIP, open the extracted repository folder, and double-click
 **Install.exe** beside this README. The installer is included in the ZIP.
 
-The included v1.1.1 installer fixes the QtWidgets startup crash and keeps the animated
+The included v1.1.2 installer fixes the QtWidgets startup crash and keeps the animated
 pepper setup. Python is bundled; LTspice and, when using IBM Bob, Bob Shell are separate
 prerequisites. See INSTALL.txt for instructions and SHA256SUMS.txt for the installer hash.
 
@@ -48,6 +48,21 @@ operating points. Vendor IBIS/AMI/Touchstone sources can also be imported with p
 high-speed channel/protocol validation remains external. See
 [coverage, conditions, caching and limitations](docs/FAST_ACCURATE_MODELS.md).
 
+## API calls and reasoning
+
+OpenCode **Go (subscription)** and **Zen (pay as you go)** are separate provider choices.
+Select Go for a Go subscription; its endpoint is `/zen/go/v1`, and Zen credit is never
+used as an automatic fallback. Both choices use the existing OpenCode credential slot.
+The Bob edition continues to accept only IBM Bob.
+
+Extraction, model authoring and JSON repair use the selected provider's highest
+configured reasoning setting: `max` for DeepSeek, OpenAI, Claude Opus and OpenRouter;
+`high` for Gemini; `xhigh` for Grok 4.6. OpenCode's default DeepSeek model uses `max`.
+An exhausted thinking budget is reported without silently disabling thinking. Models
+without an exposed reasoning control (including the current Groq/Mistral defaults) and
+Bob Shell retain their provider-controlled behavior; they cannot be labeled max.
+These settings apply to the documented default models and compatible overrides.
+
 ## Install
 
 Use **Code → Download ZIP** on **main**. Extract the archive, then double-click
@@ -57,7 +72,7 @@ setup. The same folder contains INSTALL.txt and SHA256SUMS.txt.
 Open SETUP once to select LTspice and save your API key. Python is bundled; LTspice and,
 when using Bob, Bob Shell must be installed separately. This installer is unsigned.
 
-To rebuild, run `installer\build.ps1 -Version 1.1.1`; see
+To rebuild, run `installer\build.ps1 -Version 1.1.2`; see
 [installer details](installer/README.md). The build refreshes the root installer,
 instructions and checksum so committing those files updates Code → Download ZIP.
 

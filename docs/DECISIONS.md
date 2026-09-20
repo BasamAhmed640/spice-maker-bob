@@ -659,3 +659,20 @@ At the user's explicit request, track the verified installer as root Install.exe
 INSTALL.txt and SHA256SUMS.txt. GitHub Code -> Download ZIP must include the executable.
 Use an ordinary Git binary, not a pointer or download bootstrapper. build.ps1 refreshes
 these files after packaging; release updates must commit them to the appropriate main.
+
+
+### Remote consent retries and API reasoning (2026-09-20)
+
+An explicit current egress decision may update only remote_inference_allowed on an
+otherwise byte-identical DocumentRecord. The default document-store API still refuses
+metadata changes. The model pipeline opts in so retrying after the consent dialog works.
+
+OpenCode Go and Zen are separate catalog entries and billing routes, with no automatic
+fallback. Both retain the existing credential name. Go requires a client user agent and
+stable session header (https://opencode.ai/docs/go/). Highest supported default-model
+effort is sent on extraction and repair requests; a token-limit failure may not silently
+lower thinking. Models without a documented effort control retain vendor behavior.
+Reasoning references: https://api-docs.deepseek.com/guides/thinking_mode/,
+https://platform.claude.com/docs/en/build-with-claude/effort,
+https://ai.google.dev/gemini-api/docs/thinking,
+https://docs.x.ai/developers/model-capabilities/text/reasoning.

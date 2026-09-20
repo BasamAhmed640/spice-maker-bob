@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import threading
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -62,8 +63,7 @@ WIRE_ENTRIES: tuple[AgentProvider, ...] = (
         endpoint="https://api.deepseek.com",
         model="deepseek-flash",
         env_aliases=("DEEPSEEK_API_KEY",),
-        extra_body={"thinking": {"type": "enabled"}, "reasoning_effort": "low"},
-        retry_body={"thinking": {"type": "disabled"}},
+        extra_body={"thinking": {"type": "enabled"}, "reasoning_effort": "max"},
     ),
     AgentProvider(
         id="openai",
@@ -77,6 +77,7 @@ WIRE_ENTRIES: tuple[AgentProvider, ...] = (
         model="gpt-6-astra",
         env_aliases=("OPENAI_API_KEY",),
         reasoning=True,
+        extra_body={"reasoning_effort": "max"},
     ),
     AgentProvider(
         id="anthropic",
@@ -89,6 +90,7 @@ WIRE_ENTRIES: tuple[AgentProvider, ...] = (
         endpoint="https://api.anthropic.com/v1",
         model="claude-opus-5",
         env_aliases=("ANTHROPIC_API_KEY",),
+        extra_body={"thinking": {"type": "adaptive"}, "output_config": {"effort": "max"}},
     ),
     AgentProvider(
         id="google",
@@ -101,6 +103,7 @@ WIRE_ENTRIES: tuple[AgentProvider, ...] = (
         endpoint="https://generativelanguage.googleapis.com/v1beta",
         model="gemini-3.8-flash",
         env_aliases=("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+        extra_body={"generationConfig": {"thinkingConfig": {"thinkingLevel": "high"}}},
     ),
 )
 
@@ -280,12 +283,12 @@ def test_a_providers_own_request_switch_reaches_the_body(tmp_path: Path) -> None
     assert result.ok is True, result.detail
     body = json.loads(transport.requests[0].body)
     assert body["thinking"] == deepseek.extra_body["thinking"]
-    assert body["reasoning_effort"] == deepseek.extra_body["reasoning_effort"] == "low"
+    assert body["reasoning_effort"] == deepseek.extra_body["reasoning_effort"] == "max"
 
 
 def test_an_entry_without_a_switch_sends_none(tmp_path: Path) -> None:
     """The mechanism is per entry: a provider that declares nothing adds nothing."""
-    plain = provider("openai")
+    plain = replace(provider("openai"), extra_body={})
     assert not plain.extra_body, "this entry declares no vendor switch"
     reply = json.dumps({"files": {f"model/{SUBCKT}.lib": LIB_TEXT}})
     transport = Recorder(openai_reply(reply))
@@ -306,7 +309,7 @@ def test_an_empty_reply_at_the_budget_is_reasked_with_the_fallback_setting(
     reply is empty at ``finish_reason='length'``. The entry declares the setting that
     makes the model answer, so the turn is re-asked instead of lost.
     """
-    deepseek = provider("deepseek")
+    deepseek = replace(provider("deepseek"), retry_body={"thinking": {"type": "disabled"}})
     assert deepseek.retry_body, "the DeepSeek entry declares its fallback setting"
     reply = json.dumps({"files": {f"model/{SUBCKT}.lib": LIB_TEXT}})
     transport = Sequenced(
@@ -321,7 +324,7 @@ def test_an_empty_reply_at_the_budget_is_reasked_with_the_fallback_setting(
     first = json.loads(transport.requests[0].body)
     second = json.loads(transport.requests[1].body)
     assert first["thinking"] == deepseek.extra_body["thinking"]
-    assert first["reasoning_effort"] == "low"
+    assert first["reasoning_effort"] == "max"
     assert second["thinking"] == deepseek.retry_body["thinking"]
     assert "reasoning_effort" not in second, "the fallback body replaces the entry's own"
 

@@ -80,6 +80,7 @@ class DocumentStore:
         title: str | None = None,
         manufacturer: str | None = None,
         doc_id: str | None = None,
+        update_remote_permission: bool = False,
     ) -> DocumentRecord:
         """Store ``source`` and return its record.
 
@@ -131,7 +132,7 @@ class DocumentStore:
             path=f"{_DOCS_DIR}/{_FILES_DIR}/{stored_name}",
             redistribution_allowed=redistribution_allowed,
         )
-        already = self._already_stored(record)
+        already = self._already_stored(record, update_remote_permission=update_remote_permission)
         if already is not None:
             return already
         destination = resolve_within(self.files_dir, stored_name)
@@ -222,7 +223,9 @@ class DocumentStore:
     def _record_path(self, doc_id: str) -> Path:
         return resolve_within(self.docs_dir, f"{_check_doc_id(doc_id)}.{_JSON_EXTENSION}")
 
-    def _already_stored(self, record: DocumentRecord) -> DocumentRecord | None:
+    def _already_stored(
+        self, record: DocumentRecord, *, update_remote_permission: bool = False
+    ) -> DocumentRecord | None:
         """Return the identical stored record, or raise when it differs."""
         path = self._record_path(record.doc_id)
         if not path.is_file():
@@ -234,6 +237,14 @@ class DocumentStore:
                 f"({stored.file_hash[:12]} != {record.file_hash[:12]})"
             )
         if stored != record:
+            # A fresh user decision may grant or revoke egress without changing the
+            # document's identity. All content and other metadata remain immutable.
+            permission_only = stored.model_copy(
+                update={"remote_inference_allowed": record.remote_inference_allowed}
+            )
+            if update_remote_permission and permission_only == record:
+                self._write(record)
+                return record
             raise DocumentStoreError(
                 f"doc_id {record.doc_id} is already stored with different metadata; "
                 "pass a distinct doc_id instead of reusing this one"

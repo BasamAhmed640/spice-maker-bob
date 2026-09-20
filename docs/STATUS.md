@@ -1,3 +1,23 @@
+# Desktop PDF retry and Go subscription — 2026-09-20
+
+The reported LM358 run stopped before inference: the same cached PDF was first
+registered without remote permission and then retried with permission. The document
+store now permits only that explicitly requested permission change; content and all
+other metadata conflicts remain refused. A regression grants and revokes permission
+through the actual model pipeline's read stage.
+
+OpenCode Go now has a separate provider entry and documented /zen/go/v1 endpoint,
+sharing the OS credential slot with the explicitly separate Zen option. API calls
+identify SpiceMaker and keep a stable x-opencode-session through extraction and repairs.
+Supported default models use their highest documented effort; production catalogs no
+longer switch thinking off after an empty response.
+
+Observed live checks with the user's stored OpenCode credential: Zen returned HTTP 401
+(insufficient Zen credit); Go returned HTTP 200 for a short SPICE authoring request at
+max reasoning (168 output tokens, 135 reasoning tokens). No secret was written into
+repository or diagnostic files. The user's unchanged 68-page LM358 PDF passed the
+previously failing registration step and reached live Go extraction.
+
 # Code menu ZIP includes the installer — 2026-09-20
 
 Added this edition's verified v1.1.1 Install.exe, INSTALL.txt and SHA256SUMS.txt at the
@@ -396,3 +416,13 @@ split-limit check produced one hashed waveform/log pair, a passing row and faili
 row, and matching model-card totals with zero API calls. This is synthetic test data,
 not a real device accuracy claim. The user requested direct tests/CI delivery to stop
 the repeated automated review cost; every committed review fix was preserved.
+
+
+1.1.2 packaging verification: both builds passed the actual frozen Windows GUI launch
+before packaging. Root Install.exe is byte-identical to this edition's ZIP payload and
+canonical Velopack setup; its SHA256 matches the root checksum. General full offline
+suite: 1052 passed, 4 skipped (before eight additional default-reasoning cases, all passed
+in their focused run). Bob: 1050 passed, 14 skipped. Ruff check/format passed, 190 files.
+The installed desktop executable was updated and matched the rebuilt application hash;
+its real window opened, responded and exited cleanly. The selected provider is now Go,
+with the existing OS credential and requested model preserved.

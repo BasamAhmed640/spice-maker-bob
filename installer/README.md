@@ -33,7 +33,7 @@ dotnet tool install -g vpk --version 1.2.0           # needs the .NET SDK; keep 
 Then, from the repository root:
 
 ```powershell
-.\installer\build.ps1 -Version 1.1.1
+.\installer\build.ps1 -Version 1.1.2
 ```
 
 The script renders the splash/icon from `render_assets.py`, freezes the app from
@@ -91,7 +91,7 @@ warns on first run.
 The repository tracks the real **Install.exe** at its root, alongside **INSTALL.txt**
 and **SHA256SUMS.txt**. GitHub's **Code → Download ZIP** on main includes these files.
 After extracting the archive, users run Install.exe directly from the repository folder.
-Each edition carries its own verified v1.1.1 setup executable, including the animation.
+Each edition carries its own verified v1.1.2 setup executable, including the animation.
 
 After a successful build, build.ps1 refreshes all three root files. Commit those files
 with a release update to keep the Code menu download current. The installer is stored

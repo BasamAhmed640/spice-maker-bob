@@ -2,10 +2,10 @@
 
 The list is **data, not code**. A build ships the catalog it sells, and every consumer
 (the setup page's provider row, the backend factory, ``doctor``) reads the catalog
-instead of naming a provider itself. That is what makes the Bob-only build a one-entry
-edit to :data:`CATALOG` rather than a fork of the code: with a single entry the setup
-page shows no provider row and keeps the ``BOB API KEY`` label, and the backend factory
-can only ever return Bob.
+instead of naming a provider itself. The Bob-only build sets ``build_flavor.BOB_ONLY``,
+which filters :data:`CATALOG` down to the Bob entry rather than forking the code: with a
+single entry the setup page shows no provider row and keeps the ``BOB API KEY`` label,
+and the backend factory can only ever return Bob.
 
 Every entry declares the transport it needs (``wire``), so an unsupported shape is
 refused with a reason instead of being coerced:
@@ -74,6 +74,8 @@ class AgentProvider:
     endpoint: str | None = None
     model: str | None = None
     env_aliases: tuple[str, ...] = ()
+    #: Documented conversation header for providers that require session affinity.
+    session_header: str | None = None
     #: On the ``openai`` wire, whether the entry's model is a reasoning model: it
     #: rejects ``temperature`` and takes its output budget as
     #: ``max_completion_tokens`` rather than ``max_tokens``. OpenAI's own reasoning
@@ -104,8 +106,8 @@ class AgentProvider:
         return not self.uses_cli
 
 
-#: The providers a build accepts, default first. Trim this tuple for a restricted
-#: build; nothing else in the code names a provider.
+#: The providers a build accepts, default first. ``build_flavor.BOB_ONLY`` filters
+#: this tuple for a restricted build; nothing else in the code names a provider.
 CATALOG: tuple[AgentProvider, ...] = (
     AgentProvider(
         id="bob",
@@ -128,13 +130,9 @@ CATALOG: tuple[AgentProvider, ...] = (
         endpoint="https://api.deepseek.com",
         model="deepseek-flash",
         env_aliases=("DEEPSEEK_API_KEY",),
-        # DeepSeek's own "Invoke The Chat API" example documents this switch, and the
-        # measured settings differ: thinking off answers in ~10 s but the model it writes
-        # reaches 0 PASS, thinking on at low effort reaches 4 PASS / 0 FAIL in three
-        # turns — and once in a while spends the whole budget reasoning anyway, which is
-        # what ``retry_body`` is for (D-015).
-        extra_body={"thinking": {"type": "enabled"}, "reasoning_effort": "low"},
-        retry_body={"thinking": {"type": "disabled"}},
+        # Maximum documented effort, retained for extraction and every repair.
+        # No fallback may silently disable thinking when the output budget is spent.
+        extra_body={"thinking": {"type": "enabled"}, "reasoning_effort": "max"},
     ),
     AgentProvider(
         id="openai",
@@ -148,6 +146,7 @@ CATALOG: tuple[AgentProvider, ...] = (
         model="gpt-6-astra",
         env_aliases=("OPENAI_API_KEY",),
         reasoning=True,
+        extra_body={"reasoning_effort": "max"},
     ),
     AgentProvider(
         id="anthropic",
@@ -160,6 +159,7 @@ CATALOG: tuple[AgentProvider, ...] = (
         endpoint="https://api.anthropic.com/v1",
         model="claude-opus-5",
         env_aliases=("ANTHROPIC_API_KEY",),
+        extra_body={"thinking": {"type": "adaptive"}, "output_config": {"effort": "max"}},
     ),
     AgentProvider(
         id="google",
@@ -172,6 +172,7 @@ CATALOG: tuple[AgentProvider, ...] = (
         endpoint="https://generativelanguage.googleapis.com/v1beta",
         model="gemini-3.8-flash",
         env_aliases=("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+        extra_body={"generationConfig": {"thinkingConfig": {"thinkingLevel": "high"}}},
     ),
     AgentProvider(
         id="openrouter",
@@ -184,6 +185,7 @@ CATALOG: tuple[AgentProvider, ...] = (
         endpoint="https://openrouter.ai/api/v1",
         model="~openai/gpt-sol-latest",
         env_aliases=("OPENROUTER_API_KEY",),
+        extra_body={"reasoning": {"effort": "max"}},
     ),
     AgentProvider(
         id="xai",
@@ -196,6 +198,7 @@ CATALOG: tuple[AgentProvider, ...] = (
         endpoint="https://api.x.ai/v1",
         model="grok-4.6",
         env_aliases=("XAI_API_KEY",),
+        extra_body={"reasoning_effort": "xhigh"},
     ),
     AgentProvider(
         id="groq",
@@ -211,15 +214,31 @@ CATALOG: tuple[AgentProvider, ...] = (
     ),
     AgentProvider(
         id="opencode",
-        label="OpenCode Zen / Go",
+        label="OpenCode Zen (pay as you go)",
         wire="openai",
         credential="opencode",
         key_label="OPENCODE API KEY",
-        key_hint="opencode.ai/auth → API key (Zen pay-as-you-go, or the Go subscription)",
+        key_hint="opencode.ai/auth → API key with Zen credit; select OpenCode Go for a Go subscription",
         docs="https://opencode.ai/docs/zen",
         endpoint="https://opencode.ai/zen/v1",
         model="deepseek-v4-flash",
         env_aliases=("OPENCODE_API_KEY",),
+        session_header="x-opencode-session",
+        extra_body={"thinking": {"type": "enabled"}, "reasoning_effort": "max"},
+    ),
+    AgentProvider(
+        id="opencode_go",
+        label="OpenCode Go (subscription)",
+        wire="openai",
+        credential="opencode",
+        key_label="OPENCODE GO API KEY",
+        key_hint="opencode.ai/auth → API key for your Go subscription",
+        docs="https://opencode.ai/docs/go/",
+        endpoint="https://opencode.ai/zen/go/v1",
+        model="deepseek-v4.1-flash",
+        env_aliases=("OPENCODE_API_KEY",),
+        session_header="x-opencode-session",
+        extra_body={"thinking": {"type": "enabled"}, "reasoning_effort": "max"},
     ),
     AgentProvider(
         id="mistral",
