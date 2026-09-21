@@ -195,3 +195,22 @@ successfully with the same executable hash as the tested frozen build.
 - With explicit user approval, three legacy Spice Maker vault credentials were removed
   after fresh-process verification of the encrypted files. Other applications' entries
   were not touched. A scan of release/source files found neither selected saved key.
+
+
+## 2026-09-20 — selected datasheet isolation and visible progress (1.1.11)
+
+The UCC28251 run reused a folder containing LM358 and oscillator documents. The
+model extraction path accidentally selected all three: 93 electrical pages and
+18 initial batches. Explicit document selection now limits this run to UCC28251:
+45 electrical pages and 9 batches, preserving manufacturing-appendix accounting.
+No API calls were made for this before/after planning check.
+
+Progress reports completed/total batches, active requests, retries and elapsed
+time every five seconds. Failed work is not counted as completed. Tests cover
+reused-folder isolation, cache independence and progress during a blocked request.
+Source, package and splash version must match; the window title shows 1.1.11.
+
+General tests: 1,186 passed / 4 skipped. Bob tests: 1,076 passed / 8 skipped.
+Ruff passed. Both local frozen GUI launch checks passed. Local Application Control
+blocked the packaging tool; a manual GitHub Windows packaging workflow now builds
+the same source with no local policy changes and records artifact hashes.

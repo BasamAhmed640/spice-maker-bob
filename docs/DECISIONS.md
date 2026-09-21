@@ -112,3 +112,13 @@ is provided. Explicit environment variables still support CLI automation.
 Defaults are omitted from settings JSON; model evidence and caches remain separate.
 Existing vault entries require explicit user-authorized migration/removal; the app
 does not enumerate or delete a user's other saved credentials.
+
+
+## 2026-09-20 — scope extraction to the selected datasheet
+
+A model run must pass its registered document ID to extraction. Other documents
+left in a shared output folder are excluded before text collection, egress checks,
+disclosures and cache keys. The board-project API keeps its explicit all-document
+default. Excluding unrelated files must not change their stored originals.
+Installer builds must match the application and project version. Windows packaging
+can run on GitHub's hosted runner; this does not change local Windows security policy.

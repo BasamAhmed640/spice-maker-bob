@@ -12,7 +12,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import replace
 from pathlib import Path
 
@@ -30,6 +30,78 @@ from boardmodeler.providers.base import (
     request_hash,
 )
 from boardmodeler.providers.http_inference import extract_json_object
+
+PROGRESS_INTERVAL_S = 5.0
+
+
+def _run_batches(jobs, run, progress, cancel):
+    """Keep progress alive while requests block; retain deterministic result order."""
+    started = time.monotonic()
+    lock = threading.Lock()
+    active, completed, failures = {}, set(), set()
+    results = [None] * len(jobs)
+
+    def execute(index, job):
+        pages = len({(s.doc_id, s.pdf_page) for r in job for s in r.snippets})
+
+        def report(detail):
+            with lock:
+                active[index] = (time.monotonic(), f"{pages} pages: {detail}")
+
+        report("starting")
+        try:
+            result = run(job, report)
+        except Exception:
+            with lock:
+                failures.add(index)
+            raise
+        else:
+            with lock:
+                completed.add(index)
+            return result
+        finally:
+            with lock:
+                active.pop(index, None)
+
+    def publish():
+        if progress is None:
+            return
+        now = time.monotonic()
+        with lock:
+            detail = (
+                f"{len(completed)}/{len(jobs)} batches complete; {len(active)} active; "
+                f"{int(now - started)}s elapsed"
+            )
+            if failures:
+                detail += f"; {len(failures)} failed"
+            if cancel is not None and cancel.is_set():
+                detail += "; cancellation requested, waiting for active API calls to return"
+            detail += " | " + "; ".join(
+                f"batch {index + 1}: {message} ({int(now - since)}s)"
+                for index, (since, message) in sorted(active.items())
+            )
+        progress(detail.rstrip(" |"))
+
+    failure = None
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        pending = {pool.submit(execute, index, job): index for index, job in enumerate(jobs)}
+        publish()
+        while pending:
+            done, _ = wait(pending, timeout=PROGRESS_INTERVAL_S, return_when=FIRST_COMPLETED)
+            for future in done:
+                index = pending.pop(future)
+                if future.cancelled():
+                    continue
+                try:
+                    results[index] = future.result()
+                except Exception as exc:
+                    failure = failure or exc
+                    for queued in pending:
+                        queued.cancel()
+            publish()
+    if failure is not None:
+        raise failure
+    return results
 
 
 class AgentExtractionProvider:
@@ -80,7 +152,12 @@ class AgentExtractionProvider:
             raise ProviderError("remote_not_enabled", "authorize processing this datasheet first")
         rows = next((r for r in requests if r.task == ExtractionTask.REQUIREMENTS), None)
         if rows is None or sum(len(s.text) for s in rows.snippets) <= 24_000:
-            return self._extract_combined(requests, cancel)
+            return _run_batches(
+                [requests],
+                lambda job, report: self._extract_combined(job, cancel, progress=report),
+                self.progress,
+                cancel,
+            )[0]
         # These explicitly labelled manufacturing appendices have no circuit
         # behavior. Keep their page inventory; never cut an unrecognized section.
         appendix = re.compile(
@@ -128,7 +205,7 @@ class AgentExtractionProvider:
             )
         identity = self.identity()
 
-        def batch(job, depth=0):
+        def batch(job, depth=0, progress=None):
             key = request_hash(
                 job[0],
                 provider=identity.provider,
@@ -139,6 +216,8 @@ class AgentExtractionProvider:
             if cached and cached.is_file():
                 payload = json.loads(cached.read_text(encoding="utf-8"))
                 _validate_combined(payload, job)
+                if progress:
+                    progress("validated cached result")
                 return {
                     r.task: ExtractionResponse(
                         payload[r.task.value],
@@ -164,9 +243,11 @@ class AgentExtractionProvider:
                     ]
                 else:
                     return None
-                if self.progress:
-                    self.progress("resuming an interrupted extraction as smaller cached requests")
-                return _merge_batches([batch(child, depth + 1) for child in children], identity)
+                if progress:
+                    progress("retrying smaller requests")
+                return _merge_batches(
+                    [batch(child, depth + 1, progress) for child in children], identity
+                )
 
             previous_failure = False
             if self.diagnostics_dir:
@@ -184,7 +265,7 @@ class AgentExtractionProvider:
             response = split() if previous_failure else None
             if response is None:
                 try:
-                    response = self._extract_combined(job, cancel)
+                    response = self._extract_combined(job, cancel, progress=progress)
                 except ProviderError as exc:
                     if exc.code not in {"agent_extraction_failed", "extraction_payload_invalid"}:
                         raise
@@ -199,12 +280,17 @@ class AgentExtractionProvider:
                 )
             return response
 
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            results = list(pool.map(batch, jobs))
+        results = _run_batches(
+            jobs, lambda job, report: batch(job, progress=report), self.progress, cancel
+        )
         return _merge_batches(results, identity)
 
     def _extract_combined(
-        self, requests: Sequence[ExtractionRequest], cancel: threading.Event | None = None
+        self,
+        requests: Sequence[ExtractionRequest],
+        cancel: threading.Event | None = None,
+        *,
+        progress=None,
     ) -> dict[ExtractionTask, ExtractionResponse]:
         if not requests:
             return {}
@@ -292,15 +378,15 @@ class AgentExtractionProvider:
         with tempfile.TemporaryDirectory(prefix="spice-extract-") as scratch:
             next_prompt = prompt
             for attempt in range(2):
-                if self.progress:
-                    self.progress(
-                        f"extraction request {attempt + 1}/2: waiting for the selected API"
-                    )
+                if progress:
+                    progress(f"API request {attempt + 1}/2, waiting for response")
                 request = AuthorRequest(
                     next_prompt, Path(scratch), Path(scratch), 1, expect_text=True
                 )
                 started = time.monotonic()
                 result = self.backend.author(request, cancel)
+                if progress:
+                    progress("response received, validating extracted records")
                 if self.diagnostics_dir is not None:
                     # API backends return credential-redacted text, including failure replies.
                     self.diagnostics_dir.mkdir(parents=True, exist_ok=True)

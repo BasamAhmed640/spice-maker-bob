@@ -148,6 +148,7 @@ def extract_requirements(
     project: Project,
     *,
     provider: Provider,
+    document_ids: Sequence[str] | None = None,
     task_pages: Mapping[ExtractionTask | str, Sequence[int]] | None = None,
     max_chars: int = MAX_SNIPPET_CHARS,
     cache_dir: Path | None = None,
@@ -156,6 +157,10 @@ def extract_requirements(
     cancel: threading.Event | None = None,
 ) -> ExtractionResult:
     """Run the four extraction tasks over ``project``'s documents.
+
+    ``document_ids`` restricts every read, disclosure, cache key and provider request
+    to the explicitly chosen documents. None retains the board-project behavior.
+    Unknown IDs fail before reading document contents or calling the provider.
 
     ``cache_dir`` defaults to the project's ``evidence/cache``; pass an explicit
     directory to control it, or set ``DataPolicy.cache_extraction=False`` to
@@ -168,6 +173,11 @@ def extract_requirements(
     remote_provider = identity.kind is not ProviderKind.FIXTURE
 
     records = {record.doc_id: record for record in project.documents()}
+    if document_ids is not None:
+        selected = set(document_ids)
+        if selected - records.keys():
+            raise ProviderError("document_not_found", "a selected document is not registered")
+        records = {doc_id: record for doc_id, record in records.items() if doc_id in selected}
     findings, snippets_by_doc = _collect_snippets(project, records, max_chars=max_chars)
 
     codec = _PageLookup(project, records, snippets_by_doc)

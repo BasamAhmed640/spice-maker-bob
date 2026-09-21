@@ -89,7 +89,9 @@ def _window_title() -> str:
 
     only = agent_providers.only_provider()
     suffix = f" · {only.label} only" if only is not None else ""
-    return f"Spice Maker — IC model maker{suffix}"
+    from boardmodeler import __version__
+
+    return f"Spice Maker {__version__} — IC model maker{suffix}"
 
 
 def _configured_provider() -> object:

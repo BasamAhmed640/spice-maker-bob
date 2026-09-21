@@ -1527,6 +1527,7 @@ class _Run:
             result = extract_requirements(
                 project,
                 provider=extraction_provider,
+                document_ids=[self.record.doc_id],
                 cache_dir=self.cache_dir,
                 policy=policy,
                 allow_remote=True if self.request.allow_remote else None,

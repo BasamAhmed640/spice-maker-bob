@@ -1,0 +1,43 @@
+name: Windows installer
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: uv sync --frozen --all-extras
+      - run: dotnet tool install --global vpk --version 1.2.0
+      - name: Build and verify the installer
+        shell: pwsh
+        run: |
+          $version = & ./.venv/Scripts/python.exe -c "from boardmodeler import __version__; print(__version__)"
+          & ./installer/build.ps1 -Version $version
+          if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
+          $record = @{
+            version = $version
+            source_commit = (git rev-parse HEAD)
+            executable_sha256 = (Get-FileHash ./dist/SpiceMaker/SpiceMaker.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+            installer_sha256 = (Get-FileHash ./Install.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
+          $record | ConvertTo-Json | Set-Content ./build/build-verification.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+          path: |
+            Install.exe
+            INSTALL.txt
+            SHA256SUMS.txt
+            installer/assets/pepper-splash.gif
+            build/build-verification.json
+            build/gui-startup.png

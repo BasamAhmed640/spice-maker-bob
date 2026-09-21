@@ -39,6 +39,8 @@ if (-not (Test-Path -LiteralPath $python)) { throw "Run uv sync --frozen --all-e
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must be x.y.z" }
 & $python -c "import sys; assert sys.version_info[:2] == (3, 14), 'Python 3.14 is required'"
 if ($LASTEXITCODE -ne 0) { throw "The build requires Python 3.14" }
+$sourceVersion = (& $python -c "from boardmodeler import __version__; import tomllib; from pathlib import Path; p=tomllib.loads(Path('pyproject.toml').read_text()); assert p['project']['version']==__version__; print(__version__)")
+if ($LASTEXITCODE -ne 0 -or $Version -ne $sourceVersion) { throw "Installer version must match source and pyproject.toml ($sourceVersion)." }
 $bobOnly = (& $python -c "from boardmodeler.build_flavor import BOB_ONLY; print(int(BOB_ONLY))") -eq "1"
 if (-not $Name) { $Name = if ($bobOnly) { "Spice Maker Bob" } else { "Spice Maker" } }
 if (-not $PackId) { $PackId = if ($bobOnly) { "SpiceMakerBob" } else { "SpiceMaker" } }
