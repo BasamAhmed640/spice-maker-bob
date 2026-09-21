@@ -76,6 +76,11 @@ def test_internal_subcircuits_and_parameters(tmp_path):
 # the bounded load check: it may say "loaded" or nothing, never "verified"
 
 CLEAN_LOG = "Total elapsed time: 0.001 seconds\n"
+OP_RAW = (
+    b"Title: TEST_FIXTURE\nPlotname: Operating Point\nFlags: real\n"
+    b"No. Variables: 2\nNo. Points: 1\nVariables:\n"
+    b"0 V(p0) voltage\n1 V(p1) voltage\nValues:\n0 0\n0\n"
+)
 REJECTED_LOG = "UCC28251.lib(68): Expected 2 node names here\n"
 
 
@@ -95,6 +100,8 @@ def _scripted_simulator(
     cancelled: bool = False,
     log_path: bool = True,
     raises: Exception | None = None,
+    terminated_after_marker: bool = False,
+    raw_bytes: bytes = OP_RAW,
 ) -> list[dict]:
     """Patch ``run_batch`` with a scripted run and return the calls it observed.
 
@@ -114,7 +121,7 @@ def _scripted_simulator(
             log.write_text(log_text, encoding="utf-8")
         raw_file = run_dir / "load.raw"
         if raw:
-            raw_file.write_bytes(b"raw")
+            raw_file.write_bytes(raw_bytes)
         return BatchResult(
             deck=Path(deck),
             run_dir=run_dir,
@@ -126,6 +133,7 @@ def _scripted_simulator(
             raw_path=raw_file if raw else None,
             log_path=log if log_path else None,
             cancelled=cancelled,
+            terminated_after_marker=terminated_after_marker,
         )
 
     monkeypatch.setattr(ltspice_mod, "run_batch", fake)
@@ -177,6 +185,29 @@ def test_load_check_a_timeout_is_inconclusive_not_loaded(tmp_path, monkeypatch):
     result = load_check(_model(tmp_path), "TEST", tmp_path / "check", tmp_path / "LTspice.exe")
 
     assert result["status"] == "inconclusive"
+    assert result["electrical_accuracy_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("log_text", "raw_bytes", "expected"),
+    [
+        (CLEAN_LOG, OP_RAW, "loaded"),
+        ("", OP_RAW, "inconclusive"),
+        (CLEAN_LOG, b"truncated raw", "inconclusive"),
+    ],
+)
+def test_completed_load_survives_watchdog_cleanup(
+    tmp_path, monkeypatch, log_text, raw_bytes, expected
+):
+    _scripted_simulator(
+        monkeypatch,
+        exit_code=1,
+        terminated_after_marker=True,
+        log_text=log_text,
+        raw_bytes=raw_bytes,
+    )
+    result = load_check(_model(tmp_path), "TEST", tmp_path / "check", tmp_path / "LTspice.exe")
+    assert result["status"] == expected
     assert result["electrical_accuracy_verified"] is False
 
 
@@ -279,6 +310,7 @@ def test_record_load_states_whether_a_simulation_ran(status, simulation_run):
     assert returned["load_check"] == load
     assert returned["simulation_run"] is simulation_run
     assert returned["electrical_accuracy_verified"] is False
+    assert ("load ran" in returned["simulation_note"]) is simulation_run
 
 
 def test_cache_requires_matching_spec_and_model(tmp_path):
@@ -306,6 +338,29 @@ def test_repairs_are_bounded_and_spec_tampering_stops(tmp_path):
     assert not (tmp_path / "model/TEST.lib").exists()
     with pytest.raises(ValueError, match="spec_tampered"):
         author_model(spec, Backend(tamper=True), tmp_path, None, lambda _: None, {})
+
+
+def test_cancellation_during_cached_load_keeps_receipt_and_never_reauthors(tmp_path, monkeypatch):
+    import threading
+
+    from boardmodeler.authoring import sanity
+
+    spec = SpecSet("TEST", "TEST", "TEST_FIXTURE", (), PINS)
+    backend = Backend()
+    prepare_workdir(spec=spec, subckt="TEST", workdir=tmp_path)
+    author_model(spec, backend, tmp_path, None, lambda _: None, {})
+    receipt = (tmp_path / "sanity-report.json").read_bytes()
+    cancel = threading.Event()
+
+    def cancelled(*args, **kwargs):
+        cancel.set()
+        return {"status": "cancelled"}
+
+    monkeypatch.setattr(sanity, "load_check", cancelled)
+    with pytest.raises(ValueError, match="cancelled"):
+        author_model(spec, backend, tmp_path, cancel, lambda _: None, {})
+    assert backend.calls == 1
+    assert (tmp_path / "sanity-report.json").read_bytes() == receipt
 
 
 @pytest.mark.parametrize("write_model", [True, False])
@@ -396,7 +451,7 @@ def test_quick_pipeline_records_the_one_load_check_and_publishes(tmp_path, monke
         log = run_dir / "load.log"
         log.write_text(CLEAN_LOG, encoding="utf-8")
         raw = run_dir / "load.raw"
-        raw.write_bytes(b"raw")
+        raw.write_bytes(OP_RAW)
         return BatchResult(
             deck=Path(deck),
             run_dir=run_dir,

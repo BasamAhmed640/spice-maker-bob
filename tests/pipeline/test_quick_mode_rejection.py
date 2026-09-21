@@ -83,3 +83,22 @@ def test_a_model_the_real_simulator_rejects_is_never_published(tmp_path, monkeyp
     assert backend.calls == 2, "one draft plus the single bounded repair"
     assert result.status == "UNKNOWN"
     assert not (out / "sanity-report.json").exists(), "a refused build publishes no report"
+
+
+def test_repair_preserves_independent_subcircuits_in_real_ltspice(tmp_path, ltspice_exe):
+    from boardmodeler.authoring.model_syntax import normalize_behavioral_sources
+    from boardmodeler.authoring.sanity import load_check
+
+    model = tmp_path / "scoped.lib"
+    model.write_text(
+        "* TEST_FIXTURE: no device accuracy claim\n"
+        ".subckt DUT a b c d\nX1 a b FIX\nX2 a b c d VALID\n.ends DUT\n"
+        ".subckt FIX a b\nG1 a b I=V(a,b)\nBMON n b V=I(G1)\nR1 n b 1k\n.ends FIX\n"
+        ".subckt VALID a b c d\nG1 a b c d 1m\n"
+        "BMON n b V=I(G1)\nR1 n b 1k\n.ends VALID\n",
+        encoding="utf-8",
+    )
+    assert normalize_behavioral_sources(model, tmp_path / "evidence")
+    loaded = load_check(model, "DUT", tmp_path / "load", ltspice_exe)
+    assert loaded["status"] == "loaded", loaded
+    assert loaded["electrical_accuracy_verified"] is False

@@ -1,3 +1,25 @@
+## 2026-09-21 — 1.3.0 source ready for installer verification
+
+Fixed behavioral-source repair scope (including nested subcircuits, forward current
+references and local name collisions), cancellation during cached load checks and
+contradictory quick-mode documentation. Old sanity receipts are invalidated.
+The Windows download workflow now defaults to the checked-out source version.
+
+Real LTspice exposed a successful operating-point run being labelled inconclusive
+after watchdog cleanup. A completed log plus readable finite operating-point data
+now establishes `loaded` even when the watchdog terminates the finished process.
+Missing/truncated data and missing completion markers remain inconclusive. This is
+not electrical accuracy verification and never changes electrical rows to PASS.
+
+Both editions: `python -m pytest -q tests/authoring/test_sanity.py
+tests/authoring/test_model_syntax.py tests/pipeline/test_quick_mode_rejection.py`:
+45 passed each, including two real LTspice cases (rejection prevents export;
+independent subcircuits load after repair). Earlier focused authoring/publish/GUI
+regressions passed 66 per edition before the three output-completion cases were added.
+`ruff check .`, `ruff format --check .`, and `git diff --check` passed.
+No inference requests were made. Full source CI and fresh installer verification
+must pass on this source before publication. No five-device accuracy claim is made.
+
 # Quick structural-check mode 1.3.0 — 2026-09-21
 
 GUI GO now defaults to local structural checks, with no AI test-fixture planning or

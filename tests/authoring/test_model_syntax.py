@@ -141,3 +141,51 @@ def test_a_crlf_library_keeps_its_own_endings(tmp_path):
     assert b"B_G1 a b I = 2m * V(a)\r\n" in text
     assert text.count(b"\r\n") == 4, "every original terminator is preserved"
     assert text.count(b"\n") == 4, "no bare LF was introduced"
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_repair_and_current_references_stay_in_their_own_scope(tmp_path, nested):
+    repaired = ".subckt FIX a b\nBMON a b V = I(G1)\nG1 a b I = V(a,b)\n"
+    untouched = ".subckt VALID a b c d\nG1 a b c d 1m\nBMON a b V = I(G1)\n.ends VALID\n"
+    body = (
+        repaired + untouched + "BPOST a b V = I(G1)\n.ends FIX\n"
+        if nested
+        else repaired + ".ends FIX\n" + untouched
+    )
+    model = tmp_path / "scopes.lib"
+    model.write_bytes(body.encode())
+    assert normalize_behavioral_sources(model, tmp_path / "evidence")
+    text = model.read_text(encoding="utf-8")
+    assert untouched in text
+    assert "BMON a b V = I(B_G1)" in text
+    if nested:
+        assert "BPOST a b V = I(B_G1)" in text
+    validate_library(model)
+
+
+def test_independent_repairs_handle_local_collisions_and_preserve_comments(tmp_path):
+    body = (
+        ".subckt A a b\n* I(G1) documents the original\n\n"
+        "  G1 a b I=V(a,b) ; I(G1) remains a comment\n"
+        "BMON a b V=I ( g1 )\nB_G1 a b I=0\n.ends A\n"
+        ".SUBCKT B a b\nG1 a b I=V(a,b)\nBMON a b V=I(G1)\n.ENDS B\n"
+    )
+    model = tmp_path / "scopes.lib"
+    model.write_bytes(body.encode())
+    assert normalize_behavioral_sources(model, tmp_path / "evidence")
+    text = model.read_text(encoding="utf-8")
+    assert "* I(G1) documents the original\n\n  B_G1_FIX" in text
+    assert "; I(G1) remains a comment" in text
+    assert "BMON a b V=I ( B_G1_FIX )" in text
+    assert ".SUBCKT B a b\nB_G1 a b I=V(a,b)\nBMON a b V=I(B_G1)" in text
+    validate_library(model)
+
+
+def test_repair_does_not_hide_duplicate_component_names(tmp_path):
+    model = tmp_path / "duplicate.lib"
+    body = b".subckt A a b c d\nG1 a b I=V(a,b)\nG1 a b c d 1m\n.ends A\n"
+    model.write_bytes(body)
+    assert not normalize_behavioral_sources(model, tmp_path / "evidence")
+    assert model.read_bytes() == body
+    with pytest.raises(ProbeError):
+        validate_library(model)

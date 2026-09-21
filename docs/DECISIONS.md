@@ -142,4 +142,15 @@ requirements intact and falls back to all pages when pin headings are unrecogniz
 
 ## 2026-09-21: user-selected quick default
 
-The user requested local sanity checks instead of waiting for full simulation verification. GUI quick mode skips independent AI test planning and simulation, preserves every extracted row, and labels exported models electrically unverified. Full verification remains available explicitly. No numerical tolerance or measured PASS requirement is weakened. Source/CLI full defaults remain backward compatible; the CLI offers --sanity.
+The user requested local sanity checks instead of waiting for full simulation verification. GUI quick mode skips independent AI test planning and the full electrical simulation suite, preserves every extracted row, and labels exported models electrically unverified. Full verification remains available explicitly. No numerical tolerance or measured PASS requirement is weakened. Source/CLI full defaults remain backward compatible; the CLI offers --sanity.
+
+
+## 2026-09-21: bounded load checks and local source repair
+
+Quick mode performs a generic unpowered LTspice load under a five-second deadline
+when the simulator is available. Explicit syntax rejection withholds the export;
+timeout or unavailable simulation is displayed as inconclusive/unavailable, never
+electrical PASS. Full electrical verification remains optional.
+Repairing a behavioral source must update current references only in that source's
+own subcircuit, preserving unrelated circuits and original evidence. The sanity
+receipt version changes so candidates from the earlier repair logic are not reused.

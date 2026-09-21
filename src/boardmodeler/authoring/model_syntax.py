@@ -65,33 +65,75 @@ def normalize_library_end(path: Path, evidence: Path) -> bool:
 
 
 def normalize_behavioral_sources(path: Path, evidence: Path) -> bool:
-    """Repair unambiguous E/G sources written with B-source V=/I= syntax."""
+    """Repair E/G sources and their current references within the owning subcircuit.
+
+    Component names are local to each subcircuit, including nested declarations.
+    Collect names before rewriting so forward references and collisions are handled
+    without changing unrelated scopes, comments, whitespace or line endings.
+    """
     if not path.is_file():
         return False
     original_bytes = path.read_bytes()
     original = original_bytes.decode("utf-8")
-    names = set(re.findall(r"(?m)^\s*([A-Za-z]\S*)", original.upper()))
-    replacements = {}
+    source = re.compile(r"(?i)^[ \t]*([EG]\S*)[ \t]+\S+[ \t]+\S+[ \t]+([IV])[ \t]*=")
+    lines = original.splitlines(keepends=True)
+    scopes: list[int] = []
+    stack = [0]
+    names: list[dict[str, int]] = [{}]
+    for line in lines:
+        fields = line.partition(";")[0].split()
+        first = fields[0].upper() if fields else ""
+        if first == ".SUBCKT":
+            stack.append(len(names))
+            names.append({})
+        scopes.append(stack[-1])
+        if first and first[0].isalpha():
+            counts = names[stack[-1]]
+            counts[first] = counts.get(first, 0) + 1
+        if first == ".ENDS":
+            if len(stack) == 1:
+                return False  # Let the validator reject malformed scope boundaries.
+            stack.pop()
+    if len(stack) != 1:
+        return False
 
-    def repair(match):
-        old, nodes, quantity = match.group(1), match.group(2), match.group(3)
+    replacements: list[dict[str, str]] = [{} for _ in names]
+    for index, line in enumerate(lines):
+        code, separator, comment = line.partition(";")
+        match = source.match(code)
+        if match is None:
+            continue
+        old, quantity = match[1], match[2]
         if (old[0].upper(), quantity.upper()) not in {("G", "I"), ("E", "V")}:
-            return match[0]
-        new = replacements.get(old.upper(), "B_" + old)
-        while old.upper() not in replacements and new.upper() in names:
+            continue
+        scope = scopes[index]
+        if names[scope][old.upper()] != 1:
+            continue  # Do not hide an existing duplicate by giving it another name.
+        new = "B_" + old
+        while new.upper() in names[scope]:
             new += "_FIX"
-        names.add(new.upper())
-        replacements[old.upper()] = new
-        return new + nodes + quantity + " ="
+        names[scope][new.upper()] = 1
+        replacements[scope][old.upper()] = new
+        lines[index] = code[: match.start(1)] + new + code[match.end(1) :] + separator + comment
 
-    text = re.sub(r"(?im)^\s*([EG]\S*)(\s+\S+\s+\S+\s+)([IV])\s*=", repair, original)
+    current = re.compile(r"(?i)\bI[ \t]*\([ \t]*([^()\s]+)[ \t]*\)")
+    for index, line in enumerate(lines):
+        if line.lstrip().lower().startswith(("*", ";", ".subckt", ".ends")):
+            continue
+        local = replacements[scopes[index]]
+        code, separator, comment = line.partition(";")
+
+        def reference(match, local=local):
+            new = local.get(match[1].upper())
+            if new is None:
+                return match[0]
+            start, end = match.start(1) - match.start(), match.end(1) - match.start()
+            return match[0][:start] + new + match[0][end:]
+
+        lines[index] = current.sub(reference, code) + separator + comment
+    text = "".join(lines)
     if text == original:
         return False
-    text = re.sub(
-        r"(?i)\bI\(\s*([^()\s]+)\s*\)",
-        lambda m: "I(" + replacements.get(m[1].upper(), m[1]) + ")",
-        text,
-    )
     archive_original(evidence, original_bytes)
     write_library(path, text)
     return True

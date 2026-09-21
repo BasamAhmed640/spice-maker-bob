@@ -4,8 +4,8 @@ on:
     inputs:
       version:
         description: Installer version (x.y.z)
-        required: true
-        default: '1.1.7'
+        required: false
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -14,15 +14,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v7
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
       - run: uv sync --frozen --all-extras
-      - run: dotnet tool install --global vpk --version 1.2.0
       - name: Build animated installer and download zip
         env:
           INSTALLER_VERSION: ${{ inputs.version }}
-        run: ./installer/build.ps1 -Version $env:INSTALLER_VERSION
+        shell: pwsh
+        run: |
+          $version = $env:INSTALLER_VERSION
+          if (-not $version) {
+            $version = & ./.venv/Scripts/python.exe -c "from boardmodeler import __version__; print(__version__)"
+          }
+          & ./installer/build.ps1 -Version $version
+          if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-download
