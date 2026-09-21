@@ -1,0 +1,9 @@
+{
+  "version": "1.3.0",
+  "source_commit": "8abf88658c4effdd25fa31b96ae9701703730ba6",
+  "source_ci_run": "35572967584",
+  "installer_run": "35572967282",
+  "installer_sha256": "54b8203931a438c5b16aa52d34ff47e8946867cca3e3c21dffce488ac5f960d0",
+  "portable_gui_and_isolation_verification": "PASS",
+  "real_ltspice_regressions": "2 passed locally per edition; synthetic circuits, no device accuracy claim"
+}
