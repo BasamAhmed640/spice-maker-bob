@@ -1,3 +1,17 @@
+# API completion release 1.2.1 - 2026-09-20
+
+The streamed HTTP reader now stops at [DONE] instead of waiting for socket EOF,
+while the decoder still enforces finish_reason. Extraction reports actual received
+byte counts per request, and metadata uses complete labelled pin sections without
+removing any electrical requirements. See API_STREAM_PROGRESS.md.
+
+Validation: full source suite `1090 passed, 8 skipped, 159 deselected` with
+`pytest -q -m 'not ltspice and not network'`; Ruff check/format passed. A real localhost
+server reproduces the old reader timing out after sending a completed response; the
+new reader returns immediately. Five vendor PDFs retain all electrical pages while
+metadata input is reduced. No new paid inference call or complete UCC28251 model is
+claimed by those checks. Portable install verification remains required by build.ps1.
+
 # Portable release 1.2.0 - 2026-09-20
 
 Install.exe now extracts app/ beside itself, preserving this folder's data/ and

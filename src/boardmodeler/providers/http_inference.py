@@ -37,7 +37,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from boardmodeler.config import ProviderConfig
@@ -91,6 +91,7 @@ class HttpRequest:
     headers: dict[str, str]
     body: bytes
     timeout_s: float
+    progress: Callable[[str], None] | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -157,7 +158,7 @@ def urllib_transport(request: HttpRequest) -> HttpResponse:
             return HttpResponse(
                 status=int(response.status),
                 headers={str(key): str(value) for key, value in response.headers.items()},
-                body=_read_response_body(response, deadline),
+                body=_read_response_body(response, deadline, progress=request.progress),
             )
     except urllib.error.HTTPError as exc:
         try:
@@ -173,9 +174,15 @@ def urllib_transport(request: HttpRequest) -> HttpResponse:
         )
 
 
-def _read_response_body(response, deadline):
+def _read_response_body(response, deadline, *, progress=None):
     """Enforce a whole-response deadline even while SSE keeps the socket alive."""
     chunks, size = [], 0
+    headers = getattr(response, "headers", {})
+    streaming = "text/event-stream" in str(headers.get("Content-Type", "")).lower()
+    line_buffer = b""
+    reported = 0.0
+    if progress:
+        progress("API connected; waiting for response data")
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -192,6 +199,21 @@ def _read_response_body(response, deadline):
         if size > 128 * 1024 * 1024:
             raise ValueError("API response exceeds the 128 MiB transport bound")
         chunks.append(chunk)
+        if progress and time.monotonic() - reported >= 1:
+            progress(
+                f"API receiving {'stream' if streaming else 'response'}: {size / 1024:.1f} KiB"
+            )
+            reported = time.monotonic()
+        if streaming:
+            line_buffer += chunk
+            while b"\n" in line_buffer:
+                line, line_buffer = line_buffer.split(b"\n", 1)
+                if line.rstrip(b"\r").strip() == b"data: [DONE]":
+                    if progress:
+                        progress("API stream complete; decoding response")
+                    # The decoder still requires finish_reason and validates every event.
+                    # A server may keep the connection open after completing this stream.
+                    return b"".join(chunks)
 
 
 def probe_endpoint(

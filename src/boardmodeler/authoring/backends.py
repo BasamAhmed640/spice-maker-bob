@@ -25,7 +25,7 @@ import subprocess
 import threading
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -97,6 +97,7 @@ class AuthorRequest:
     max_turns: int
     expect_text: bool = False
     session_id: str | None = None
+    progress: Callable[[str], None] | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)

@@ -131,3 +131,10 @@ setup. The installer creates no global install/shortcut/credential entries. Upda
 replace app/ only. DPAPI ciphertext, scratch directories and model exports stay local.
 Normalize only unambiguous flat citation page numbers; conflicting page numbers remain
 validation errors. Preserve all numeric requirements and reasoning settings.
+
+## 2026-09-20 - Respect stream completion and expose real network activity
+
+HTTP SSE [DONE] ends the response without waiting for connection EOF. The decoder
+still rejects missing finish reasons. Progress is per request, carries counts only,
+and cannot mix concurrent batches. Metadata section routing leaves full electrical
+requirements intact and falls back to all pages when pin headings are unrecognized.

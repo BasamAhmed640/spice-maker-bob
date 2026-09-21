@@ -1,6 +1,8 @@
 # Spice Maker Bob
 
-**1.2.0 is portable.** Extract the GitHub **Code > Download ZIP** archive and run
+**1.2.1 fixes streamed API completion and shows received-data progress.** [API fix and measured checks](docs/API_STREAM_PROGRESS.md).
+
+**This build is portable.** Extract the GitHub **Code > Download ZIP** archive and run
 **Install.exe** inside it. The animated installer puts the app in `app/` in that same
 folder. Open `Start.cmd` next time. First launch asks you to choose LTspice and a model
 folder inside this extracted folder, and enter your key. It never restores settings

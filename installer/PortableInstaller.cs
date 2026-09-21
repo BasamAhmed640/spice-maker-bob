@@ -8,8 +8,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 
 [assembly: System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8")]
-[assembly: AssemblyVersion("1.2.0.0")]
-[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyVersion("1.2.1.0")]
+[assembly: AssemblyFileVersion("1.2.1.0")]
 
 internal static class PortableInstaller {
     private static string Root;
@@ -32,7 +32,7 @@ internal static class PortableInstaller {
         } else {
             using (var form = new Form())
             using (var gif = Assembly.GetExecutingAssembly().GetManifestResourceStream("splash.gif")) {
-                form.Text = Edition + " 1.2.0 setup";
+                form.Text = Edition + " 1.2.1 setup";
                 form.FormBorderStyle = FormBorderStyle.FixedDialog;
                 form.MaximizeBox = false; form.MinimizeBox = false;
                 form.StartPosition = FormStartPosition.CenterScreen;

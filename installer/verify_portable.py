@@ -42,7 +42,7 @@ def run(repo: Path) -> dict:
     assert not (second / "data/config.json").exists()
     assert not (second / "data/credentials.bin").exists()
     main = verify(exe, repo / "build/portable-main-window.png")
-    assert "1.2.0" in main["title"]
+    assert "1.2.1" in main["title"]
     env = os.environ.copy()
     env["BOARDMODELER_CONFIG"] = str(data / "config.json")
     check = subprocess.run(
