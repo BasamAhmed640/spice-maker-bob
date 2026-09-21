@@ -198,6 +198,7 @@ def _engine_module(calls: list[object]) -> ModuleType:
         datasheet: Path
         out_dir: Path
         backend_name: str
+        verification: str
         provider: str | None = None
         allow_remote: bool = False
 

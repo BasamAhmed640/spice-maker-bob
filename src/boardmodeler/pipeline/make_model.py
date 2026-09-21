@@ -237,6 +237,8 @@ class MakeModelRequest:
     #: author loop is never bounded by this (``max_iterations``/``turn_timeout_s`` stay
     #: ``None``), so the search cannot weaken a tested claim.
     reinforce_timeout_s: float | None = 45.0
+    #: Low-level API remains full by default; the GUI defaults to sanity mode.
+    verification: str = "full"
 
 
 @dataclass(frozen=True)
@@ -361,6 +363,7 @@ def _request_payload(request: MakeModelRequest) -> dict[str, Any]:
         "datasheet": str(request.datasheet),
         "out_dir": str(request.out_dir),
         "backend_name": request.backend_name,
+        "verification": request.verification,
         "provider": request.provider,
         "agent_model": request.agent_model,
         "agent_max_tokens": (
@@ -392,6 +395,7 @@ def _request_from_payload(payload: Mapping[str, Any]) -> MakeModelRequest:
         datasheet=Path(payload["datasheet"]),
         out_dir=Path(payload["out_dir"]),
         backend_name=str(payload.get("backend_name", "api")),
+        verification=str(payload.get("verification", "full")),
         provider=None if payload.get("provider") is None else str(payload["provider"]),
         agent_model=None if payload.get("agent_model") is None else str(payload["agent_model"]),
         agent_max_tokens=(
@@ -1205,6 +1209,8 @@ def _checked(request: MakeModelRequest) -> MakeModelRequest:
             f"subckt {request.subckt!r} is not a sanitized SPICE identifier "
             "(expected [A-Za-z_][A-Za-z0-9_]*)"
         )
+    if request.verification not in ("full", "sanity"):
+        raise ValueError("verification must be full or sanity")
     if request.max_iterations is not None and request.max_iterations < 1:
         raise ValueError(f"max_iterations must be >= 1 or None, got {request.max_iterations}")
     if request.stall_patience < 1:
@@ -1342,6 +1348,7 @@ class _Run:
         self.backend: AuthorBackend | None = None
         self.backend_name = ""
         self.turns = 0
+        self.sanity_ok = False
         self.reference_bindings: list[dict[str, Any]] | None = None
         self.citation_lookup = None
         self.status = Status.UNKNOWN.value
@@ -1367,6 +1374,16 @@ class _Run:
         supplied: list[Requirement] = []
         if request.requirements_json is not None:
             declared, supplied = _read_requirements_file(Path(request.requirements_json))
+            from boardmodeler.domain.records import PinDefinition
+
+            try:
+                saved = json.loads(Path(request.requirements_json).read_text(encoding="utf-8"))
+                self.pin_map = tuple(
+                    PinDefinition.model_validate(pin).model_dump(mode="json")
+                    for pin in saved.get("pin_map", [])
+                )
+            except (ValueError, TypeError) as exc:
+                raise _Stop("read", "BLOCKED", f"saved pin map is invalid: {exc}") from exc
         doc_id, note = self._document_id(declared, datasheet)
         store = DocumentStore(self.workdir)
         try:
@@ -1625,7 +1642,15 @@ class _Run:
         self.log.emit("bind", "running", "binding datasheet rows to the probe registry")
         self.spec_dir.mkdir(parents=True, exist_ok=True)
         requirements_path = self._write_requirements()
-        if request.bindings_json is not None:
+        if request.verification == "sanity":
+            from boardmodeler.authoring.sanity import DEFERRED
+
+            entries = [
+                {"req_id": r.req_id, "probe": None, "not_testable_reason": DEFERRED}
+                for r in self.requirements
+            ]
+            note = "quick mode: AI test planning and full simulation deferred"
+        elif request.bindings_json is not None:
             supplied = Path(request.bindings_json)
             if not supplied.is_file():
                 raise _Stop(
@@ -1667,7 +1692,7 @@ class _Run:
                 "part": request.part,
                 "subckt": request.subckt,
                 "doc_id": "" if self.record is None else self.record.doc_id,
-                "note": _BINDING_NOTE,
+                "note": note if request.verification == "sanity" else _BINDING_NOTE,
                 "bindings": [dict(entry) for entry in entries],
             },
         )
@@ -1689,8 +1714,12 @@ class _Run:
         self.log.emit(
             "bind",
             "ok",
-            f"{counts['testable']} row(s) judged by probes, "
-            f"{counts['not_testable']} declared not testable; {note}",
+            (
+                f"{len(self.requirements)} datasheet rows retained; no test-planning requests"
+                if request.verification == "sanity"
+                else f"{counts['testable']} row(s) judged by probes, "
+                f"{counts['not_testable']} declared not testable; {note}"
+            ),
             counts,
         )
 
@@ -1757,6 +1786,43 @@ class _Run:
         backend = self.backend or build_backend(self.request)
         self.backend = backend
         self.backend_name = backend.name
+        if self.request.verification == "sanity":
+            from boardmodeler.authoring.sanity import LABEL, author_model
+
+            if not _BUILD_LOCK.acquire(blocking=False):
+                raise _Stop("author", "BLOCKED", "another model build is running")
+            try:
+                prepare_workdir(
+                    spec=self.spec,
+                    subckt=self.request.subckt,
+                    workdir=self.workdir,
+                    prompt="Quick structural checks; full simulation was not requested.",
+                )
+                checked, turns = author_model(
+                    self.spec,
+                    backend,
+                    self.workdir,
+                    cancel,
+                    lambda detail: self.log.emit("author", "running", detail),
+                    self.unverified,
+                    max_attempts=min(2, self.request.max_iterations or 2),
+                )
+                self.report = HarnessReport(
+                    part=self.request.part,
+                    model_sha256=checked["model_sha256"],
+                    spec_digest=self.spec.digest(),
+                    outcomes=(),
+                )
+                self.sanity_ok = True
+                self.status, self.detail = "UNKNOWN", LABEL
+                self.log.emit("author", "ok", f"model ready after {turns} author turn(s)")
+                self.log.emit("judge", "ok", LABEL + "; no simulation was run")
+            except Exception as exc:
+                self.status, self.detail = "UNKNOWN", f"sanity authoring stopped: {exc}"
+                self.log.emit("judge", "failed", self.detail)
+            finally:
+                _BUILD_LOCK.release()
+            return
         install = locate()
         if install is None:
             self.log.emit("author", "failed", LTSPICE_MISSING)
@@ -1924,6 +1990,8 @@ class _Run:
         self.log.emit("save", "running", f"publishing deliverables into {self.out_dir}")
         notes: list[str] = []
         source = None if self.spec is None else model_file(self.workdir, self.request.subckt)
+        if self.request.verification == "sanity" and not self.sanity_ok:
+            source = None
         if source is not None and source.is_file():
             try:
                 self._publish(source, notes)
@@ -1971,6 +2039,23 @@ class _Run:
             (path for path in written if path.name == "MODEL_CARD.md"),
             self.out_dir / "MODEL_CARD.md",
         )
+        if request.verification == "sanity":
+            from boardmodeler.authoring.sanity import write_card
+
+            write_card(self.card_path, self.spec, self.report.model_sha256, self.unverified)
+            self._write_text(
+                self.out_dir / "sanity-report.json",
+                (self.workdir / "sanity-report.json").read_text(encoding="utf-8"),
+            )
+            self._write_text(
+                self.out_dir / "example.cir",
+                f"* {request.subckt}: connection template, not a verified test circuit\n"
+                "* Add power supplies, inputs, loads and an analysis before simulation.\n"
+                f".include {lib_target.name}\n"
+                f"XU1 {' '.join(ports)} {request.subckt}\n.end\n",
+            )
+            # Replace any old full-mode report: this artifact has no simulated outcomes.
+            self._write_text(self.out_dir / HARNESS_REPORT_NAME, self.report.to_json())
         example = self.out_dir / "example.cir"
         if example.is_file():
             self._write_text(self.out_dir / EXAMPLE_NAME, example.read_text(encoding="utf-8"))
@@ -2017,6 +2102,18 @@ class _Run:
     def rows(self) -> tuple[RowOutcome, ...]:
         if self.spec is None:
             return ()
+        if self.request.verification == "sanity":
+            return tuple(
+                RowOutcome(
+                    c.char_id,
+                    c.statement,
+                    _required_text(c),
+                    "not simulated",
+                    "UNKNOWN",
+                    c.source_page,
+                )
+                for c in self.spec.characteristics
+            )
         outcomes = {
             char_id: outcome for outcome in self.report.outcomes for char_id in outcome.char_ids
         }

@@ -1,5 +1,7 @@
 # Spice Maker Bob
 
+**1.3.0: quick structural checks are now the GUI default.** No AI test-circuit planning or simulation runs before delivery. Electrical accuracy remains explicitly unverified. Enable **Full simulation verification (slower)** in SETUP, or use **Run full verification** after a quick build. [Modes and limitations](docs/QUICK_MODE.md).
+
 **1.2.1 fixes streamed API completion and shows received-data progress.** [API fix and measured checks](docs/API_STREAM_PROGRESS.md).
 
 **This build is portable.** Extract the GitHub **Code > Download ZIP** archive and run

@@ -248,6 +248,15 @@ class SetupDialog(QDialog):
         self.reinforce_check.setChecked(self._config.web_reinforcement)
         grid.addWidget(self.reinforce_check, row, 1, 1, 3)
 
+        row += 1
+        self.full_verification_check = QCheckBox("Full simulation verification (slower)")
+        self.full_verification_check.setChecked(self._config.full_verification)
+        self.full_verification_check.setToolTip(
+            "Off: create a model and check its structure locally. Electrical accuracy remains "
+            "unverified. On: also plan test circuits and run LTspice verification."
+        )
+        grid.addWidget(self.full_verification_check, row, 1, 1, 3)
+
         # --- actions ---------------------------------------------------------
         row = QHBoxLayout()
         self.saved_label = QLabel("")
@@ -454,6 +463,7 @@ class SetupDialog(QDialog):
         self._config.ltspice.path = self.ltspice_edit.text().strip() or None
         self._config.default_model_dir = self.model_dir_edit.text().strip() or None
         self._config.web_reinforcement = self.reinforce_check.isChecked()
+        self._config.full_verification = self.full_verification_check.isChecked()
         if self._provider_choice is not None:
             self._config.agent_provider = self._provider_choice
             if self._provider.model_editable:

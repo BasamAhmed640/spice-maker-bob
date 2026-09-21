@@ -18,6 +18,8 @@ uv run boardmodeler model install --out build/tps54320 --user-lib --apply
 
 ## The model-maker path (D-014)
 
+The GUI defaults to `authoring/sanity.py`: no test planning or simulation, at most two author turns, and UNKNOWN electrical status. Full verification remains optional and its rules below still apply. Never describe a structural check as measured accuracy.
+
 * `authoring/` is the engine: `spec.py` (the frozen datasheet rows), `probes.py` (one deck
   per characteristic), `harness.py` (run + judge), `backends.py` + `loop.py` (the agent),
   `card.py` (deliverables). `pipeline/make_model.py` chains them; `ui/model_maker.py` and

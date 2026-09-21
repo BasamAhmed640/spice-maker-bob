@@ -1,3 +1,21 @@
+# Quick structural-check mode 1.3.0 — 2026-09-21
+
+GUI GO now defaults to local structural checks, with no AI test-fixture planning or
+LTspice simulation. Full verification is an explicit setup choice or follow-up
+button. Quick exports retain UNKNOWN electrical status and say accuracy is unverified.
+There are at most two authoring turns, hash/spec checked reuse, and no published stale
+candidate after an empty response. All app storage remains folder-local.
+
+Validation: 11 structural/pipeline cases and two GUI/persistence cases passed in the
+source suite. The general focused pipeline/GUI run passed 77 tests. The first full
+suite exposed old mock Request signatures that lacked the new verification field;
+after updating those fixtures, the affected CLI/provider suite passed all 18 tests
+in each edition. Ruff passed. Final source CI and actual packaged startup verification
+are required before the installer is added to main.
+
+The actual UCC28251 model from the ongoing 1.1.11 run passed the local static check.
+That is not an observed electrical-accuracy result and required no new inference.
+
 # API completion release 1.2.1 - 2026-09-20
 
 The streamed HTTP reader now stops at [DONE] instead of waiting for socket EOF,

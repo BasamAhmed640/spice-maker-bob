@@ -138,3 +138,8 @@ HTTP SSE [DONE] ends the response without waiting for connection EOF. The decode
 still rejects missing finish reasons. Progress is per request, carries counts only,
 and cannot mix concurrent batches. Metadata section routing leaves full electrical
 requirements intact and falls back to all pages when pin headings are unrecognized.
+
+
+## 2026-09-21: user-selected quick default
+
+The user requested local sanity checks instead of waiting for full simulation verification. GUI quick mode skips independent AI test planning and simulation, preserves every extracted row, and labels exported models electrically unverified. Full verification remains available explicitly. No numerical tolerance or measured PASS requirement is weakened. Source/CLI full defaults remain backward compatible; the CLI offers --sanity.

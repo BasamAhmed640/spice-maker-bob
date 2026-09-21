@@ -117,6 +117,7 @@ class AppConfig(BaseModel):
     default_project_dir: str | None = None
     log_level: str = "INFO"
     setup_complete: bool = False
+    full_verification: bool = False
 
 
 def config_dir() -> Path:

@@ -56,6 +56,7 @@ class _Request:
     datasheet: Path
     out_dir: Path
     backend_name: str = "bob"
+    verification: str = "full"
     team_id: str | None = None
     max_iterations: int = 3
     timeout_s: float = 120.0

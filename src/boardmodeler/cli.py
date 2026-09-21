@@ -274,6 +274,11 @@ def build_parser() -> argparse.ArgumentParser:
         "satisfied, or until the agent stops improving)",
     )
     model_build.add_argument("--timeout", type=float, default=120.0, help="seconds per simulation")
+    model_build.add_argument(
+        "--sanity",
+        action="store_true",
+        help="local structural checks only; no simulation test planning",
+    )
     model_build.add_argument("--json", action="store_true")
     model_build.add_argument(
         "--strict", action="store_true", help="exit 1 when the outcome is not PASS"
@@ -896,6 +901,8 @@ def _cmd_model_build(args: argparse.Namespace) -> int:
         return code
 
     subckt = args.subckt or _sanitize_subckt(args.part)
+    if args.sanity and args.datasheet is None:
+        return emit({"status": "BLOCKED", "detail": "--sanity requires --datasheet"}, 1)
     part_class = classify(args.part)
     if not part_class.supported:
         # The same refusal the pipeline raises, reported before it reads anything:
@@ -1088,6 +1095,7 @@ def _cmd_model_build_from_datasheet(args: argparse.Namespace, *, subckt: str, em
         subckt=subckt,
         datasheet=args.datasheet,
         out_dir=args.out,
+        verification="sanity" if args.sanity else "full",
         backend_name=args.backend,
         provider=args.provider,
         agent_model=args.model,

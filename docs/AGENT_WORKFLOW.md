@@ -1,3 +1,7 @@
+# Current default: quick model delivery
+
+In 1.3.0, GUI GO reads/extracts the datasheet, writes a model, runs local structural checks and exports it as electrically unverified. Full test planning and LTspice verification are opt-in. See [quick mode](QUICK_MODE.md) for the exact limits. The full workflow described below runs when full verification is selected.
+
 # What happens after GO
 
 The elapsed clock beside GO shows hours:minutes:seconds. It updates while the agent

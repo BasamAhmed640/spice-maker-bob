@@ -17,6 +17,7 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QThread, QTimer, Signal
@@ -393,12 +394,15 @@ class ModelMakerWindow(QMainWindow):
         out_dir.mkdir(parents=True, exist_ok=True)
 
         subckt = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in part).upper()
+        from boardmodeler.config import load_config
+
         request = MakeModelRequest(
             part=part,
             subckt=subckt,
             datasheet=datasheet,
             out_dir=out_dir,
             backend_name="api",
+            verification="full" if load_config().full_verification else "sanity",
             allow_remote=True,
             # The configured id as written, so ``build_api_backend`` refuses a provider
             # this build lacks instead of another provider answering with the wrong key.
@@ -421,7 +425,11 @@ class ModelMakerWindow(QMainWindow):
     def _rerun_tests(self) -> None:
         if self._out_dir is None:
             return
-        self._run_cli(["model", "test", "--out", str(self._out_dir), "--json"])
+        request = getattr(self._result, "request", None)
+        if request is not None:
+            self._start(replace(request, verification="full"))
+        else:
+            self._run_cli(["model", "test", "--out", str(self._out_dir), "--json"])
 
     def _install(self) -> None:
         if self._out_dir is None:
@@ -535,6 +543,11 @@ class ModelMakerWindow(QMainWindow):
             f"color: {_STATUS_COLOUR.get(status, '#ffffff')}; font-family: Consolas; "
             "font-size: 10pt;"
         )
+        quick = getattr(getattr(result, "request", None), "verification", "full") == "sanity"
+        if quick and getattr(result, "lib_path", None) is not None:
+            self.status_label.setText("SANITY CHECKED — electrical accuracy unverified")
+            self.status_label.setStyleSheet("color: #55ffff;")
+        self.again_button.setText("Run full verification" if quick else "Run tests again")
         rows = getattr(result, "rows", ()) or ()
         self.rows.setRowCount(len(rows))
         for index, row in enumerate(rows):
