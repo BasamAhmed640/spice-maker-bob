@@ -1,5 +1,7 @@
 # Spice Maker Bob
 
+**1.1.11** processes only the selected PDF when a model folder is reused and shows live batch progress. The installer splash and app title display the same version. [What changed and what was verified](docs/EXTRACTION_PROGRESS.md).
+
 **SAVE & CHECK KEY** now verifies a newly saved key in the background, with a 15-second wait and clear verified/rejected/unverified results. [Credential safety and check details](docs/API_KEY_CHECK.md).
 
 Datasheet extraction and model verification now recover smaller requests, preserve failed-run feedback, and report untested numeric requirements honestly. See [coverage and reliability](docs/DATASHEET_ROBUSTNESS.md).
@@ -20,7 +22,7 @@ feedback. A model card records measured behavior and every uncovered requirement
 ## Install on Windows
 
 On the **main** branch, choose **Code → Download ZIP**, extract the archive and run
-**Install.exe** beside this README. The included **1.1.10** installer retains the animated
+**Install.exe** beside this README. The included **1.1.11** installer retains the animated
 pepper setup. INSTALL.txt contains instructions; SHA256SUMS.txt authenticates the installer.
 Python is bundled. LTspice and IBM Bob Shell are separate prerequisites. This build is unsigned.
 
@@ -89,7 +91,7 @@ uv run boardmodeler model test --out build/part --json
 The fixture/scripted backends remain clearly labeled deterministic test tools. No other
 AI catalog or author transport ships in this repository.
 
-Rebuild with `installer/build.ps1 -Version 1.1.10`. The build checks the frozen GUI before
+Rebuild with `installer/build.ps1 -Version 1.1.11`. The build checks the frozen GUI before
 packaging and refreshes Install.exe, INSTALL.txt and SHA256SUMS.txt at the repository
 root. These generated files must be committed for Code → Download ZIP to update.
 See [installer details](installer/README.md) and [current status](docs/STATUS.md).

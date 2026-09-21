@@ -214,3 +214,10 @@ General tests: 1,186 passed / 4 skipped. Bob tests: 1,076 passed / 8 skipped.
 Ruff passed. Both local frozen GUI launch checks passed. Local Application Control
 blocked the packaging tool; a manual GitHub Windows packaging workflow now builds
 the same source with no local policy changes and records artifact hashes.
+
+Final 1.1.11 installer built from `9ef259341cf779e1f6a15b919ca44e15c9773690` on GitHub Windows,
+installed with exit 0 and verified against executable/installer SHA256 records.
+The installed GUI title displays 1.1.11, encrypted keys remained readable, and
+all seven TLV9002 real-LTspice checks passed. Root Install.exe and the release ZIP
+contain the same installer. The earlier general-desktop update block is resolved
+for this tested build; no local Windows security policy was changed.
