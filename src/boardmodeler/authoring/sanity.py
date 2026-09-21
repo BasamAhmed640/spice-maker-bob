@@ -16,7 +16,131 @@ from boardmodeler.models.library import subckt_ports
 
 LABEL = "Sanity checked; electrical accuracy unverified"
 DEFERRED = "Full simulation verification was not requested; electrical accuracy unverified"
-VERSION = "structural-sanity-v1"
+VERSION = "structural-sanity-v2"
+
+#: A bounded, unpowered operating-point load: long enough for a real solve, short
+#: enough that a hung or pathological model cannot stall a quick build.
+LOAD_LIMIT_S = 5.0
+
+#: LTspice points at the offending construct as ``<file>(<line>):`` for every syntax,
+#: instantiation and name-resolution failure, with a caret under the token. Matching that
+#: shape is deliberate: a word list cannot know every message LTspice prints, and a
+#: rejection worded ``No such node.`` must not be published as a finished model.
+_LTSPICE_DIAGNOSTIC = re.compile(r"[^\s:]+\(\d+\)\s*:")
+
+#: Wording already observed in a rejection, kept as a second net for diagnostics that
+#: arrive without their file/line prefix.
+_REJECTION_WORDS = re.compile(
+    r"(?i)syntax|expected .+ here|unknown (?:parameter|subcircuit|symbol)|undefined|unrecognized"
+)
+
+
+def rejection_marker(detail: str) -> str | None:
+    """The simulator's words when it rejected the model outright, else ``None``."""
+    if not detail:
+        return None
+    if _LTSPICE_DIAGNOSTIC.search(detail) is None and _REJECTION_WORDS.search(detail) is None:
+        return None
+    return detail.strip()[:300]
+
+
+def load_check(path, subckt, folder, ltspice, cancel=None) -> dict:
+    """A generic unpowered operating-point load with no numerical acceptance test.
+
+    This establishes only that LTspice parsed the library, solved an operating point and
+    wrote a raw file inside :data:`LOAD_LIMIT_S`. It measures no datasheet behaviour, so
+    ``electrical_accuracy_verified`` is always False and anything that did not load stays
+    visibly ``inconclusive``, ``unavailable`` or ``cancelled`` rather than being dropped.
+    """
+    from boardmodeler.authoring.harness import _simulator_said
+    from boardmodeler.simulation.log import parse_log
+    from boardmodeler.simulation.ltspice import LtspiceLockTimeout, run_batch
+
+    if ltspice is None:
+        return {
+            "status": "unavailable",
+            "detail": "no LTspice executable was located",
+            "electrical_accuracy_verified": False,
+        }
+    if cancel is not None and cancel.is_set():
+        return {
+            "status": "cancelled",
+            "detail": "cancelled before the load check ran",
+            "electrical_accuracy_verified": False,
+        }
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    ports = subckt_ports(path.read_text(encoding="utf-8"), subckt)
+    nodes = [f"p{i}" for i in range(len(ports))]
+    deck = folder / "load.cir"
+    deck.write_text(
+        "* Generic unpowered load check; NOT an electrical accuracy test\n"
+        f'.include "{path.resolve().as_posix()}"\n'
+        + "\n".join(f"R{i} {node} 0 1G" for i, node in enumerate(nodes))
+        + f"\nXdut {' '.join(nodes)} {subckt}\n.op\n.end\n",
+        encoding="utf-8",
+    )
+    try:
+        result = run_batch(
+            Path(ltspice),
+            deck,
+            folder,
+            timeout_s=LOAD_LIMIT_S,
+            lock_timeout_s=0.0,
+            marker_grace_s=0.0,
+            cancel=cancel,
+        )
+    except (OSError, LtspiceLockTimeout) as exc:
+        return {
+            "status": "unavailable",
+            "detail": f"{type(exc).__name__}: {exc}",
+            "electrical_accuracy_verified": False,
+        }
+    # A missing log is an ordinary outcome (the batch never started), so it must not
+    # decide the status: parse an empty summary instead of failing the check.
+    log = parse_log(result.log_path) if result.log_path is not None else parse_log(text="")
+    said = _simulator_said(log)
+    rejected = rejection_marker(said)
+    if rejected is not None:
+        raise ValueError("LTspice rejected the model: " + rejected)
+    if result.cancelled:
+        status = "cancelled"
+    elif result.timed_out:
+        status = "inconclusive"
+    elif (
+        result.ok and result.raw_path is not None and not log.errors and not log.convergence_issues
+    ):
+        status = "loaded"
+    else:
+        status = "inconclusive"
+    return {
+        "status": status,
+        "detail": result.observed() + said,
+        "runtime_limit_s": LOAD_LIMIT_S,
+        "wall_s": result.wall_s,
+        "artifact_dir": str(folder),
+        "artifacts": {
+            entry.name: hashlib.sha256(entry.read_bytes()).hexdigest()
+            for entry in (deck, result.log_path, result.raw_path)
+            if entry is not None and entry.is_file()
+        },
+        "electrical_accuracy_verified": False,
+    }
+
+
+def record_load(checked: dict, load: dict) -> dict:
+    """Merge the bounded load result without ever implying electrical accuracy.
+
+    ``simulation_run`` states whether a simulator process actually ran; the separate
+    ``electrical_accuracy_verified`` flag stays False, so the two cannot be conflated.
+    """
+    checked["load_check"] = load
+    checked["simulation_run"] = load.get("status") in {"loaded", "inconclusive"}
+    checked["simulation_note"] = (
+        "one generic unpowered operating-point load ran under a five-second limit and "
+        "measured no datasheet behaviour"
+    )
+    return checked
 
 
 def check_model(path: Path, subckt: str, pin_map) -> dict:
@@ -84,20 +208,22 @@ def check_model(path: Path, subckt: str, pin_map) -> dict:
     }
 
 
-def write_card(path, spec, model_hash, unverified):
+def write_card(path, spec, model_hash, unverified, load=None):
     def cell(value):
         return str(value).replace("|", "\\|").replace("\n", " ")
 
     lines = [
         f"# {spec.part} — {LABEL}",
         "",
-        "No electrical simulation was run. These checks do not establish datasheet accuracy, "
+        "No electrical-accuracy simulation suite was run. These checks do not establish datasheet accuracy, "
         "convergence, timing, stability, or performance over temperature and operating conditions.",
         f"Model SHA256: `{model_hash}`. Specification SHA256: `{spec.digest()}`.",
         "",
         "Local checks cover subcircuit structure, unique element names, physical pin mapping, "
         "expression braces and self-contained subcircuit references. This is not a complete "
         "LTspice syntax parser. The generated symbol follows the model's pin order.",
+        "A generic unpowered LTspice load check has a five-second runtime limit and does not "
+        "measure datasheet performance. Its result: " + str(load or {"status": "not checked"}),
         "",
         "Use Run full verification when measured coverage is needed. The example is a "
         "connection template; add appropriate supplies, inputs, loads and analysis.",
@@ -169,7 +295,9 @@ def prompt_for(spec, unverified) -> str:
     )
 
 
-def author_model(spec, backend, workdir, cancel, progress, unverified, *, max_attempts=2):
+def author_model(
+    spec, backend, workdir, cancel, progress, unverified, *, max_attempts=2, ltspice=None
+):
     """One draft plus at most one structural repair, in isolated attempt folders."""
     workdir = Path(workdir)
     target = workdir / "model" / f"{spec.subckt}.lib"
@@ -183,6 +311,17 @@ def author_model(spec, backend, workdir, cancel, progress, unverified, *, max_at
                 and previous.get("spec_digest") == spec.digest()
                 and previous.get("model_sha256") == checked["model_sha256"]
             ):
+                record_load(
+                    checked,
+                    load_check(
+                        target,
+                        spec.subckt,
+                        workdir / "sanity-load" / uuid.uuid4().hex,
+                        ltspice,
+                        cancel,
+                    ),
+                )
+                receipt.write_text(json.dumps({**previous, **checked}, indent=2), encoding="utf-8")
                 progress("reused model with matching specification and structural-check receipt")
                 return checked, 0
         except ValueError, OSError:
@@ -219,11 +358,19 @@ def author_model(spec, backend, workdir, cancel, progress, unverified, *, max_at
         try:
             if not candidate.resolve().is_relative_to((folder / "model").resolve()):
                 raise ValueError("model path escaped the authoring folder")
+            from boardmodeler.authoring.model_syntax import normalize_behavioral_sources
+
+            normalize_behavioral_sources(candidate, folder / "syntax-originals")
             checked = check_model(candidate, spec.subckt, spec.pin_map)
+            progress(f"checking the LTspice load, {LOAD_LIMIT_S:.0f} s limit")
+            load = load_check(candidate, spec.subckt, folder / "load-check", ltspice, cancel)
         except (ValueError, OSError) as exc:
             problem = str(exc)
             progress(f"structural check needs repair: {problem}")
             continue
+        if cancel is not None and cancel.is_set():
+            raise ValueError("cancelled during the LTspice load check")
+        record_load(checked, load)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(candidate.read_bytes())
         receipt.write_text(

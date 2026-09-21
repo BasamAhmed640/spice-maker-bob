@@ -262,8 +262,8 @@ def export_project(
                     )
                 )
                 model_text = None
-            if record.kind != "vendor_original":
-                (out / "model.lib").write_text(model_text, encoding="utf-8")
+            if record.kind != "vendor_original" and model_text is not None:
+                (out / "model.lib").write_text(model_text, encoding="utf-8", newline="\n")
             # The hash is recorded even when the bytes are not shipped, so the
             # manifest still pins exactly which vendor artifact was used.
             model_files[chosen] = record.sha256

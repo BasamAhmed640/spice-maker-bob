@@ -24,6 +24,7 @@ from boardmodeler.authoring.probes import ProbeError, model_ports
 from boardmodeler.authoring.spec import Characteristic, SpecSet, load_tps54320_spec
 from boardmodeler.domain.enums import Status
 from boardmodeler.models.regulator import write_regulator_library
+from boardmodeler.simulation.log import LogSummary
 from boardmodeler.simulation.ltspice import BatchResult
 
 FIXTURE = Path(__file__).resolve().parents[2] / "fixtures" / "regulator" / "tps54320"
@@ -370,6 +371,34 @@ def test_a_deck_the_simulator_rejects_names_the_simulators_own_error(
     assert "Expected a sequence" in reason, reason
     assert "buck.lib(408)" in reason, reason
     assert "Expected a sequence" in report.feedback(), report.feedback()
+
+
+def test_a_long_path_no_longer_eats_the_diagnostic_budget() -> None:
+    """The simulator's error is what the author can act on; its directory is not.
+
+    A real Windows temp path is longer than the 300-character budget, so truncating
+    first would keep the prefix and drop ``Expected 2 node names here``.
+    """
+    prefix = "C:/" + "/".join(f"segment_{n:02d}_padding" for n in range(14)) + "/load-check/"
+    error = "UCC28251.lib(68): Expected 2 node names here"
+    log = LogSummary(
+        path=None,
+        errors=[
+            prefix + error,
+            prefix + error,
+            "second.lib(3): Unknown subcircuit called in: xu1",
+            "third.lib(7): Singular matrix: Check node n001",
+        ],
+    )
+
+    said = harness_mod._simulator_said(log)
+
+    assert len(prefix + error) > 300, "the fixture must be longer than the budget"
+    assert error in said
+    assert prefix not in said
+    assert "segment_00_padding" not in said
+    assert len(said.removeprefix("; LTspice said: ").split(" | ")) <= 3
+    assert len(said) <= len("; LTspice said: ") + 300
 
 
 def test_an_empty_raw_file_still_names_what_the_simulator_said(

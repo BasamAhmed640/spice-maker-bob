@@ -1316,6 +1316,7 @@ def build_demo_project(
         )
         + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
     # documents + requirements

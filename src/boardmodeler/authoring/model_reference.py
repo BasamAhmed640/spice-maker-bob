@@ -6,7 +6,6 @@ the rewritten bytes again. Nested cells are left alone unless each declares GND.
 
 from __future__ import annotations
 
-import hashlib
 import re
 from pathlib import Path
 
@@ -14,10 +13,16 @@ from pathlib import Path
 def normalize_ground_reference(path: Path, pin_map, evidence: Path, *, spec=None) -> bool:
     from boardmodeler.authoring.model_syntax import (
         add_regulator_operating_hint,
+        archive_original,
+        normalize_behavioral_sources,
         normalize_library_end,
+        write_library,
     )
 
     syntax_changed = normalize_library_end(path, evidence / "syntax")
+    syntax_changed = (
+        normalize_behavioral_sources(path, evidence / "behavioral-sources") or syntax_changed
+    )
     syntax_changed = (
         add_regulator_operating_hint(path, spec, evidence / "operating-point") or syntax_changed
     )
@@ -27,7 +32,8 @@ def normalize_ground_reference(path: Path, pin_map, evidence: Path, *, spec=None
         for p in pin_map
     ):
         return syntax_changed
-    original = path.read_text(encoding="utf-8")
+    original_bytes = path.read_bytes()
+    original = original_bytes.decode("utf-8")
     declarations = re.findall(r"(?im)^\s*\.subckt\s+\S+\s+([^\r\n]+)", original)
     if not declarations or any("GND" not in d.upper().split() for d in declarations):
         return syntax_changed
@@ -77,12 +83,10 @@ def normalize_ground_reference(path: Path, pin_map, evidence: Path, *, spec=None
                     tokens[i] = "GND"
             line = " ".join(tokens)
         lines.append(line)
-    result = "\n".join(lines) + "\n"
+    newline = "\r\n" if "\r\n" in original else "\n"
+    result = newline.join(lines) + newline
     if result == original:
         return syntax_changed
-    evidence.mkdir(parents=True, exist_ok=True)
-    (evidence / (hashlib.sha256(original.encode()).hexdigest() + ".lib")).write_text(
-        original, encoding="utf-8"
-    )
-    path.write_text(result, encoding="utf-8")
+    archive_original(evidence, original_bytes)
+    write_library(path, result)
     return True

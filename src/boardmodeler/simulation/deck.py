@@ -286,7 +286,7 @@ def write_deck(deck: DeckSpec, path: str | Path) -> Path:
     """
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(deck.render(target.parent), encoding="utf-8")
+    target.write_text(deck.render(target.parent), encoding="utf-8", newline="\n")
     return target
 
 
@@ -333,7 +333,7 @@ def deck_from_template(
     """Render a template into a runnable deck file."""
     target = Path(out_path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(load_template(template_path, values), encoding="utf-8")
+    target.write_text(load_template(template_path, values), encoding="utf-8", newline="\n")
     return target
 
 

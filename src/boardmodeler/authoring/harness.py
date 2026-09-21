@@ -20,6 +20,7 @@ move its model but not the target.
 from __future__ import annotations
 
 import json
+import re
 import threading
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -308,7 +309,14 @@ def _simulator_said(log) -> str:
         said.extend(str(line) for line in (getattr(log, name, None) or []))
     if not said:
         return ""
-    tail = list(dict.fromkeys(said))[:2]
+    # Long absolute paths previously consumed the entire diagnostic budget and hid
+    # the actual error (e.g. UCC28251.lib(68): Expected 2 node names here).
+    said = [
+        re.sub(r"^(?:[A-Za-z]:[\\/]|/).*?([^\\/\n]+(?:\(\d+\))?:)(?=\s)", r"\1", line)
+        for item in said
+        for line in item.splitlines()
+    ]
+    tail = list(dict.fromkeys(said))[:3]
     return f"; LTspice said: {' | '.join(tail)[:300]}"
 
 

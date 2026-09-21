@@ -7,6 +7,29 @@ import re
 from pathlib import Path
 
 
+def archive_original(evidence: Path, original: bytes) -> None:
+    """Keep the exact bytes that were replaced, named by their own sha256.
+
+    Archives are evidence, so they are written as bytes: text mode would translate
+    newlines and store something other than what was replaced.
+    """
+    evidence.mkdir(parents=True, exist_ok=True)
+    (evidence / (hashlib.sha256(original).hexdigest() + ".lib")).write_bytes(original)
+
+
+def write_library(path: Path, text: str) -> None:
+    """Rewrite a repaired library without re-encoding bytes it did not touch.
+
+    ``Path.write_text`` translates ``\\n`` to ``os.linesep``, so on Windows a one-line
+    repair rewrote every terminator in the file, and the archive held CRLF bytes that were
+    not the bytes it replaced. The pipeline hashes model bytes and ``.gitattributes`` marks
+    ``*.lib`` binary, so a repair must change only what it repairs. ``text`` keeps the
+    endings that were read from the file, because it was decoded from bytes rather than
+    opened in text mode.
+    """
+    path.write_bytes(text.encode("utf-8"))
+
+
 def normalize_library_end(path: Path, evidence: Path) -> bool:
     """Repair a final .end used to close the sole unclosed subcircuit.
 
@@ -15,7 +38,8 @@ def normalize_library_end(path: Path, evidence: Path) -> bool:
     """
     if not path.is_file():
         return False
-    original = path.read_text(encoding="utf-8")
+    original_bytes = path.read_bytes()
+    original = original_bytes.decode("utf-8")
     lines = original.splitlines()
     meaningful = [
         i for i, line in enumerate(lines) if line.strip() and not line.lstrip().startswith("*")
@@ -33,12 +57,43 @@ def normalize_library_end(path: Path, evidence: Path) -> bool:
             opened.pop()
     if len(opened) != 1:
         return False
+    newline = "\r\n" if "\r\n" in original else "\n"
     lines[meaningful[-1]] = ".ends " + opened[0]
-    evidence.mkdir(parents=True, exist_ok=True)
-    (evidence / (hashlib.sha256(original.encode()).hexdigest() + ".lib")).write_text(
-        original, encoding="utf-8"
+    archive_original(evidence, original_bytes)
+    write_library(path, newline.join(lines) + newline)
+    return True
+
+
+def normalize_behavioral_sources(path: Path, evidence: Path) -> bool:
+    """Repair unambiguous E/G sources written with B-source V=/I= syntax."""
+    if not path.is_file():
+        return False
+    original_bytes = path.read_bytes()
+    original = original_bytes.decode("utf-8")
+    names = set(re.findall(r"(?m)^\s*([A-Za-z]\S*)", original.upper()))
+    replacements = {}
+
+    def repair(match):
+        old, nodes, quantity = match.group(1), match.group(2), match.group(3)
+        if (old[0].upper(), quantity.upper()) not in {("G", "I"), ("E", "V")}:
+            return match[0]
+        new = replacements.get(old.upper(), "B_" + old)
+        while old.upper() not in replacements and new.upper() in names:
+            new += "_FIX"
+        names.add(new.upper())
+        replacements[old.upper()] = new
+        return new + nodes + quantity + " ="
+
+    text = re.sub(r"(?im)^\s*([EG]\S*)(\s+\S+\s+\S+\s+)([IV])\s*=", repair, original)
+    if text == original:
+        return False
+    text = re.sub(
+        r"(?i)\bI\(\s*([^()\s]+)\s*\)",
+        lambda m: "I(" + replacements.get(m[1].upper(), m[1]) + ")",
+        text,
     )
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    archive_original(evidence, original_bytes)
+    write_library(path, text)
     return True
 
 
@@ -51,6 +106,10 @@ def validate_library(path: Path) -> None:
         if not words or words[0].startswith(("*", "+", ";")):
             continue
         first = words[0].lower()
+        if re.match(r"(?i)^[EG]\S*\s+\S+\s+\S+\s+[IV]\s*=", line.strip()):
+            raise ProbeError(
+                "model_syntax_invalid", f"behavioral I=/V= requires a B source at line {number}"
+            )
         if first == ".subckt":
             if len(words) < 3:
                 raise ProbeError("model_syntax_invalid", f"incomplete .subckt at line {number}")
@@ -98,7 +157,8 @@ def add_regulator_operating_hint(path: Path, spec, evidence: Path) -> bool:
     }
     if len(outputs) != 1 or len(values) != 1:
         return False
-    original = path.read_text(encoding="utf-8")
+    original_bytes = path.read_bytes()
+    original = original_bytes.decode("utf-8")
     if len(re.findall(r"(?im)^\s*\.subckt\b", original)) != 1 or re.search(
         r"(?im)^\s*\.nodeset\b", original
     ):
@@ -107,9 +167,7 @@ def add_regulator_operating_hint(path: Path, spec, evidence: Path) -> bool:
     updated, count = re.subn(r"(?im)^(\s*\.ends\b)", lambda m: hint + m[1], original)
     if count != 1:
         return False
-    evidence.mkdir(parents=True, exist_ok=True)
-    (evidence / (hashlib.sha256(original.encode()).hexdigest() + ".lib")).write_text(
-        original, encoding="utf-8"
-    )
-    path.write_text(updated, encoding="utf-8")
+    archive_original(evidence, original_bytes)
+    newline = "\r\n" if "\r\n" in original else "\n"
+    write_library(path, updated.replace("\r\n", "\n").replace("\n", newline))
     return True

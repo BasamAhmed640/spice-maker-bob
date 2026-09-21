@@ -1,6 +1,8 @@
 """Structural checks and quick-mode control flow using synthetic circuit fixtures."""
 
 import json
+import threading
+import types
 from dataclasses import replace
 from pathlib import Path
 
@@ -8,10 +10,12 @@ import pytest
 
 from boardmodeler.authoring.backends import AuthorResult
 from boardmodeler.authoring.loop import prepare_workdir
-from boardmodeler.authoring.sanity import author_model, check_model
+from boardmodeler.authoring.sanity import author_model, check_model, load_check, record_load
 from boardmodeler.authoring.spec import SpecSet
 from boardmodeler.domain.records import Requirement
 from boardmodeler.pipeline import make_model as engine
+from boardmodeler.simulation import ltspice as ltspice_mod
+from boardmodeler.simulation.ltspice import BatchResult, LtspiceLockTimeout
 
 PINS = (
     {"name": "IN", "physical_pin": "1", "direction": "input"},
@@ -68,6 +72,215 @@ def test_internal_subcircuits_and_parameters(tmp_path):
     assert result["simulation_run"] is False
 
 
+# --------------------------------------------------------------------------- #
+# the bounded load check: it may say "loaded" or nothing, never "verified"
+
+CLEAN_LOG = "Total elapsed time: 0.001 seconds\n"
+REJECTED_LOG = "UCC28251.lib(68): Expected 2 node names here\n"
+
+
+def _model(tmp_path: Path) -> Path:
+    path = tmp_path / "TEST.lib"
+    path.write_text(VALID, encoding="utf-8")
+    return path
+
+
+def _scripted_simulator(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    log_text: str | None = CLEAN_LOG,
+    raw: bool = True,
+    exit_code: int = 0,
+    timed_out: bool = False,
+    cancelled: bool = False,
+    log_path: bool = True,
+    raises: Exception | None = None,
+) -> list[dict]:
+    """Patch ``run_batch`` with a scripted run and return the calls it observed.
+
+    ``load_check`` imports ``run_batch`` inside its own body, so patching the module
+    attribute is the seam that works. Real log and raw files are written beside the
+    deck, so ``parse_log`` and the artifact hashing see genuine content.
+    """
+    calls: list[dict] = []
+
+    def fake(exe, deck, run_dir, **kwargs):
+        calls.append({"exe": Path(exe), "deck": Path(deck), "kwargs": kwargs})
+        if raises is not None:
+            raise raises
+        run_dir = Path(run_dir)
+        log = run_dir / "load.log"
+        if log_text is not None:
+            log.write_text(log_text, encoding="utf-8")
+        raw_file = run_dir / "load.raw"
+        if raw:
+            raw_file.write_bytes(b"raw")
+        return BatchResult(
+            deck=Path(deck),
+            run_dir=run_dir,
+            exit_code=exit_code,
+            stdout="",
+            stderr="",
+            wall_s=0.01,
+            timed_out=timed_out,
+            raw_path=raw_file if raw else None,
+            log_path=log if log_path else None,
+            cancelled=cancelled,
+        )
+
+    monkeypatch.setattr(ltspice_mod, "run_batch", fake)
+    return calls
+
+
+def test_load_check_without_a_simulator_is_unavailable(tmp_path, monkeypatch):
+    """Absent LTspice stays visibly unchecked instead of being called "verified"."""
+    calls = _scripted_simulator(monkeypatch)
+
+    result = load_check(_model(tmp_path), "TEST", tmp_path / "check", None)
+
+    assert result["status"] == "unavailable"
+    assert "no LTspice" in result["detail"]
+    assert result["electrical_accuracy_verified"] is False
+    assert calls == []
+
+
+def test_load_check_after_cancellation_never_starts_the_simulator(tmp_path, monkeypatch):
+    calls = _scripted_simulator(monkeypatch)
+    cancel = threading.Event()
+    cancel.set()
+
+    result = load_check(
+        _model(tmp_path), "TEST", tmp_path / "check", tmp_path / "LTspice.exe", cancel
+    )
+
+    assert result["status"] == "cancelled"
+    assert result["electrical_accuracy_verified"] is False
+    assert calls == []
+
+
+def test_load_check_a_clean_log_and_raw_file_is_loaded(tmp_path, monkeypatch):
+    """``ok`` needs exit_code 0, no timeout, no cancellation and a log path."""
+    calls = _scripted_simulator(monkeypatch)
+
+    result = load_check(_model(tmp_path), "TEST", tmp_path / "check", tmp_path / "LTspice.exe")
+
+    assert result["status"] == "loaded"
+    assert result["electrical_accuracy_verified"] is False
+    assert result["wall_s"] == 0.01
+    assert [call["deck"].name for call in calls] == ["load.cir"]
+    assert {"load.cir", "load.log", "load.raw"} <= set(result["artifacts"])
+
+
+def test_load_check_a_timeout_is_inconclusive_not_loaded(tmp_path, monkeypatch):
+    _scripted_simulator(monkeypatch, exit_code=-1, timed_out=True, raw=False)
+
+    result = load_check(_model(tmp_path), "TEST", tmp_path / "check", tmp_path / "LTspice.exe")
+
+    assert result["status"] == "inconclusive"
+    assert result["electrical_accuracy_verified"] is False
+
+
+def test_load_check_without_a_log_does_not_raise(tmp_path, monkeypatch):
+    """A missing log is an ordinary outcome; the defect was ``parse_log(None)``."""
+    _scripted_simulator(monkeypatch, log_text=None, log_path=False, raw=False)
+
+    result = load_check(_model(tmp_path), "TEST", tmp_path / "check", tmp_path / "LTspice.exe")
+
+    assert result["status"] == "inconclusive"
+    assert result["electrical_accuracy_verified"] is False
+
+
+def test_load_check_a_busy_simulator_is_unavailable_without_waiting(tmp_path, monkeypatch):
+    """A locked simulator must not stall quick mode for the 900 s lock default."""
+    calls = _scripted_simulator(
+        monkeypatch, raises=LtspiceLockTimeout("another run holds the lock")
+    )
+
+    result = load_check(_model(tmp_path), "TEST", tmp_path / "check", tmp_path / "LTspice.exe")
+
+    assert result["status"] == "unavailable"
+    assert "LtspiceLockTimeout" in result["detail"]
+    assert calls[0]["kwargs"]["lock_timeout_s"] == 0.0
+
+
+def test_load_check_repeats_the_simulators_own_rejection(tmp_path, monkeypatch):
+    _scripted_simulator(monkeypatch, log_text=REJECTED_LOG, raw=False)
+
+    with pytest.raises(ValueError) as excinfo:
+        load_check(_model(tmp_path), "TEST", tmp_path / "check", tmp_path / "LTspice.exe")
+
+    message = str(excinfo.value)
+    assert "UCC28251.lib(68): Expected 2 node names here" in message
+    assert "rejected" in message
+
+
+@pytest.mark.parametrize(
+    "diagnostic",
+    [
+        "UCC28251.lib(68): Expected 2 node names here.",
+        "TEST.lib(3): No such node.",
+        "deck.cir(23): This sub-circuit name is not defined.",
+    ],
+)
+def test_load_check_repeats_any_ltspice_diagnostic_shape(tmp_path, monkeypatch, diagnostic: str):
+    """Real rejections include wordings a keyword list cannot anticipate.
+
+    The observed escape was ``No such node.``: LTspice rejected the deck, the wording
+    matched no known phrase, and the model was published anyway.
+    """
+    _scripted_simulator(monkeypatch, log_text=f"Circuit: load.cir\n{diagnostic}\n", raw=False)
+
+    with pytest.raises(ValueError) as excinfo:
+        load_check(_model(tmp_path), "TEST", tmp_path / "check", tmp_path / "LTspice.exe")
+
+    message = str(excinfo.value)
+    assert diagnostic in message, message
+    assert "rejected" in message
+
+
+def test_a_model_that_parses_but_never_converges_is_inconclusive(tmp_path, monkeypatch):
+    """The real repaired UCC28251 outcome: parsed, no operating point, not a rejection."""
+    _scripted_simulator(
+        monkeypatch,
+        log_text=(
+            "Circuit: load.cir\n"
+            "Direct Newton iteration failed to find the operating point.\n"
+            "Gmin stepping failed to find operating point.\n"
+            "Iteration limit reached\n"
+        ),
+        raw=False,
+        exit_code=1,
+        timed_out=True,
+    )
+
+    result = load_check(_model(tmp_path), "TEST", tmp_path / "check", tmp_path / "LTspice.exe")
+
+    assert result["status"] == "inconclusive"
+    assert result["electrical_accuracy_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("status", "simulation_run"),
+    [
+        ("loaded", True),
+        ("inconclusive", True),
+        ("unavailable", False),
+        ("cancelled", False),
+    ],
+)
+def test_record_load_states_whether_a_simulation_ran(status, simulation_run):
+    """``simulation_run`` is truthful per status, and accuracy stays unverified."""
+    checked = {"simulation_run": False, "electrical_accuracy_verified": False}
+    load = {"status": status, "electrical_accuracy_verified": False}
+
+    returned = record_load(checked, load)
+
+    assert returned is checked
+    assert returned["load_check"] == load
+    assert returned["simulation_run"] is simulation_run
+    assert returned["electrical_accuracy_verified"] is False
+
+
 def test_cache_requires_matching_spec_and_model(tmp_path):
     spec = SpecSet("TEST", "TEST", "TEST_FIXTURE", (), PINS)
     backend = Backend()
@@ -117,7 +330,8 @@ def test_quick_pipeline_skips_planner_simulator_and_never_claims_accuracy(
     monkeypatch.setattr(engine._Run, "read", lambda self: None)
     monkeypatch.setattr(engine._Run, "extract", extract)
     monkeypatch.setattr(engine, "build_backend", lambda request: backend)
-    monkeypatch.setattr(engine, "locate", forbidden)
+    # Quick mode calls locate() for the bounded load check; no simulator installed.
+    monkeypatch.setattr(engine, "locate", lambda: None)
     monkeypatch.setattr(engine, "build_model", forbidden)
     monkeypatch.setattr(engine._Run, "_gather_supporting_material", forbidden)
     monkeypatch.setattr(test_planner, "plan_bindings", forbidden)
@@ -142,3 +356,76 @@ def test_quick_pipeline_skips_planner_simulator_and_never_claims_accuracy(
             "an old candidate must not be published after an empty reply"
         )
         assert backend.calls == 2
+
+
+def test_quick_pipeline_records_the_one_load_check_and_publishes(tmp_path, monkeypatch):
+    """With LTspice present, quick mode runs exactly one bounded deck and records it.
+
+    The numerical harness (``build_model``) must stay untouched: this is a parse/solve
+    check, not an electrical-accuracy run, and the receipt must say so.
+    """
+    from boardmodeler.authoring import test_planner
+
+    backend = Backend(VALID)
+    fixture = Path(__file__).resolve().parents[2] / "fixtures/regulator/tps54320/requirements.json"
+    rows = [
+        Requirement.model_validate(r)
+        for r in json.loads(fixture.read_text(encoding="utf-8"))["requirements"][:2]
+    ]
+
+    def extract(run, cancel):
+        run.requirements, run.pin_map = rows, PINS
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("quick mode invoked the numerical harness or test planning")
+
+    install = types.SimpleNamespace(path=tmp_path / "LTspice.exe")
+    monkeypatch.setattr(engine._Run, "read", lambda self: None)
+    monkeypatch.setattr(engine._Run, "extract", extract)
+    monkeypatch.setattr(engine, "build_backend", lambda request: backend)
+    monkeypatch.setattr(engine, "locate", lambda: install)
+    monkeypatch.setattr(engine, "build_model", forbidden)
+    monkeypatch.setattr(engine._Run, "_gather_supporting_material", forbidden)
+    monkeypatch.setattr(test_planner, "plan_bindings", forbidden)
+
+    calls: list[tuple[Path, Path]] = []
+
+    def fake_run_batch(exe, deck, run_dir, **kwargs):
+        calls.append((Path(exe), Path(deck)))
+        run_dir = Path(run_dir)
+        log = run_dir / "load.log"
+        log.write_text(CLEAN_LOG, encoding="utf-8")
+        raw = run_dir / "load.raw"
+        raw.write_bytes(b"raw")
+        return BatchResult(
+            deck=Path(deck),
+            run_dir=run_dir,
+            exit_code=0,
+            stdout="",
+            stderr="",
+            wall_s=0.01,
+            timed_out=False,
+            raw_path=raw,
+            log_path=log,
+        )
+
+    monkeypatch.setattr(ltspice_mod, "run_batch", fake_run_batch)
+
+    out = tmp_path / "out"
+    request = engine.MakeModelRequest(
+        "TEST", "TEST", tmp_path / "fake.pdf", out, verification="sanity"
+    )
+    result = engine.make_model(request)
+
+    assert [(exe.name, deck.name) for exe, deck in calls] == [("LTspice.exe", "load.cir")], (
+        "the bounded load check must be the only simulator invocation"
+    )
+    receipt = json.loads((out / "build/sanity-report.json").read_text(encoding="utf-8"))
+    assert receipt["load_check"]["status"] == "loaded"
+    assert receipt["simulation_run"] is True
+    assert receipt["electrical_accuracy_verified"] is False
+    assert result.lib_path is not None
+    assert result.card_path is not None
+    card = result.card_path.read_text(encoding="utf-8")
+    assert "load check" in card.lower()
+    assert "loaded" in card

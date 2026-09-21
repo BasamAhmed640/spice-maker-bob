@@ -1322,6 +1322,34 @@ def _required_text(characteristic: object) -> str:
 # the run
 
 
+#: Reasons that mean this run could not use the model at all, so a rejection quoted in one
+#: of them is about the model. A timeout is deliberately absent: it is inconclusive, not
+#: proof of an invalid model. These are the reasons the pipeline actually produces
+#: (``validate_library``, ``model_ports``, and the harness run diagnostics).
+_HARD_FAILURE_PREFIXES = (
+    "model_syntax_invalid",
+    "model_lib_unreadable",
+    "sim_output_unreadable",
+    "sim_convergence_failure",
+)
+
+
+def _rejection_from_report(report: HarnessReport) -> str | None:
+    """The simulator's own rejection recorded in a run, if the run recorded one."""
+    from boardmodeler.authoring.sanity import rejection_marker
+
+    for outcome in report.outcomes:
+        reason = (outcome.unknown_reason or "").strip()
+        while reason.startswith("deferred_after_invalid_simulation: "):
+            reason = reason.removeprefix("deferred_after_invalid_simulation: ").strip()
+        if not reason.startswith(_HARD_FAILURE_PREFIXES):
+            continue
+        rejected = rejection_marker(reason)
+        if rejected is not None:
+            return rejected
+    return None
+
+
 class _Run:
     """One make-model run: the six stages, the state they produce, the result."""
 
@@ -1798,6 +1826,13 @@ class _Run:
                     workdir=self.workdir,
                     prompt="Quick structural checks; full simulation was not requested.",
                 )
+                install = None
+                try:
+                    install = locate()
+                except OSError as exc:
+                    # Quick mode must never become harder to run than it was without a
+                    # simulator: a probing failure leaves the load check unavailable.
+                    self.log.emit("author", "running", f"LTspice was not located: {exc}")
                 checked, turns = author_model(
                     self.spec,
                     backend,
@@ -1806,6 +1841,7 @@ class _Run:
                     lambda detail: self.log.emit("author", "running", detail),
                     self.unverified,
                     max_attempts=min(2, self.request.max_iterations or 2),
+                    ltspice=install.path if install is not None else None,
                 )
                 self.report = HarnessReport(
                     part=self.request.part,
@@ -1815,8 +1851,14 @@ class _Run:
                 )
                 self.sanity_ok = True
                 self.status, self.detail = "UNKNOWN", LABEL
+                load = checked.get("load_check") or {}
                 self.log.emit("author", "ok", f"model ready after {turns} author turn(s)")
-                self.log.emit("judge", "ok", LABEL + "; no simulation was run")
+                self.log.emit(
+                    "judge",
+                    "ok",
+                    f"{LABEL}; LTspice load: {load.get('status', 'not checked')} "
+                    f"({load.get('detail', 'no bounded load check ran')})",
+                )
             except Exception as exc:
                 self.status, self.detail = "UNKNOWN", f"sanity authoring stopped: {exc}"
                 self.log.emit("judge", "failed", self.detail)
@@ -1997,6 +2039,8 @@ class _Run:
                 self._publish(source, notes)
             except (OSError, ValueError, ModelStoreError) as exc:
                 notes.append(f"the model could not be published: {type(exc).__name__}: {exc}")
+                refusal = f"model_not_published: {exc}"
+                self.detail = f"{self.detail}; {refusal}".strip("; ") if self.detail else refusal
                 self.lib_path = None
                 self.asy_path = None
                 self.card_path = None
@@ -2013,9 +2057,41 @@ class _Run:
             {"files": len(published)},
         )
 
+    def _receipt_load(self) -> dict:
+        """The bounded load result this build recorded, for the model card."""
+        try:
+            payload = json.loads((self.workdir / "sanity-report.json").read_text(encoding="utf-8"))
+        except OSError, ValueError:
+            return {"status": "not checked", "detail": "no sanity receipt was written"}
+        load = payload.get("load_check")
+        return load if isinstance(load, dict) else {"status": "not checked"}
+
+    def _refuse_known_invalid(self, text: str) -> None:
+        """Refuse to publish a model that is already known to be invalid.
+
+        Two independent signals count, because either alone would let an unusable
+        library reach the user: the deterministic syntax rules, and the simulator's own
+        rejection recorded in this run's outcomes. The artifacts stay in the build
+        folder for diagnosis; only the deliverable is withheld.
+        """
+        from boardmodeler.authoring.model_syntax import validate_library
+        from boardmodeler.authoring.probes import ProbeError
+
+        staged = self.workdir / "publish-check" / f"{self.request.subckt}.lib"
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        staged.write_text(text, encoding="utf-8", newline="\n")
+        try:
+            validate_library(staged)
+        except ProbeError as exc:
+            raise ValueError(f"model_syntax_rejected: {exc.full_reason()}") from exc
+        rejected = _rejection_from_report(self.report)
+        if rejected is not None:
+            raise ValueError(f"simulator_rejected_model: {rejected}")
+
     def _publish(self, source: Path, notes: list[str]) -> None:
         request = self.request
         text = source.read_text(encoding="utf-8", errors="replace")
+        self._refuse_known_invalid(text)
         ports = list(subckt_ports(text, request.subckt))
         if not ports:
             raise ValueError(f"{source} declares no .subckt {request.subckt}")
@@ -2042,7 +2118,13 @@ class _Run:
         if request.verification == "sanity":
             from boardmodeler.authoring.sanity import write_card
 
-            write_card(self.card_path, self.spec, self.report.model_sha256, self.unverified)
+            write_card(
+                self.card_path,
+                self.spec,
+                self.report.model_sha256,
+                self.unverified,
+                load=self._receipt_load(),
+            )
             self._write_text(
                 self.out_dir / "sanity-report.json",
                 (self.workdir / "sanity-report.json").read_text(encoding="utf-8"),
