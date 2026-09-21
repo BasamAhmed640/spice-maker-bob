@@ -10,11 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v7
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
       - run: uv sync --frozen --all-extras
-      - run: dotnet tool install --global vpk --version 1.2.0
       - name: Build and verify the installer
         shell: pwsh
         run: |
@@ -41,3 +37,6 @@ jobs:
             installer/assets/pepper-splash.gif
             build/build-verification.json
             build/gui-startup.png
+            build/portable-verification.json
+            build/portable-first-launch.png
+            build/portable-main-window.png

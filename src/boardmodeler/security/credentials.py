@@ -1,6 +1,6 @@
 """One encrypted local credential per edition and Windows user; no credential vault.
 
-The application writes only DPAPI ciphertext in its LocalAppData directory. It never
+The application writes only DPAPI ciphertext beside the app in its data directory. It never
 falls back to a plaintext file. Explicit environment variables remain available for
 CLI automation. Saving another provider replaces the previously stored credential.
 """
@@ -44,10 +44,10 @@ class Credential:
 
 
 def credential_path() -> Path:
-    """An edition-specific local file, outside source, settings and model folders."""
-    local = os.environ.get("LOCALAPPDATA")
-    base = Path(local) if local else Path.home() / "AppData" / "Local"
-    return base / f"{_APP_NAME}Data" / "credentials.bin"
+    """Ciphertext belongs to this extracted copy, never a shared profile."""
+    from boardmodeler.storage import data_dir
+
+    return data_dir() / "credentials.bin"
 
 
 def env_var_name(name: str) -> str:

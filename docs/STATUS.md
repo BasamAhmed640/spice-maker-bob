@@ -1,3 +1,25 @@
+# Portable release 1.2.0 - 2026-09-20
+
+Install.exe now extracts app/ beside itself, preserving this folder's data/ and
+models/ on update. New copies require setup and cannot read the previous AppData
+settings/key. Python file writes, scratch work, Bob profile and model exports stay
+under the extracted root. Details: PORTABLE_STORAGE.md.
+
+Validation observed for this change:
+- General source suite: 1186 passed, 4 skipped, 159 deselected (`pytest -q -m 'not ltspice and not network'`).
+- Seven new portable-state regression tests passed; setup plus portable tests: 20 passed.
+- Bob source suite including portable tests: 1083 passed, 8 skipped, 159 deselected.
+- Extraction regression tests after page-shape repair: 11 passed in each edition.
+- Ruff check/format passed.
+- Both actual animated installers passed extraction, first-launch SETUP, relaunch,
+  same-folder update preservation, fresh-copy isolation and external-config rejection.
+- Both installed frozen apps passed the real LTspice RC smoke check: 0.632119 V
+  versus 0.632 V expected, raw/log hashes captured, exit 0; all run files under data/temp/.
+- The recorded UCC28251 responses validate after local page-field normalization;
+  no new API call or completed UCC28251 model is claimed.
+
+Historical release notes follow.
+
 # Current status — Spice Maker Bob
 
 Updated 2026-09-20 for the 1.1.3 maintenance build.

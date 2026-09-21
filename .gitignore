@@ -17,3 +17,15 @@ projects/
 # Local encrypted credentials never belong in source archives.
 credentials.bin
 .credential-*.tmp
+
+# Portable runtime data must never enter source downloads.
+/data/
+/models/
+/library/
+/app/
+/.spice-maker-root
+/.install-*/
+/.previous-*/
+/.install.lock
+/install-error.txt
+/Start.cmd

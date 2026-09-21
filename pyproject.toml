@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "boardmodeler"
-version = "1.1.11"
+version = "1.2.0"
 description = "Spice Maker: datasheet-grounded LTspice model authoring judged by real simulator runs"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
@@ -23,7 +23,6 @@ sim = ["spicelib>=1.6,<2"]
 packaging = [
     "pyinstaller>=6.22",
     "pillow>=11",
-    "velopack>=1",
 ]
 dev = [
     "pytest>=9.1",

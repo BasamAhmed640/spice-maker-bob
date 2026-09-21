@@ -311,6 +311,10 @@ class InstallPlan:
 
 def _ltspice_user_lib(home: Path | None = None) -> Path:
     """The per-user LTspice library directory (never the installation directory)."""
+    from boardmodeler.storage import library_dir, portable
+
+    if portable():
+        return library_dir()
     base = home if home is not None else Path.home()
     return base / "AppData" / "Local" / "LTspice" / "lib"
 

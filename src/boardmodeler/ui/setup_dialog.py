@@ -45,6 +45,7 @@ from boardmodeler import agent_providers
 from boardmodeler.agent_providers import AgentProvider
 from boardmodeler.config import AppConfig, config_path, load_config, save_config
 from boardmodeler.security.key_verification import CHECK_TIMEOUT_S, KeyVerification, verify_key
+from boardmodeler.storage import app_root, library_dir, local_path, model_dir, portable
 from boardmodeler.ui.theme import CGA, RETRO_STYLESHEET
 
 __all__ = ["SetupDialog", "configured_provider", "describe_settings", "ltspice_user_lib", "main"]
@@ -55,6 +56,8 @@ _STATUS = f"color: {CGA['grey']}; font-family: Consolas; font-size: 9pt;"
 
 def ltspice_user_lib(home: Path | None = None) -> Path:
     """The per-user LTspice library (never the installation directory)."""
+    if portable():
+        return library_dir()
     base = home if home is not None else Path.home()
     return base / "AppData" / "Local" / "LTspice" / "lib"
 
@@ -220,9 +223,7 @@ class SetupDialog(QDialog):
 
         # --- where models go -------------------------------------------------
         row += 1
-        self.model_dir_edit = QLineEdit(
-            self._config.default_model_dir or str(Path.home() / "Spice Maker")
-        )
+        self.model_dir_edit = QLineEdit(str(model_dir(self._config.default_model_dir)))
         choose_dir = QPushButton("Choose…")
         choose_dir.clicked.connect(self._choose_model_dir)
         grid.addWidget(QLabel("MODEL FOLDER"), row, 0)
@@ -230,7 +231,10 @@ class SetupDialog(QDialog):
         grid.addWidget(choose_dir, row, 2, 1, 2)
         row += 1
 
-        library = QLabel(str(ltspice_user_lib()))
+        library = QLabel(
+            "library/ inside this extracted folder" if portable() else str(ltspice_user_lib())
+        )
+        library.setToolTip(str(ltspice_user_lib()))
         library.setStyleSheet(
             f"color: {CGA['bright_green']}; font-family: Consolas; font-size: 9pt;"
         )
@@ -266,6 +270,8 @@ class SetupDialog(QDialog):
     def _resolved_ltspice(self) -> str:
         if self._config.ltspice.path:
             return self._config.ltspice.path
+        if portable():
+            return ""
         from boardmodeler.simulation.ltspice import locate
 
         install = locate()
@@ -279,7 +285,7 @@ class SetupDialog(QDialog):
         self.key_hint.setText(
             f"{provider.key_hint}\n{provider.docs}\n"
             "GO sends your chosen datasheet and model text to this provider.\n"
-            "One encrypted key is saved for this Windows user; a new provider replaces it.\n"
+            "The key is encrypted in this folder's data/credentials.bin; a new provider replaces it.\n"
             "Saving a key runs a small connection check (may use a little API credit)."
         )
         self.model_edit.setText(self._model_for(provider))
@@ -311,7 +317,13 @@ class SetupDialog(QDialog):
         self.key_status.setText(f"stored key: {describe_credential(provider.credential)}")
         chosen = self._config.ltspice.path
         self.ltspice_status.setText(
-            "using the path set here" if chosen else "path discovered automatically"
+            "using the path set here"
+            if chosen
+            else (
+                "choose your LTspice executable once"
+                if portable()
+                else "path discovered automatically"
+            )
         )
 
     def _choose_ltspice(self) -> None:
@@ -447,11 +459,20 @@ class SetupDialog(QDialog):
             if self._provider.model_editable:
                 self._config.agent_model = self.model_edit.text().strip() or None
         try:
+            if portable():
+                if not self._config.ltspice.path or not Path(self._config.ltspice.path).is_file():
+                    raise ValueError("Choose your LTspice executable before saving setup.")
+                selected = local_path(self.model_dir_edit.text())
+                selected.mkdir(parents=True, exist_ok=True)
+                self._config.default_model_dir = str(selected.relative_to(app_root()))
+                self._config.setup_complete = True
             path = save_config(self._config)
         except Exception as exc:
             QMessageBox.warning(self, "Could not save", str(exc))
             return
         self.saved_label.setText(f"saved to {path}")
+        if portable():
+            self.accept()
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -12,28 +12,26 @@ frozen exe with the module form (``ui/model_maker.py`` spawns diagnostics that w
 A ``--windowed`` PyInstaller build has no standard streams. ``--cli`` therefore rebinds
 them, in order: the handles the caller passed (a pipe or a redirected file, which is how
 the app's own CHECK ENVIRONMENT re-enters this exe), the console it was started from, or
-``%LOCALAPPDATA%\\SpiceMaker\\cli.log`` — which it names inside that file.
+``data/logs/cli.log`` — which it names inside that file.
 
-The Velopack startup hook runs only in a frozen build and only when the ``velopack``
-package is present, so a source checkout (``uv run boardmodeler ui``) is unaffected.
+The executable and all application-owned files stay beside Install.exe.
 """
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
 __all__ = ["APP_DIR_NAME", "app_dir", "cli_log_path", "main"]
 
 APP_DIR_NAME = "SpiceMaker"
-"""The Velopack pack id: the installer's directory is ``%LOCALAPPDATA%\\SpiceMaker``."""
+"""The portable edition name."""
 
 
 def app_dir() -> Path:
-    """The app's per-user directory — where the CLI log lives."""
-    base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
-    return Path(base) / APP_DIR_NAME
+    from boardmodeler.storage import data_dir
+
+    return data_dir() / "logs"
 
 
 def cli_log_path() -> Path:
@@ -109,25 +107,13 @@ def _cli_arguments(args: list[str]) -> list[str] | None:
     return None
 
 
-def _velopack_startup() -> None:
-    """Velopack's startup hook (install/update callbacks); packaged builds only.
-
-    ``velopack.App`` is the package's ``VelopackApp`` wrapper; the import is inside the
-    try so a source checkout without the ``packaging`` extra still runs the app.
-    """
-    if not getattr(sys, "frozen", False):
-        return
-    try:
-        from velopack import App
-    except ImportError:  # a build without the velopack package still runs the app
-        return
-    App().run()
-
-
 def main(argv: list[str] | None = None) -> int:
     """Run the GUI, or the CLI when the arguments select it."""
     args = list(sys.argv[1:] if argv is None else argv)
-    _velopack_startup()
+    from boardmodeler.storage import initialize, install_write_guard
+
+    initialize()
+    install_write_guard()
     forwarded = _cli_arguments(args)
     if forwarded is not None:
         log = _cli_streams()

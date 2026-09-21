@@ -1,4 +1,4 @@
-"""Application configuration and ``%APPDATA%\\BoardModeler\\config.json`` handling.
+"""Application configuration in this extracted copy's data/config.json.
 
 Precedence, highest first:
 
@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from boardmodeler.domain import SCHEMA_VERSION
 from boardmodeler.domain.enums import ProviderKind
 from boardmodeler.security.policy import DataPolicy
+from boardmodeler.storage import data_dir, local_path, portable
 
 __all__ = [
     "AppConfig",
@@ -115,23 +116,17 @@ class AppConfig(BaseModel):
     web_reinforcement: bool = True
     default_project_dir: str | None = None
     log_level: str = "INFO"
+    setup_complete: bool = False
 
 
 def config_dir() -> Path:
-    """Directory holding the config file (``%APPDATA%\\BoardModeler`` on Windows)."""
-    appdata = os.environ.get("APPDATA")
-    if appdata:
-        return Path(appdata) / APP_DIR_NAME
-    xdg = os.environ.get("XDG_CONFIG_HOME")
-    if xdg:
-        return Path(xdg) / APP_DIR_NAME
-    return Path.home() / ".config" / APP_DIR_NAME
+    """Settings for this copy only; never read a previous user-profile install."""
+    return data_dir()
 
 
 def config_path() -> Path:
-    """Path of the config file, honouring ``BOARDMODELER_CONFIG``."""
     override = os.environ.get(CONFIG_ENV_VAR)
-    if override:
+    if override and not portable():
         return Path(override)
     return config_dir() / "config.json"
 
@@ -142,7 +137,7 @@ def load_config(path: Path | None = None) -> AppConfig:
     A malformed config is an error, not silently replaced by defaults — running
     with different settings than the user wrote would be worse than failing.
     """
-    target = path or config_path()
+    target = local_path(path or config_path()) if portable() else (path or config_path())
     if not target.exists():
         return AppConfig()
     raw = json.loads(target.read_text(encoding="utf-8"))
@@ -151,7 +146,7 @@ def load_config(path: Path | None = None) -> AppConfig:
 
 def save_config(config: AppConfig, path: Path | None = None) -> Path:
     """Write the config atomically (temp file + replace) and return its path."""
-    target = path or config_path()
+    target = local_path(path or config_path()) if portable() else (path or config_path())
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(target.suffix + ".tmp")
     payload = config.model_dump(mode="json", exclude_defaults=True)

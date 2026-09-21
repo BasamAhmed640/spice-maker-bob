@@ -70,7 +70,7 @@ uv run boardmodeler model install --out build/tps54320 --user-lib --apply
    stage is `BLOCKED` with the reason. Bob is never replaced by an external provider automatically.
 6. **No telemetry.** Extraction and model artifacts are cached by hash; repeat runs make zero
    inference requests.
-7. **No plaintext secret persistence.** Credentials live as current-user DPAPI ciphertext in one per-edition LocalAppData file or
+7. **No plaintext secret persistence.** Credentials live as current-user DPAPI ciphertext in this extracted copy's `data/credentials.bin` file or
    `BOARDMODELER_<NAME>_API_KEY` for CI; they are never logged, written into project files, or exported.
 8. **Repair is bounded and cannot weaken honesty.** Repair may only edit `models/candidates/<n>/`,
    is capped by `max_repair_iterations`, and may never relax a tolerance, delete a test, alter source

@@ -1,6 +1,11 @@
 # Spice Maker Bob
 
-**1.1.11** processes only the selected PDF when a model folder is reused and shows live batch progress. The installer splash and app title display the same version. [What changed and what was verified](docs/EXTRACTION_PROGRESS.md).
+**1.2.0 is portable.** Extract the GitHub **Code > Download ZIP** archive and run
+**Install.exe** inside it. The animated installer puts the app in `app/` in that same
+folder. Open `Start.cmd` next time. First launch asks you to choose LTspice and a model
+folder inside this extracted folder, and enter your key. It never restores settings
+or keys from an older installation. [Storage and fresh-start instructions](docs/PORTABLE_STORAGE.md).
+
 
 **SAVE & CHECK KEY** now verifies a newly saved key in the background, with a 15-second wait and clear verified/rejected/unverified results. [Credential safety and check details](docs/API_KEY_CHECK.md).
 

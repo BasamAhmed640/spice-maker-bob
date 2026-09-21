@@ -53,6 +53,9 @@ def build_application(argv: Sequence[str] | None = None) -> QApplication:
     """Return the running ``QApplication`` or create one (never two)."""
     existing = QApplication.instance()
     app = existing if existing is not None else QApplication(list(argv) if argv is not None else [])
+    from PySide6.QtCore import Qt
+
+    app.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
     app.setApplicationName(APPLICATION_NAME)
     app.setApplicationVersion(__version__)
     app.setOrganizationName(APPLICATION_NAME)
@@ -78,6 +81,10 @@ def main(argv: Sequence[str] | None = None, *, exec_app: bool = True) -> int:
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
+    from boardmodeler.config import load_config
+    from boardmodeler.storage import initialize, portable
+
+    initialize()
     app = build_application([sys.argv[0]])
     if args.installer:
         from boardmodeler.ui.setup_dialog import SetupDialog
@@ -99,6 +106,13 @@ def main(argv: Sequence[str] | None = None, *, exec_app: bool = True) -> int:
         return int(app.exec())
 
     from boardmodeler.ui.model_maker import ModelMakerWindow
+
+    if portable() and not load_config().setup_complete and exec_app:
+        from boardmodeler.ui.setup_dialog import SetupDialog
+
+        SetupDialog().exec()
+        if not load_config().setup_complete:
+            return 0
 
     maker = ModelMakerWindow()
     maker.show()

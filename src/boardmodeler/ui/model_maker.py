@@ -38,6 +38,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from boardmodeler.storage import local_path, model_dir, portable
+
 __all__ = ["ModelMakerWindow"]
 
 _STATUS_COLOUR = {
@@ -347,6 +349,11 @@ class ModelMakerWindow(QMainWindow):
         part = self.part_edit.text().strip()
         datasheet = Path(self.datasheet_edit.text().strip())
         out_dir = Path(self.out_edit.text().strip() or _default_model_dir())
+        try:
+            out_dir = local_path(out_dir)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Choose a local folder", str(exc))
+            return
         if not part:
             QMessageBox.warning(self, "Part number needed", "Which part should be modelled?")
             return
@@ -440,7 +447,12 @@ class ModelMakerWindow(QMainWindow):
         QMessageBox.information(
             self,
             "Installed",
-            "LTspice will find the model the next time it starts:\n\n"
+            (
+                "Files saved inside this app folder. Add library/sym and library/sub to "
+                "LTspice's search paths once:\n\n"
+                if portable()
+                else "LTspice will find the model the next time it starts:\n\n"
+            )
             + "\n".join(plan.steps[:2])
             + f"\n\nPlace the {spec.subckt} symbol on a schematic, or open example.cir "
             "from the model folder.",
@@ -572,7 +584,7 @@ def _default_model_dir() -> str:
         configured = load_config().default_model_dir
     except Exception:  # pragma: no cover - a broken config must not block the window
         configured = None
-    return configured or str(Path.home() / "Spice Maker")
+    return str(model_dir(configured))
 
 
 def _window_stylesheet() -> str:

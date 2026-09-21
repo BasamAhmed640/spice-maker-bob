@@ -122,3 +122,12 @@ disclosures and cache keys. The board-project API keeps its explicit all-documen
 default. Excluding unrelated files must not change their stored originals.
 Installer builds must match the application and project version. Windows packaging
 can run on GitHub's hosted runner; this does not change local Windows security policy.
+
+## 2026-09-20 - Portable folder is the storage boundary
+
+The user requires installation and all application-owned state under the extracted
+GitHub folder. Do not restore global config or keys. First launch requires explicit
+setup. The installer creates no global install/shortcut/credential entries. Updates
+replace app/ only. DPAPI ciphertext, scratch directories and model exports stay local.
+Normalize only unambiguous flat citation page numbers; conflicting page numbers remain
+validation errors. Preserve all numeric requirements and reasoning settings.

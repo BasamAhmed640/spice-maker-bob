@@ -418,6 +418,7 @@ class AgentExtractionProvider:
                     raise ProviderError("agent_extraction_failed", result.detail)
                 try:
                     payload = extract_json_object(result.stdout_tail, secrets=())
+                    _normalize_evidence_pages(payload)
                     _classify_stress_ratings(payload, snippets.values())
                     _validate_combined(payload, requests)
                     break
@@ -506,10 +507,37 @@ def _classify_stress_ratings(payload, snippets):
                 break
 
 
+def _normalize_evidence_pages(value):
+    """Move a provider's flat page number into PageRef without inventing provenance.
+
+    Conflicting numbers and invalid types remain errors for normal validation.
+    No excerpt, document ID, unit, bound or operating condition is altered.
+    """
+    if isinstance(value, list):
+        for item in value:
+            _normalize_evidence_pages(item)
+    elif isinstance(value, dict):
+        evidence = value.get("evidence", [])
+        if isinstance(evidence, list):
+            for ref in evidence:
+                if not isinstance(ref, dict) or "doc_id" not in ref:
+                    continue
+                page = ref.get("pdf_page")
+                if type(page) is not int or page < 0:
+                    continue
+                if "page" not in ref:
+                    ref["page"] = {"pdf_page": ref.pop("pdf_page")}
+                elif isinstance(ref["page"], dict) and ref["page"].get("pdf_page") == page:
+                    ref.pop("pdf_page")
+        for item in value.values():
+            _normalize_evidence_pages(item)
+
+
 def _validate_combined(payload, requests):
     from boardmodeler.domain.records import PartIdentity, PinDefinition, Requirement
     from boardmodeler.requirements.model import validate_requirements
 
+    _normalize_evidence_pages(payload)
     required = {request.task.value for request in requests}
     if set(payload) != required or any(not isinstance(value, dict) for value in payload.values()):
         raise ValueError(f"expected task objects {sorted(required)}; got {sorted(payload)}")

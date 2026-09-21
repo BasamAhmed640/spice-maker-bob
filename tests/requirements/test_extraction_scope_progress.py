@@ -139,3 +139,26 @@ def test_model_pipeline_selects_current_pdf_in_a_reused_output_folder(tmp_path, 
     )
     assert provider.calls == 4
     assert last_stage(result, "extract").status == "ok"
+
+
+def test_flat_evidence_page_is_normalized_without_changing_the_citation():
+    from boardmodeler.providers.agent import _normalize_evidence_pages
+
+    payload = {
+        "part": {"evidence": [{"doc_id": "datasheet", "pdf_page": 0, "excerpt": "Source words"}]}
+    }
+    _normalize_evidence_pages(payload)
+    assert payload["part"]["evidence"] == [
+        {"doc_id": "datasheet", "page": {"pdf_page": 0}, "excerpt": "Source words"}
+    ]
+    _normalize_evidence_pages(payload)
+    assert payload["part"]["evidence"][0]["page"] == {"pdf_page": 0}
+
+
+def test_conflicting_or_invalid_page_numbers_are_not_silently_repaired():
+    from boardmodeler.providers.agent import _normalize_evidence_pages
+
+    for number in (True, -1, "0", 2):
+        ref = {"doc_id": "datasheet", "pdf_page": number, "page": {"pdf_page": 0}}
+        _normalize_evidence_pages({"evidence": [ref]})
+        assert "pdf_page" in ref

@@ -1322,7 +1322,9 @@ class _Run:
     def __init__(self, request: MakeModelRequest, log: _StageLog) -> None:
         self.request = request
         self.log = log
-        self.out_dir = Path(request.out_dir)
+        from boardmodeler.storage import local_path
+
+        self.out_dir = local_path(request.out_dir)
         self.workdir = self.out_dir / WORK_DIRNAME
         self.cache_dir = self.out_dir / CACHE_DIRNAME
         self.spec_dir = self.out_dir / SPEC_DIRNAME

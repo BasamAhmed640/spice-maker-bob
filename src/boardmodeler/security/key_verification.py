@@ -53,7 +53,9 @@ def _verify_bob(key: str, timeout_s: float, cancel: threading.Event | None) -> K
     executable = shutil.which("bob")
     if executable is None:
         return KeyVerification("unverified", "Install IBM Bob Shell, then reopen SETUP and retry.")
-    env = dict(os.environ)
+    from boardmodeler.storage import bob_environment
+
+    env = bob_environment(dict(os.environ))
     env["BOB_API_KEY"] = key
     with tempfile.TemporaryDirectory(prefix="spice-key-check-") as folder:
         process = run_bob_shell(

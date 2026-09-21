@@ -1312,6 +1312,9 @@ def _cmd_extract(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from boardmodeler.storage import initialize
+
+    initialize()
     parser = build_parser()
     args = parser.parse_args(argv)
 

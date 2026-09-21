@@ -360,6 +360,9 @@ class BobShellBackend:
 
         argv = self.argv(request)
         child_env = dict(self.env if self.env is not None else os.environ)
+        from boardmodeler.storage import bob_environment
+
+        child_env = bob_environment(child_env)
         child_env[BOB_API_KEY_ENV] = key
         limit = self.timeout_s if timeout_s is None else float(timeout_s)
         if limit is not None and limit <= 0:
