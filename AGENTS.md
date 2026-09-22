@@ -72,8 +72,14 @@ The GUI defaults to `authoring/sanity.py`: no AI test planning, one bounded unpo
    stage is `BLOCKED` with the reason. Bob is never replaced by an external provider automatically.
 6. **No telemetry.** Extraction and model artifacts are cached by hash; repeat runs make zero
    inference requests.
-7. **No plaintext secret persistence.** Credentials live as current-user DPAPI ciphertext in this extracted copy's `data/credentials.bin` file or
-   `BOARDMODELER_<NAME>_API_KEY` for CI; they are never logged, written into project files, or exported.
+7. **Secrets stay inside this folder, and are plain local files.** The one API key is an ordinary
+   local JSON file, `data/credentials.bob.json`, inside this extracted copy, or
+   `BOARDMODELER_BOB_SHELL_API_KEY` / `BOB_API_KEY` for CI. Nothing is bound to Windows: no DPAPI
+   ciphertext, no registry entry, no Credential Manager entry and no user-profile location, and no
+   credential is written outside this folder. The tradeoff is deliberate and weaker at rest than
+   DPAPI was: the file is **not encrypted**, so anyone who can read the folder can read the key —
+   keep the copy private and do not share its `data` directory. Keys are never logged, written into
+   project files, model output, the repository, the installer or a ZIP, and are never exported.
 8. **Repair is bounded and cannot weaken honesty.** Repair may only edit `models/candidates/<n>/`,
    is capped by `max_repair_iterations`, and may never relax a tolerance, delete a test, alter source
    evidence, narrow coverage, or edit the circuit.

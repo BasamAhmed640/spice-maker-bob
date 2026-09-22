@@ -1,12 +1,13 @@
-Spice Maker Bob 1.3.0 for Windows x64
+Spice Maker Bob 1.4.0 for Windows x64
 
 Extract this zip, then double-click Install.exe. The pepper animation plays during setup.
 Python is included. First launch requires SETUP: choose LTspice, a model folder inside this folder, and your key.
 The app is unpacked into app/ here. Start.cmd opens it next time.
-Settings, encrypted key, temporary work, logs and models stay inside this extracted folder.
+Settings, the key file, temporary work, logs and models stay inside this extracted folder.
 No registry installation, Start Menu entry, AppData settings, or Credential Manager entries.
 Delete this entire extracted folder for a fresh start. Reinstalling in it preserves data/.
 LTspice and (for IBM Bob) Bob Shell must be installed separately.
-The API key stays in a local file encrypted for this Windows user; no account login is needed in this app.
+The API key is an ordinary local file, data/credentials.bob.json, inside this folder. It is not
+encrypted: anyone who can read this folder can read the key, so keep the copy private.
 GO sends the selected datasheet and model text to the chosen provider.
 This build is unsigned. Check the publisher/source and the SHA256 before running it.

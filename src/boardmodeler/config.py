@@ -7,8 +7,8 @@ Precedence, highest first:
 3. the config file
 4. built-in defaults
 
-Nothing here writes secrets: credentials live in the encrypted local credential file or the
-``BOARDMODELER_<NAME>_API_KEY`` environment variable (see ``security.credentials``).
+Nothing here writes secrets: credentials live in this copy's local credential file or
+the ``BOARDMODELER_<NAME>_API_KEY`` environment variable (see ``security.credentials``).
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from boardmodeler.domain import SCHEMA_VERSION
 from boardmodeler.domain.enums import ProviderKind
 from boardmodeler.security.policy import DataPolicy
-from boardmodeler.storage import data_dir, local_path, portable
+from boardmodeler.storage import data_dir, local_path, portable, state_file
 
 __all__ = [
     "AppConfig",
@@ -41,8 +41,10 @@ APP_DIR_NAME = "BoardModeler"
 class LtspiceConfig(BaseModel):
     """Where LTspice is and how it is invoked.
 
-    ``path=None`` means "discover it" (see ``simulation.ltspice.locate``), which
-    is why an unset config still works on a normal installation.
+    ``path=None`` means SETUP has not chosen an executable yet. It is never taken
+    as an instruction to search the machine: ``simulation.ltspice.locate`` resolves
+    only what is written here or in ``LTSPICE_EXE`` (see
+    ``simulation.ltspice.discover`` for the explicit, user-requested search).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -129,7 +131,7 @@ def config_path() -> Path:
     override = os.environ.get(CONFIG_ENV_VAR)
     if override and not portable():
         return Path(override)
-    return config_dir() / "config.json"
+    return state_file("config.json")
 
 
 def load_config(path: Path | None = None) -> AppConfig:
@@ -141,7 +143,13 @@ def load_config(path: Path | None = None) -> AppConfig:
     target = local_path(path or config_path()) if portable() else (path or config_path())
     if not target.exists():
         return AppConfig()
-    raw = json.loads(target.read_text(encoding="utf-8"))
+    try:
+        raw = json.loads(target.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        # The type is preserved: a broken file stays an error, never defaults.
+        raise json.JSONDecodeError(
+            f"{target} is not valid JSON: {exc.msg}", exc.doc, exc.pos
+        ) from exc
     return AppConfig.model_validate(raw)
 
 

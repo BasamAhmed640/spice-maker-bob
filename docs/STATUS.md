@@ -1,11 +1,65 @@
-# 1.3.0 installer verification complete
+# 1.4.0 source; 1.3.0 installer verification complete
 
 Installer run 35572967282 and source CI 35572967584 passed for `8abf88658c4effdd25fa31b96ae9701703730ba6`.
 The actual installer passed GUI startup, first-launch setup, same-folder data preservation
-and fresh-copy isolation on GitHub Windows. Source, window and splash versions are 1.3.0.
+and fresh-copy isolation on GitHub Windows. That verified installer and its window/splash
+strings are 1.3.0; the source tree is now 1.4.0 (see the entry below) and a fresh installer
+verification must pass on it before publication.
 Install.exe is tracked directly for Code > Download ZIP. See BUILD_VERIFICATION.json
 for source provenance and installer hash. No live provider or broad device-accuracy
 claim is established by these checks.
+
+## 2026-09-21 — 1.4.0: resizable windows, the whole doctor report, user-driven LTspice search
+
+Hand-adapted from the main edition, keeping this edition Bob-only (one catalog entry, no
+provider row, `BOB API KEY` label):
+
+- The main window and SETUP are resizable again (`resize(900, 600)` plus a content-derived
+  floor, no `setFixedSize`); SETUP keeps every row reachable through a scroll area.
+- CHECK ENVIRONMENT opens `DoctorView` with the entire report (readable first, raw JSON one
+  click away, COPY REPORT) instead of a message box holding only the last 4000 characters.
+- `HourglassWidget` draws itself next to the elapsed clock, animates only while a build runs
+  (80 ms timer, stopped when idle) and ships no binary asset.
+- LTspice is never searched on open: SETUP has explicit FIND and BROWSE buttons, and the
+  status line distinguishes not-set-yet, found-by-that-search, browsed and saved-configuration.
+- Inference egress is catalog-bound: `agent_providers.endpoint_is_vendor` compares the whole
+  host, and `http_inference.require_vendor_endpoint` refuses before any header, credential
+  lookup or socket. Bob is a CLI entry with no HTTP endpoint, so naming it refuses every URL
+  rather than inventing one.
+- The credential file is plain local JSON (`data/credentials.bob.json`), not DPAPI ciphertext;
+  user-facing text, `INSTALL.txt`, `README.md` and the docs now say so.
+- Version: `pyproject.toml` and `boardmodeler.__version__` are 1.4.0. `installer/verify_portable.py`
+  is a shared file and still asserts the 1.3.0 window title, so a 1.4.0 installer build cannot
+  pass it until that shared assertion is updated in the main tree.
+
+Not yet verified here: no installer run was performed for this entry;
+`installer/verify_portable.py` has not been executed.
+
+Verification of this source state (all run in the Bob checkout with `uv run`):
+
+- `uv sync --all-extras` — resolved, 40 packages checked.
+- `ruff check src/ tests/` — `All checks passed!`
+- `pytest -q -m "not ltspice"` — **1209 passed, 13 skipped, 163 deselected**. The 5 new
+  skips are edition scope, each with its reason in the report: two
+  `tests/test_portable_storage.py` assertions that name the main edition's
+  `data/credentials.json`, and three `tests/authoring/test_reinforce.py` assertions that
+  name the main catalog's `api-docs.deepseek.com`. `tests/authoring/test_key_http.py`
+  (HTTP key verification for providers this edition does not ship, importing
+  `verify_http_key` from the main-only `api_backend.py`) is not collected. All three
+  scopes live in the edition-owned root `conftest.py` and are conditional on the edition
+  data that makes them true.
+- `doctor --json` — `"version": "1.4.0"`; credentials section names Bob only
+  (`"bob": "credential 'bob_shell': source=missing"`); `setup --json` reports
+  `accepted_providers: ["bob"]`.
+- `pytest -q tests/test_desktop_retry.py tests/ui/ tests/gui/` — **87 passed**.
+- Main tree, `uv run python tools/sync_shared_core.py ../spice-maker-bob` —
+  `0 shared files differ`.
+
+**Known shared-file staleness (cannot be fixed from this checkout):**
+`installer/verify_portable.py:239,259,262` still writes a `data/credentials.bin` sentinel
+and asserts the 1.3.0 window title, and `installer/README.md:3` still builds
+`-Version 1.3.0`. Both files are shared, so a 1.4.0 installer verification is red until
+those literals are corrected in the main tree and re-synced.
 
 ## 2026-09-21 — 1.3.0 source ready for installer verification
 

@@ -12,6 +12,7 @@ surfaces cannot drift apart. Nothing here computes a verdict.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -20,9 +21,11 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
-from PySide6.QtCore import QThread, QTimer, Signal
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QDialog,
     QFileDialog,
     QGridLayout,
     QHBoxLayout,
@@ -31,6 +34,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QTableWidget,
@@ -40,8 +44,9 @@ from PySide6.QtWidgets import (
 )
 
 from boardmodeler.storage import local_path, model_dir, portable
+from boardmodeler.ui.theme import CGA, RETRO_STYLESHEET
 
-__all__ = ["ModelMakerWindow"]
+__all__ = ["DoctorView", "HourglassWidget", "ModelMakerWindow", "readable_doctor_report"]
 
 _STATUS_COLOUR = {
     "PASS": "#55ff55",
@@ -132,10 +137,234 @@ def _agent_availability() -> tuple[bool, str]:
         return False, f"the agent backend could not be loaded: {exc}"
 
 
-def _colour(value: str) -> object:
-    from PySide6.QtGui import QColor
-
+def _colour(value: str) -> QColor:
     return QColor(value)
+
+
+class HourglassWidget(QWidget):
+    """A small line-art hourglass that animates only while a build runs.
+
+    Drawn with ``QPainter`` rather than shipped as a GIF or SVG: the installer payload is
+    rebuilt elsewhere, so a binary asset here would collide with that work. It is cheap by
+    construction — an 18x22 box, a dozen pen strokes, and a timer that exists only between
+    :meth:`start` and :meth:`stop` — so nothing repaints in the background while the
+    application sits idle.
+    """
+
+    #: ~12 frames per second: motion the eye reads, at a repaint cost of one small widget.
+    INTERVAL_MS = 80
+    #: Frames of sand the top bulb empties over; the drain restarts when it is over.
+    FRAMES_PER_DRAIN = 24
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._flow = 0.0
+        self._timer = QTimer(self)
+        self._timer.setInterval(self.INTERVAL_MS)
+        self._timer.timeout.connect(self.advance)
+        self.setFixedSize(18, 22)
+        self.setToolTip("The sand runs for as long as this build does")
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+    # ------------------------------------------------------------------ state
+    def start(self) -> None:
+        """Start the drain, from a full top bulb; running twice is a no-op."""
+        if self._timer.isActive():
+            return
+        self._flow = 0.0
+        self._timer.start()
+        self.update()
+
+    def stop(self) -> None:
+        """Settle the sand; after this the widget repaints only when told to."""
+        if not self._timer.isActive():
+            return
+        self._timer.stop()
+        self.update()
+
+    def is_animating(self) -> bool:
+        """True only while a build runs: the one time this widget drives its own repaint."""
+        return self._timer.isActive()
+
+    @property
+    def flow(self) -> float:
+        """How much sand has left the top bulb, 0.0 (full) to 1.0 (drained)."""
+        return self._flow
+
+    def advance(self) -> None:
+        """One frame of falling sand — the timer slot, and how tests step it deterministically."""
+        self._flow = (self._flow + 1.0 / self.FRAMES_PER_DRAIN) % 1.0
+        self.update()
+
+    # ------------------------------------------------------------------ painting
+    def paintEvent(self, event: object) -> None:  # Qt signature
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        running = self._timer.isActive()
+        flow = self._flow if running else 1.0  # at rest the sand has settled at the bottom
+
+        top_bulb = QPainterPath()
+        top_bulb.moveTo(4.0, 2.5)
+        top_bulb.lineTo(14.0, 2.5)
+        top_bulb.lineTo(9.0, 11.0)
+        top_bulb.closeSubpath()
+        bottom_bulb = QPainterPath()
+        bottom_bulb.moveTo(9.0, 11.0)
+        bottom_bulb.lineTo(14.0, 19.5)
+        bottom_bulb.lineTo(4.0, 19.5)
+        bottom_bulb.closeSubpath()
+
+        glass = QPen(QColor(CGA["bright_cyan"]))
+        glass.setWidthF(1.0)
+        painter.setPen(glass)
+        painter.drawLine(QPointF(2.5, 2.0), QPointF(15.5, 2.0))
+        painter.drawLine(QPointF(2.5, 20.0), QPointF(15.5, 20.0))
+        painter.drawPolyline(QPolygonF([QPointF(4.0, 3.0), QPointF(9.0, 11.0), QPointF(4.0, 19.0)]))
+        painter.drawPolyline(
+            QPolygonF([QPointF(14.0, 3.0), QPointF(9.0, 11.0), QPointF(14.0, 19.0)])
+        )
+
+        sand = QColor(CGA["bright_cyan"])
+        sand.setAlpha(190)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(sand))
+        surface = 2.5 + (11.0 - 2.5) * flow
+        if surface < 11.0:
+            painter.save()
+            painter.setClipPath(top_bulb)
+            painter.drawRect(QRectF(3.0, surface, 12.0, 11.0 - surface))
+            painter.restore()
+        pile = 19.5 - (19.5 - 11.0) * flow
+        if pile < 19.5:
+            painter.save()
+            painter.setClipPath(bottom_bulb)
+            painter.drawRect(QRectF(3.0, pile, 12.0, 19.6 - pile))
+            painter.restore()
+        if running:  # the thread of sand, from the neck down to the top of the pile
+            painter.setPen(QPen(sand, 1.0))
+            painter.drawLine(QPointF(9.0, 11.0), QPointF(9.0, pile))
+        painter.end()
+
+
+def readable_doctor_report(raw: str) -> str:
+    """The report the CLI renders for a person, falling back to the JSON it was given.
+
+    ``doctor --json`` is the invocation both surfaces share, so the window asks the CLI
+    to render the same payload the command line would print — the two cannot drift.
+    """
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        return raw
+    if not isinstance(payload, dict):
+        return raw
+    try:
+        from boardmodeler.cli import _render_doctor_human
+
+        return _render_doctor_human(payload)
+    except Exception:  # pragma: no cover - a report must survive a renamed renderer
+        return json.dumps(payload, indent=2, sort_keys=True)
+
+
+class DoctorView(QDialog):
+    """The whole environment report on a page that can be read, resized and copied.
+
+    The earlier surface was a ``QMessageBox`` showing ``report[-4000:]``: the head of the
+    report (version, config path, LTspice) was cut off, and a message box gives no more
+    than a few lines at a time. This page holds the report in full in a read-only
+    monospace view — the readable rendering first, the raw JSON one click away — sized to
+    a modest default and resizable, with COPY REPORT for pasting into a bug report.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("boardmodeler doctor")
+        self.setStyleSheet(RETRO_STYLESHEET)
+        self._raw = ""
+        self._readable = ""
+        self._showing_raw = False
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(6)
+        self.summary_label = QLabel("")
+        self.summary_label.setStyleSheet(
+            f"color: {CGA['bright_green']}; font-family: Consolas; font-size: 9pt;"
+        )
+        layout.addWidget(self.summary_label)
+        self.report_view = QPlainTextEdit()
+        self.report_view.setObjectName("doctorReport")
+        self.report_view.setReadOnly(True)
+        self.report_view.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.report_view.setToolTip("The doctor report, in full")
+        layout.addWidget(self.report_view, 1)
+
+        row = QHBoxLayout()
+        self.copy_button = QPushButton("COPY REPORT")
+        self.copy_button.setToolTip("Put the report on the clipboard exactly as shown")
+        self.copy_button.clicked.connect(self.copy_report)
+        self.raw_button = QPushButton("SHOW RAW JSON")
+        self.raw_button.clicked.connect(self.toggle_raw)
+        close = QPushButton("CLOSE")
+        close.clicked.connect(self.close)
+        row.addWidget(self.copy_button)
+        row.addWidget(self.raw_button)
+        row.addStretch(1)
+        row.addWidget(close)
+        layout.addLayout(row)
+
+        # A modest default — the whole point is that the user can drag or maximise it,
+        # which the message box this replaced could not do at all.
+        self.resize(760, 460)
+        self.setMinimumSize(420, 240)
+
+    # ------------------------------------------------------------------ report
+    def set_report(self, raw: str, *, exit_code: int = 0) -> None:
+        """Take the whole report; nothing is trimmed on the way in."""
+        from PySide6.QtGui import QFontDatabase
+
+        self._raw = raw
+        self._readable = readable_doctor_report(raw)
+        self.summary_label.setText(
+            f"doctor exit code {exit_code} · {len(raw)} characters, shown in full"
+        )
+        self.report_view.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        self.show_readable()
+
+    @property
+    def raw_json(self) -> str:
+        """The payload exactly as the CLI printed it, complete."""
+        return self._raw
+
+    @property
+    def readable_report(self) -> str:
+        """The same payload rendered for a person."""
+        return self._readable
+
+    @property
+    def report_text(self) -> str:
+        """The text currently on the page, whole."""
+        return self.report_view.toPlainText()
+
+    def show_readable(self) -> None:
+        self._showing_raw = False
+        self.raw_button.setText("SHOW RAW JSON")
+        self.report_view.setPlainText(self._readable)
+
+    def show_raw(self) -> None:
+        self._showing_raw = True
+        self.raw_button.setText("SHOW READABLE REPORT")
+        self.report_view.setPlainText(self._raw)
+
+    def toggle_raw(self) -> None:
+        self.show_readable() if self._showing_raw else self.show_raw()
+
+    def copy_report(self) -> None:
+        from PySide6.QtWidgets import QApplication
+
+        clipboard = QApplication.clipboard()
+        if clipboard is not None:  # missing only when no application object exists
+            clipboard.setText(self.report_view.toPlainText())
 
 
 class ModelMakerWindow(QMainWindow):
@@ -144,10 +373,14 @@ class ModelMakerWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(_window_title())
-        self.setFixedSize(900, 600)
+        # The build window is resizable: 900x600 is where it opens, not a cage. The floor is
+        # the content's own minimum size, computed once the layout is built, so shrinking it
+        # can never hide a control; maximising is the user's to do.
+        self.resize(900, 600)
         self._worker: MakeModelWorker | None = None
         self._result: object | None = None
         self._out_dir: Path | None = None
+        self.doctor_view: DoctorView | None = None
         self._started_at: float | None = None
         self._elapsed_seconds = 0.0
         self._elapsed_timer = QTimer(self)
@@ -170,6 +403,8 @@ class ModelMakerWindow(QMainWindow):
         layout.addWidget(self._build_result_header())
         layout.addWidget(self._build_rows(), 5)
         layout.addLayout(self._build_result_actions())
+        layout.activate()
+        self.setMinimumSize(_smallest_useful(layout.minimumSize()))
 
     # ------------------------------------------------------------------ widgets
     def _build_top_row(self) -> QHBoxLayout:
@@ -226,6 +461,11 @@ class ModelMakerWindow(QMainWindow):
         self.cancel_button.setEnabled(False)
         row.addWidget(self.go_button, 3)
         row.addWidget(self.cancel_button, 1)
+        # The hourglass sits immediately beside the clock it belongs to, and both are driven
+        # by the same two places: _set_busy starts them on GO and stops them on every exit.
+        self.hourglass = HourglassWidget()
+        self.hourglass.setObjectName("hourglass")
+        row.addWidget(self.hourglass)
         self.elapsed_label = QLabel("ELAPSED 00:00:00")
         self.elapsed_label.setStyleSheet("color: #55ffff; font-family: Consolas;")
         self.elapsed_label.setToolTip(
@@ -233,6 +473,7 @@ class ModelMakerWindow(QMainWindow):
             "Includes waiting for the agent and cancellation; not an estimate of time remaining."
         )
         row.addWidget(self.elapsed_label)
+        self.actions_row = row
         return row
 
     def _build_stages(self) -> QTableWidget:
@@ -255,6 +496,9 @@ class ModelMakerWindow(QMainWindow):
         self.status_label = QLabel(
             "GO sends this datasheet and model text to the provider selected in SETUP"
         )
+        # Wrapped, not clipped: a status line can carry a whole failure reason, and an
+        # unwrapped QLabel would force the window's minimum width to the full sentence.
+        self.status_label.setWordWrap(True)
         self.status_label.setStyleSheet("color: #ffffff; font-family: Consolas; font-size: 10pt;")
         row.addWidget(self.status_label, 1)
         self.progress = QProgressBar()
@@ -322,6 +566,7 @@ class ModelMakerWindow(QMainWindow):
             self._started_at = time.monotonic()
             self._elapsed_seconds = 0.0
             self._elapsed_timer.start()
+            self.hourglass.start()
             self.stages.setRowCount(0)
             self.rows.setRowCount(0)
             self._result = None
@@ -332,6 +577,7 @@ class ModelMakerWindow(QMainWindow):
                 self._elapsed_seconds = time.monotonic() - self._started_at
                 self._started_at = None
             self._elapsed_timer.stop()
+            self.hourglass.stop()
         self._update_elapsed()
 
     def _elapsed(self) -> str:
@@ -490,7 +736,23 @@ class ModelMakerWindow(QMainWindow):
             QMessageBox.warning(self, "Command failed", str(exc))
             return
         message = completed.stdout.strip() or completed.stderr.strip() or "no output"
+        if list(argv[:2]) == ["doctor", "--json"]:
+            # The report goes to its own page, whole: this used to be a message box showing
+            # the *last* 4000 characters, which hid the head of the report and could not be
+            # scrolled usefully. The invocation stays exactly what ``doctor --json`` is.
+            exit_code = getattr(completed, "returncode", 0)
+            self._show_doctor(message, exit_code=exit_code if isinstance(exit_code, int) else 0)
+            return
         QMessageBox.information(self, "boardmodeler " + " ".join(argv[:2]), message[-4000:])
+
+    def _show_doctor(self, report: str, *, exit_code: int = 0) -> DoctorView:
+        """Show the whole report on its own resizable page and keep the handle for tests."""
+        view = DoctorView(self)
+        view.set_report(report, exit_code=exit_code)
+        self.doctor_view = view
+        view.show()
+        view.raise_()
+        return view
 
     def _open_setup(self) -> None:
         from boardmodeler.ui.setup_dialog import SetupDialog
@@ -589,6 +851,15 @@ class ModelMakerWindow(QMainWindow):
         super().closeEvent(event)  # type: ignore[arg-type]
 
 
+def _smallest_useful(content_minimum: QSize) -> QSize:
+    """The size the window may be shrunk to: what the content needs, plus a small margin.
+
+    A floor taken from the layout keeps every control reachable; the margin keeps the
+    outermost border and the table frames from touching the window edge at that size.
+    """
+    return QSize(content_minimum.width() + 8, content_minimum.height() + 8)
+
+
 def _default_model_dir() -> str:
     """Where models go by default: the persisted setting, else a folder in the home dir."""
     try:
@@ -609,8 +880,6 @@ def _window_stylesheet() -> str:
     Here the background is scoped by object name and the button styling comes from
     ``RETRO_STYLESHEET``, so a window rule can never repaint a control.
     """
-    from boardmodeler.ui.theme import CGA, RETRO_STYLESHEET
-
     return (
         RETRO_STYLESHEET
         + f"""

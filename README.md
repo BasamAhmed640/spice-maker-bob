@@ -1,8 +1,11 @@
 # Spice Maker Bob
 
-**1.3.0: quick structural checks are now the GUI default.** Quick mode skips AI test-circuit planning and uses structural checks plus a five-second unpowered LTspice load when available. Electrical accuracy remains explicitly unverified. Enable **Full simulation verification (slower)** in SETUP, or use **Run full verification** after a quick build. [Modes and limitations](docs/QUICK_MODE.md).
+**1.4.0: the window is resizable, the doctor report is complete, and the LTspice path is only searched when you ask.** The main window and SETUP can be dragged and maximised; CHECK ENVIRONMENT shows the whole report on its own resizable page with COPY REPORT and a raw-JSON toggle (it used to show only the last 4000 characters in a message box); SETUP's LTspice row now has explicit **FIND** and **BROWSE** buttons, and nothing is searched until you press FIND. A small hourglass runs beside the elapsed clock while a build runs. Inference egress is now checked against the provider's own documented host, and the saved key is a plain local file — see below.
 
-**1.2.1 fixes streamed API completion and shows received-data progress.** [API fix and measured checks](docs/API_STREAM_PROGRESS.md).
+**IBM Bob is the only AI in this edition, in both the UI and the application source.** Bob is a CLI provider, so it declares no HTTP endpoint: an HTTP destination is refused for it rather than guessed. Bob reads a datasheet, authors an LTspice model and repairs it using actual simulator
+feedback. A model card records measured behavior and every uncovered requirement.
+
+**1.3.0: quick structural checks are now the GUI default.** Quick mode skips AI test-circuit planning and uses structural checks plus a five-second unpowered LTspice load when available. Electrical accuracy remains explicitly unverified. Enable **Full simulation verification (slower)** in SETUP, or use **Run full verification** after a quick build. [Modes and limitations](docs/QUICK_MODE.md).
 
 **This build is portable.** Extract the GitHub **Code > Download ZIP** archive and run
 **Install.exe** inside it. The animated installer puts the app in `app/` in that same
@@ -24,21 +27,19 @@ LM358 now has reviewed datasheet extraction and real dual-amplifier checks. See
 GO now shows a continuously updating **ELAPSED HH:MM:SS** clock, preserving the
 final duration. See [what the agents and simulator do](docs/AGENT_WORKFLOW.md).
 
-**IBM Bob is the only AI in this edition, in both the UI and the application source.**
-Bob reads a datasheet, authors an LTspice model and repairs it using actual simulator
-feedback. A model card records measured behavior and every uncovered requirement.
-
 ## Install on Windows
 
 On the **main** branch, choose **Code → Download ZIP**, extract the archive and run
-**Install.exe** beside this README. The included **1.1.11** installer retains the animated
+**Install.exe** beside this README. The included installer retains the animated
 pepper setup. INSTALL.txt contains instructions; SHA256SUMS.txt authenticates the installer.
 Python is bundled. LTspice and IBM Bob Shell are separate prerequisites. This build is unsigned.
 
 Open IBM Bob Shell once to review and accept IBM's license. Then open SETUP, choose
-the LTspice executable, run its smoke test and save a Bob API key.
-Bob Shell uses an Inference-scoped key through the process environment; the key stays
-in a local file encrypted for your Windows user and is never passed on the command line. See the
+the LTspice executable (FIND searches this PC only when you press it, or BROWSE picks
+the file yourself), run its smoke test and save a Bob API key.
+Bob Shell uses an Inference-scoped key through the process environment; the key is kept in
+`data/credentials.bob.json` inside this folder — plain text, **not encrypted**, so anyone who
+can read the folder can read the key — and is never passed on the command line. See the
 [Bob Shell setup documentation](https://bob.ibm.com/docs/shell/getting-started/install-and-setup).
 No interactive account login is required by this app.
 

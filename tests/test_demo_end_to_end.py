@@ -25,9 +25,14 @@ import pytest
 
 from boardmodeler.domain.enums import Status
 from boardmodeler.domain.hashing import sha256_file
-from boardmodeler.pipeline.demo import build_demo_project, check_circuit, run_fault_matrix
+from boardmodeler.pipeline.demo import (
+    FaultMatrixReport,
+    build_demo_project,
+    check_circuit,
+    run_fault_matrix,
+)
 from boardmodeler.reporting.export import export_project
-from boardmodeler.simulation.ltspice import locate
+from boardmodeler.simulation.ltspice import LtspiceInstall
 
 pytestmark = pytest.mark.ltspice
 
@@ -45,11 +50,9 @@ FAULTS = (
 
 
 @pytest.fixture(scope="module")
-def install():
-    found = locate()
-    if found is None:
-        pytest.skip("LTspice is not installed")
-    return found
+def install(ltspice_install: LtspiceInstall) -> LtspiceInstall:
+    """The simulator this test session explicitly resolved; skips only if there is none."""
+    return ltspice_install
 
 
 @pytest.fixture(scope="module")
@@ -160,7 +163,7 @@ def test_unresolved_requirements_are_visible_as_unknown_or_blocked(checked) -> N
 
 
 def test_injected_faults_are_detected_and_the_original_is_untouched(demo, install) -> None:
-    report = run_fault_matrix(demo.project_dir, ltspice=install, faults=FAULTS)
+    report: FaultMatrixReport = run_fault_matrix(demo.project_dir, ltspice=install, faults=FAULTS)
     assert report["original_unchanged"] is True, (
         f"a mutation leaked into the original project: {report['original_hashes']}"
     )

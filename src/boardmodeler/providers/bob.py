@@ -3,7 +3,7 @@
 Two adapters, both explicit and both disabled until the user asks for them:
 
 ``BobDirectProvider``
-    The Bob HTTP API. It needs a credential (``BOB_API_KEY`` or the encrypted local entry
+    The Bob HTTP API. It needs a credential (``BOB_API_KEY`` or the plain local entry
     ``boardmodeler`` / ``provider:<name>:api_key``) **and** an endpoint/model pair
     taken from official documentation — neither is guessed, and with either
     missing it reports ``bob_credentials_unavailable`` /

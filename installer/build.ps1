@@ -35,6 +35,13 @@ try {
         & $python "$PSScriptRoot\render_assets.py" --name $Name --version $Version --out $assets
     }
 
+    # Vendors a CPython runtime and the pinned wheel set into build\portable\env. This is
+    # the only step that needs a package index: the installer builds each copy's venv from
+    # those files alone, so an installed copy never needs the network.
+    Invoke-Step "Vendor the in-folder Python environment" {
+        & $python "$PSScriptRoot\vendor_env.py"
+    }
+
     Invoke-Step "Freeze the app with PyInstaller" {
         # The spec carries every analysis option (entry script, icon, data files, the
         # run-time provider imports), so each checkout uses the same declared build inputs.
@@ -62,13 +69,22 @@ try {
 $Name $Version for Windows x64
 
 Extract this zip, then double-click Install.exe. The pepper animation plays during setup.
-Python is included. First launch requires SETUP: choose LTspice, a model folder inside this folder, and your key.
-The app is unpacked into app/ here. Start.cmd opens it next time.
-Settings, encrypted key, temporary work, logs and models stay inside this extracted folder.
-No registry installation, Start Menu entry, AppData settings, or Credential Manager entries.
-Delete this entire extracted folder for a fresh start. Reinstalling in it preserves data/.
+Setup unpacks the application into app/ and the Python runtime it is built from into env/,
+then creates this folder's own .venv and its launchers: Start.cmd starts the app,
+Boardmodeler.cmd runs the command line, and one "Spice Maker" shortcut does the same as
+Start.cmd. Python is included: the environment is built from the files already in env/ and
+never from the internet.
+First launch requires SETUP: choose LTspice, a model folder inside this folder, and your key.
+Settings, key, temporary work, logs and models stay inside this extracted folder.
+The shortcut is created inside this folder only: no registry installation, no Start Menu
+entry, no desktop shortcut, no AppData settings, no Credential Manager entries.
+Delete this entire extracted folder for a fresh start. Reinstalling in it preserves data/,
+models/ and .venv/. Copies in different folders never read or change each other; keep the two
+editions in separate folders.
+The .venv command line environment has no Qt, so commands that open a window (ui, setup) are
+served by the bundled app: use Start.cmd, or app\SpiceMaker.exe --cli <command>.
 LTspice and (for IBM Bob) Bob Shell must be installed separately.
-The API key stays in a local file encrypted for this Windows user; no account login is needed in this app.
+The API key stays inside this extracted folder; no account login is needed in this app.
 GO sends the selected datasheet and model text to the chosen provider.
 This build is unsigned. Check the publisher/source and the SHA256 before running it.
 "@ | Set-Content "$bundle/Read me.txt" -Encoding utf8

@@ -24,7 +24,7 @@ import threading
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from boardmodeler.domain.enums import (
     Criticality,
@@ -68,6 +68,8 @@ __all__ = [
     "BoardModelSpec",
     "CheckResult",
     "DemoBuildResult",
+    "FaultEntry",
+    "FaultMatrixReport",
     "build_demo_project",
     "check_circuit",
     "deck_for_scenario",
@@ -2015,13 +2017,37 @@ def _coverage(
 # fault matrix
 
 
+class FaultEntry(TypedDict):
+    """One injected fault's outcome, exactly as :func:`run_fault_matrix` records it."""
+
+    fault_id: str
+    description: str
+    expected_detection: str
+    detected: bool
+    status: str
+    summary: dict[str, int]
+    evidence: list[str]
+    modifications: list[dict[str, str]]
+
+
+class FaultMatrixReport(TypedDict):
+    """The whole fault-matrix payload (also written to ``fault_matrix.json``)."""
+
+    project: str
+    faults: list[FaultEntry]
+    detected: int
+    total: int
+    original_unchanged: bool
+    original_hashes: dict[str, str]
+
+
 def run_fault_matrix(
     project_dir: str | Path,
     *,
     out_dir: Path | None = None,
     ltspice: LtspiceInstall | None = None,
     faults: Sequence[str] | None = None,
-) -> dict[str, object]:
+) -> FaultMatrixReport:
     """Inject every fault into its own copy, run the check, and record detection.
 
     The original project is hashed before and after, so a mutation that leaked into
@@ -2036,7 +2062,7 @@ def run_fault_matrix(
 
     baseline = check_circuit(root, ltspice=ltspice)
 
-    entries: list[dict[str, object]] = []
+    entries: list[FaultEntry] = []
     for fault_id in faults or fault_ids():
         variant = work / fault_id
         mutation = MUTATORS[fault_id](root)
@@ -2057,7 +2083,7 @@ def run_fault_matrix(
         )
 
     after = {name: sha256_file(root / name) for name in watched if (root / name).is_file()}
-    report = {
+    report: FaultMatrixReport = {
         "project": str(root),
         "faults": entries,
         "detected": sum(1 for entry in entries if entry["detected"]),

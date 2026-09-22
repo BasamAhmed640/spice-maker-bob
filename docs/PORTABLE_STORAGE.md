@@ -1,11 +1,11 @@
-# Portable storage in 1.2.0
+# Portable storage in 1.4.0
 
 The folder extracted from GitHub is the storage boundary for this copy:
 
 - `Install.exe`: animated installer, included in Code > Download ZIP on main.
 - `Start.cmd` and `app/`: launch command and bundled application/Python.
 - `data/config.json`: first-launch settings, selected executable path and relative model folder.
-- `data/credentials.bin`: one API key encrypted with current-user Windows DPAPI.
+- `data/credentials.bob.json`: one API key as an ordinary local JSON file, **not encrypted**.
 - `data/temp/`, `data/logs/`, `data/plot-cache/`: scratch work and diagnostics.
 - `data/bob-profile/`: isolated profile for IBM Bob Shell when used by this copy.
 - `models/`: default model output, including datasheet copies, evidence, caches and simulator runs.
@@ -24,10 +24,11 @@ Delete the entire extracted folder for a fresh start. Replacing only Install.exe
 running it again inside an existing folder updates app/ and preserves data/ and models/.
 Keep the editions in separate folders; the installer rejects mixing them in one folder.
 
-The key remains sensitive. Encryption is tied to the Windows user; copying the folder
-to another account or PC may require entering the key again. Generated data and keys
+The key remains sensitive. The file is not encrypted and is not tied to a Windows account:
+anyone who can read this folder can read the key, so keep the copy private. Generated data
+and keys
 are excluded from Git and from packaging. Sharing the entire folder manually would
-still share its private model data and encrypted key; share a clean GitHub download.
+still share its private model data and its key file; share a clean GitHub download.
 
 Spice Maker restricts its Python file writes to this folder and gives child temporary
 work and the Bob profile local paths. This is application storage containment, not an

@@ -55,6 +55,7 @@ __all__ = [
     "LtspiceLockTimeout",
     "SmokeResult",
     "default_lib_dir",
+    "discover",
     "locate",
     "locate_outcome",
     "netlist_step",
@@ -171,7 +172,7 @@ BATCH_RESOLUTION_NOTES = (
     "-I is unsupported (GUI modal hang), .step is unsupported (concatenated raw)"
 )
 
-#: Candidate locations, in the order they are probed.
+#: Explicit override for automation. On its own it is a setting, never a search.
 _CANDIDATE_ENV = "LTSPICE_EXE"
 
 
@@ -282,13 +283,13 @@ def default_lib_dir() -> Path | None:
     return None
 
 
-def _candidate_paths(explicit: str | Path | None) -> list[tuple[Path, str]]:
+def _install_candidates() -> list[tuple[Path, str]]:
+    """Well-known install locations, in probe order, for :func:`discover` only.
+
+    Nothing else may call this: an unconfigured machine reports ``unset`` instead of
+    inspecting the user's profile, so SETUP has to ask the user exactly once.
+    """
     candidates: list[tuple[Path, str]] = []
-    if explicit:
-        candidates.append((Path(explicit), "configured"))
-    env_value = os.environ.get(_CANDIDATE_ENV)
-    if env_value:
-        candidates.append((Path(env_value), f"env:{_CANDIDATE_ENV}"))
     localappdata = os.environ.get("LOCALAPPDATA")
     if localappdata:
         candidates.append(
@@ -308,66 +309,116 @@ def _candidate_paths(explicit: str | Path | None) -> list[tuple[Path, str]]:
     return candidates
 
 
+LocateReason = Literal[
+    "configured",
+    "config",
+    "env",
+    "unset",
+    "discovered",
+    "configured_missing",
+    "config_missing",
+    "env_missing",
+    "not_installed",
+]
+
+
 @dataclass(frozen=True)
 class LocateOutcome:
-    """Where LTspice was looked for, what was found, and why."""
+    """What was resolved, which setting it came from, and why."""
 
     install: LtspiceInstall | None
     probed: list[tuple[Path, str]]
-    reason: Literal[
-        "configured",
-        "env",
-        "discovered",
-        "configured_missing",
-        "env_missing",
-        "not_installed",
-    ]
+    reason: LocateReason
 
     @property
     def probed_paths(self) -> list[str]:
         return [str(path) for path, _source in self.probed]
 
 
-def locate_outcome(explicit: str | Path | None = None) -> LocateOutcome:
-    """Resolve the executable without ever overriding an explicit setting.
+def _resolve_one(
+    path: Path, source: str, *, found: LocateReason, missing: LocateReason
+) -> LocateOutcome:
+    """Report exactly one configured path: used when it is a file, missing otherwise."""
+    install = LtspiceInstall(path=path, source=source) if path.is_file() else None
+    return LocateOutcome(
+        install=install, probed=[(path, source)], reason=found if install else missing
+    )
 
-    An explicitly configured path (config file or ``LTSPICE_EXE``) is either used
-    or reported missing — discovery does **not** fall through to another
-    installation, because silently simulating with a different binary than the
-    one that was asked for would invalidate every result.
+
+def _configured_path() -> str | None:
+    """The executable path saved by SETUP, or ``None`` when it was never set."""
+    from boardmodeler.config import load_config
+
+    return load_config().ltspice.path
+
+
+def locate_outcome(explicit: str | Path | None = None) -> LocateOutcome:
+    """Resolve LTspice from what the user configured, never by searching the machine.
+
+    The order is the ``explicit`` argument, then the saved ``ltspice.path`` from the
+    config file, then ``LTSPICE_EXE``. A configured entry that is missing is reported
+    missing — it does **not** fall through to another installation, because silently
+    simulating with a different binary than the one that was asked for would
+    invalidate every result. With none of the three set, the outcome is ``unset``:
+    SETUP has not been completed, and no install location is touched. Use
+    :func:`discover` when the user explicitly asks for a search.
     """
-    candidates = _candidate_paths(explicit)
     if explicit:
-        path = Path(explicit)
-        install = LtspiceInstall(path=path, source="configured") if path.is_file() else None
-        return LocateOutcome(
-            install=install,
-            probed=candidates,
-            reason="configured" if install else "configured_missing",
+        return _resolve_one(
+            Path(explicit),
+            "configured",
+            found="configured",
+            missing="configured_missing",
         )
+    configured = _configured_path()
+    if configured:
+        return _resolve_one(Path(configured), "config", found="config", missing="config_missing")
     env_value = os.environ.get(_CANDIDATE_ENV)
     if env_value:
-        path = Path(env_value)
-        install = (
-            LtspiceInstall(path=path, source=f"env:{_CANDIDATE_ENV}") if path.is_file() else None
+        return _resolve_one(
+            Path(env_value),
+            f"env:{_CANDIDATE_ENV}",
+            found="env",
+            missing="env_missing",
         )
-        return LocateOutcome(
-            install=install, probed=candidates, reason="env" if install else "env_missing"
-        )
-
-    for path, source in candidates:
-        if path.is_file():
-            return LocateOutcome(
-                install=LtspiceInstall(path=path, source=source),
-                probed=candidates,
-                reason="discovered",
-            )
-    return LocateOutcome(install=None, probed=candidates, reason="not_installed")
+    return LocateOutcome(install=None, probed=[], reason="unset")
 
 
 def locate(explicit: str | Path | None = None) -> LtspiceInstall | None:
-    """Find LTspice, first match wins; ``None`` when nothing is installed."""
+    """The configured LTspice executable, or ``None`` when SETUP has not set one.
+
+    Never searches: an unconfigured machine reports nothing until the user chooses
+    an executable in SETUP, or exports ``LTSPICE_EXE`` for automation.
+    """
     return locate_outcome(explicit).install
+
+
+def discover(explicit: str | Path | None = None) -> LocateOutcome:
+    """Probe well-known install locations because the user explicitly asked.
+
+    This is the SETUP page's find button and the explicit CLI search. It never runs
+    as part of :func:`locate`, and never at startup; the probed list is returned so
+    the caller can show exactly which locations were inspected.
+    """
+    candidates = _install_candidates()
+    if explicit:
+        candidates.insert(0, (Path(explicit), "configured"))
+    env_value = os.environ.get(_CANDIDATE_ENV)
+    if env_value:
+        candidates.insert(0 if not explicit else 1, (Path(env_value), f"env:{_CANDIDATE_ENV}"))
+    for path, source in candidates:
+        if not path.is_file():
+            continue
+        if source == "configured":
+            reason: LocateReason = "configured"
+        elif source.startswith("env:"):
+            reason = "env"
+        else:
+            reason = "discovered"
+        return LocateOutcome(
+            install=LtspiceInstall(path=path, source=source), probed=candidates, reason=reason
+        )
+    return LocateOutcome(install=None, probed=candidates, reason="not_installed")
 
 
 def version(exe: Path, *, timeout_s: float = 20.0) -> str | None:
@@ -855,7 +906,24 @@ def smoke_test(
             version=exe_version,
         )
 
-    measured = float(np.interp(1e-3, time_axis, raw.column("V(out)")))
+    try:
+        measured = float(np.interp(1e-3, time_axis, raw.column("V(out)")))
+    except (ValueError, IndexError) as exc:
+        # Documented contract: a payload that cannot be read is a fail, not a crash.
+        return SmokeResult(
+            status="fail",
+            detail=f"cannot interpolate V(out) at 1 ms: {exc}",
+            measured_v=None,
+            expected_v=SMOKE_EXPECTED_V,
+            tolerance_pct=SMOKE_TOLERANCE_PCT,
+            exit_code=result.exit_code,
+            wall_s=result.wall_s,
+            raw_sha256=raw_sha,
+            log_sha256=log_sha,
+            reader_layout=raw.layout,
+            header_encoding=raw.header_encoding,
+            version=exe_version,
+        )
     deviation_pct = abs(measured - SMOKE_EXPECTED_V) / SMOKE_EXPECTED_V * 100.0
     log_meas = summary.value(SMOKE_MEAS_NAME)
 

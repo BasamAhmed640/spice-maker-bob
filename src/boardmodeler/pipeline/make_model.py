@@ -143,8 +143,8 @@ RESULTS_NAME = "results.json"
 EXAMPLE_NAME = "EXAMPLE.cir"
 
 LTSPICE_MISSING = (
-    "ltspice_not_found: LTspice was not found; install LTspice or set LTSPICE_EXE "
-    "and re-run 'boardmodeler doctor' to confirm it"
+    "ltspice_not_found: LTspice was not found; open SETUP and choose your LTspice.exe "
+    "(automation: set LTSPICE_EXE), then re-run 'boardmodeler doctor' to confirm it"
 )
 
 _TEXT_SUFFIXES = frozenset({".txt", ".text", ".md"})

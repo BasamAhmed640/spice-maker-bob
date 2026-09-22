@@ -100,3 +100,35 @@ def test_setup_is_reachable_from_the_window(qtbot, window, monkeypatch) -> None:
     else:  # pragma: no cover - the button must exist
         raise AssertionError("no SETUP button")
     assert opened == ["exec"]
+
+
+@pytest.fixture
+def setup_page(qtbot, tmp_path, monkeypatch):
+    """The setup page, on a throwaway config, for the same rendered-pixel check."""
+    target = tmp_path / "config.json"
+    monkeypatch.setattr("boardmodeler.config.config_path", lambda: target)
+    monkeypatch.setattr("boardmodeler.ui.setup_dialog.config_path", lambda: target)
+    from boardmodeler.ui.setup_dialog import SetupDialog
+
+    page = SetupDialog()
+    qtbot.addWidget(page)
+    page.show()
+    qtbot.waitExposed(page)
+    return page
+
+
+def test_the_setup_find_and_browse_buttons_render_legibly(setup_page) -> None:
+    """SETUP's LTspice buttons must not repeat the black-on-black regression.
+
+    The window contract above is about the main window; this is the same property on
+    the page that grew two new buttons next to the LTspice path, checked on pixels so
+    a background rule that repaints a button cannot pass unnoticed.
+    """
+    for button in (setup_page.find_ltspice_button, setup_page.browse_ltspice_button):
+        assert button.isEnabled(), f"{button.text()} must be pressable"
+        # Sample the button's own padding, never its centre: the centre can be glyph
+        # ink (black text), which says nothing about the button's background.
+        for dx in (3, button.width() - 3):
+            background, _ = _sample(setup_page, button, dx=dx)
+            assert background != (0, 0, 0), f"{button.text()} renders black ({background})"
+            assert background in {(170, 170, 170), (255, 255, 255)}, background

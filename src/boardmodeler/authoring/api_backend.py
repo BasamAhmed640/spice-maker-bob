@@ -33,7 +33,7 @@ def env_sources(provider: AgentProvider) -> tuple[str, ...]:
 def credential_for(
     provider: AgentProvider, lookup: Callable[[str], Credential] | None = None
 ) -> Credential:
-    """The key for ``provider``: encrypted file, ``BOARDMODELER_<NAME>_API_KEY``, then aliases.
+    """The key for ``provider``: plain local file, ``BOARDMODELER_<NAME>_API_KEY``, then aliases.
 
     ``lookup`` is the repo helper (:func:`boardmodeler.security.credentials.get_credential`
     by default, and the injectable seam tests use); the catalog's own environment

@@ -1,7 +1,8 @@
 """Quick mode must never publish a model the real simulator rejected.
 
-Marked ``ltspice``: a real LTspice is required, and the test is skipped where none is
-installed. The case here is the one that escaped: LTspice rejects a deck for a reason no
+Marked ``ltspice``: a real LTspice is required, and the test is skipped when this
+machine has none configured or installed (``LTSPICE_EXE`` names one explicitly). The
+case here is the one that escaped: LTspice rejects a deck for a reason no
 keyword list anticipated (``No such node.``), the bounded load check must say so, and the
 build must publish nothing rather than offer an unusable model.
 """
@@ -43,13 +44,11 @@ class Backend:
         return AuthorResult(True, "synthetic circuit written", {}, "", None)
 
 
-def test_a_model_the_real_simulator_rejects_is_never_published(tmp_path, monkeypatch):
+def test_a_model_the_real_simulator_rejects_is_never_published(
+    tmp_path, monkeypatch, ltspice_exe: Path
+):
     from boardmodeler.authoring import test_planner
     from boardmodeler.domain.records import Requirement
-    from boardmodeler.simulation.ltspice import locate
-
-    if locate() is None:
-        pytest.skip("LTspice is not installed")
 
     backend = Backend(UNDECLARED_NODE)
     fixture = Path(__file__).resolve().parents[2] / "fixtures/regulator/tps54320/requirements.json"

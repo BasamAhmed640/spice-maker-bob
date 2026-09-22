@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -75,15 +76,12 @@ def test_floating_ground_sense_node_is_not_ltspices_reserved_ground_alias():
 
 
 @pytest.mark.ltspice
-def test_operating_point_hint_does_not_force_a_passing_output(tmp_path):
+def test_operating_point_hint_does_not_force_a_passing_output(tmp_path: Path, ltspice_exe: Path):
     from types import SimpleNamespace
 
     from boardmodeler.authoring.model_reference import normalize_ground_reference
-    from boardmodeler.simulation.ltspice import locate, run_batch
+    from boardmodeler.simulation.ltspice import run_batch
 
-    install = locate()
-    if install is None:
-        pytest.skip("LTspice not installed")
     model = tmp_path / "wrong.lib"
     model.write_text(
         "* TEST_FIXTURE: wrong 1 V regulator\n.subckt DUT IN OUT GND\nVwrong OUT GND 1\nRin IN GND 1Meg\n.ends DUT\n"
@@ -101,7 +99,7 @@ def test_operating_point_hint_does_not_force_a_passing_output(tmp_path):
     probe = make_probe(recipe())
     deck = tmp_path / "hint.cir"
     deck.write_text(probe.render(model_lib=model, subckt="DUT", params={}))
-    observed = run_batch(install.path, deck, tmp_path, timeout_s=20)
+    observed = run_batch(ltspice_exe, deck, tmp_path, timeout_s=20)
     assert observed.raw_path
     assert probe.measure(observed.raw_path, {})["recipe_value"] == pytest.approx(1)
 
@@ -208,12 +206,9 @@ def test_relative_limits_preserve_formula_and_evaluate_only_explicit_point(tmp_p
 
 
 @pytest.mark.ltspice
-def test_real_fixture_measures_dut_and_detects_broken_gain(tmp_path):
-    from boardmodeler.simulation.ltspice import locate, run_batch
+def test_real_fixture_measures_dut_and_detects_broken_gain(tmp_path: Path, ltspice_exe: Path):
+    from boardmodeler.simulation.ltspice import run_batch
 
-    install = locate()
-    if install is None:
-        pytest.skip("LTspice not installed")
     probe = make_probe(recipe())
     observed = []
     for gain in (2, 0.2):
@@ -225,7 +220,7 @@ def test_real_fixture_measures_dut_and_detects_broken_gain(tmp_path):
         )
         deck = folder / "deck.cir"
         deck.write_text(probe.render(model_lib=model, subckt="DUT", params={}))
-        result = run_batch(install.path, deck, folder, timeout_s=30)
+        result = run_batch(ltspice_exe, deck, folder, timeout_s=30)
         assert result.raw_path and result.raw_path.is_file()
         observed.append(probe.measure(result.raw_path, {})["recipe_value"])
     assert observed == pytest.approx([1, 0.1], rel=1e-5)
@@ -302,13 +297,10 @@ def test_one_invalid_fixture_does_not_erase_other_source_rows():
 
 
 @pytest.mark.ltspice
-def test_open_loop_ac_compiler_measures_known_gbw(tmp_path):
+def test_open_loop_ac_compiler_measures_known_gbw(tmp_path: Path, ltspice_exe: Path):
     from boardmodeler.authoring.test_planner import _ac_open_loop
-    from boardmodeler.simulation.ltspice import locate, run_batch
+    from boardmodeler.simulation.ltspice import run_batch
 
-    install = locate()
-    if install is None:
-        pytest.skip("LTspice not installed")
     data = recipe()
     data.update(
         unit="Hz",
@@ -337,6 +329,6 @@ def test_open_loop_ac_compiler_measures_known_gbw(tmp_path):
     probe = make_probe(fixed.model_dump())
     deck = tmp_path / "gbw.cir"
     deck.write_text(probe.render(model_lib=model, subckt="DUT", params={}))
-    result = run_batch(install.path, deck, tmp_path, timeout_s=30)
+    result = run_batch(ltspice_exe, deck, tmp_path, timeout_s=30)
     assert result.raw_path
     assert probe.measure(result.raw_path, {})["recipe_value"] == pytest.approx(1e6, rel=0.002)

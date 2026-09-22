@@ -1,20 +1,22 @@
-"""One encrypted local credential per edition and Windows user; no credential vault.
+"""One local credential file per edition, inside this copy's data directory.
 
-The application writes only DPAPI ciphertext beside the app in its data directory. It never
-falls back to a plaintext file. Explicit environment variables remain available for
-CLI automation. Saving another provider replaces the previously stored credential.
+The application writes the key as an ordinary local JSON file beside the app in its
+data directory. Nothing is bound to Windows: no DPAPI ciphertext, no registry entry,
+no Credential Manager entry, no user-profile location and no machine-held key. The
+file is protected only by the folder it lives in, so keep this copy private and do
+not share its ``data`` directory. Explicit environment variables remain available
+for CLI automation. Saving another provider replaces the previously stored
+credential.
 """
 
 from __future__ import annotations
 
-import ctypes
 import json
 import os
 import re
 import tempfile
 import threading
 from collections.abc import Iterable
-from ctypes import wintypes
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -24,9 +26,11 @@ from boardmodeler.build_flavor import BOB_ONLY
 REDACTED = "[REDACTED]"
 _NON_ALNUM = re.compile(r"[^A-Za-z0-9]")
 _APP_NAME = "SpiceMakerBob" if BOB_ONLY else "SpiceMaker"
-_ENTROPY = f"{_APP_NAME}:credential-file:v1".encode("ascii")
+#: Each edition keeps its own file, so unpacking both into one folder shares no key.
+_CREDENTIAL_FILE = "credentials.bob.json" if BOB_ONLY else "credentials.json"
 _LOCK = threading.RLock()
 _MAX_FILE_BYTES = 65536
+_MAX_KEY_BYTES = 16384
 
 
 class SecretSource(StrEnum):
@@ -44,64 +48,14 @@ class Credential:
 
 
 def credential_path() -> Path:
-    """Ciphertext belongs to this extracted copy, never a shared profile."""
-    from boardmodeler.storage import data_dir
+    """This extracted copy's own credential file, never a shared profile."""
+    from boardmodeler.storage import state_file
 
-    return data_dir() / "credentials.bin"
+    return state_file(_CREDENTIAL_FILE)
 
 
 def env_var_name(name: str) -> str:
     return f"BOARDMODELER_{_NON_ALNUM.sub('_', name).upper()}_API_KEY"
-
-
-class _Blob(ctypes.Structure):
-    _fields_ = [("size", wintypes.DWORD), ("data", ctypes.POINTER(ctypes.c_ubyte))]
-
-
-def _dpapi(data: bytes, *, decrypt: bool = False) -> bytes:
-    """Current-user DPAPI, authenticated by Windows; no machine-wide flag or UI."""
-    if os.name != "nt":
-        raise RuntimeError(
-            "Encrypted credential files require Windows; use an environment variable."
-        )
-    crypt = ctypes.WinDLL("crypt32", use_last_error=True)
-    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-    operation = crypt.CryptUnprotectData if decrypt else crypt.CryptProtectData
-    operation.argtypes = [
-        ctypes.POINTER(_Blob),
-        ctypes.c_void_p,
-        ctypes.POINTER(_Blob),
-        ctypes.c_void_p,
-        ctypes.c_void_p,
-        wintypes.DWORD,
-        ctypes.POINTER(_Blob),
-    ]
-    operation.restype = wintypes.BOOL
-    kernel.LocalFree.argtypes = [ctypes.c_void_p]
-    kernel.LocalFree.restype = ctypes.c_void_p
-    buffer = ctypes.create_string_buffer(data)
-    entropy = ctypes.create_string_buffer(_ENTROPY)
-    incoming = _Blob(len(data), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ubyte)))
-    additional = _Blob(len(_ENTROPY), ctypes.cast(entropy, ctypes.POINTER(ctypes.c_ubyte)))
-    outgoing = _Blob()
-    try:
-        # CRYPTPROTECT_UI_FORBIDDEN=1; deliberately never CRYPTPROTECT_LOCAL_MACHINE.
-        if not operation(
-            ctypes.byref(incoming),
-            None,
-            ctypes.byref(additional),
-            None,
-            None,
-            1,
-            ctypes.byref(outgoing),
-        ):
-            raise RuntimeError("Windows could not protect or unlock this credential file.")
-        return ctypes.string_at(outgoing.data, outgoing.size)
-    finally:
-        ctypes.memset(buffer, 0, len(buffer))
-        if outgoing.data:
-            ctypes.memset(outgoing.data, 0, outgoing.size)
-            kernel.LocalFree(outgoing.data)
 
 
 def _read_saved() -> dict[str, object] | None:
@@ -109,10 +63,14 @@ def _read_saved() -> dict[str, object] | None:
     if not path.exists():
         return None
     with path.open("rb") as stream:
-        encrypted = stream.read(_MAX_FILE_BYTES + 1)
-    if len(encrypted) > _MAX_FILE_BYTES:
+        raw = stream.read(_MAX_FILE_BYTES + 1)
+    if len(raw) > _MAX_FILE_BYTES:
         raise ValueError("Credential file is too large.")
-    payload = json.loads(_dpapi(encrypted, decrypt=True))
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        # The text is fixed: a decoder message can quote the file's own content.
+        raise ValueError("Credential file has an unsupported format.") from exc
     if (
         not isinstance(payload, dict)
         or set(payload) != {"v", "name", "key"}
@@ -135,11 +93,11 @@ def get_credential(name: str) -> Credential:
                     name,
                     str(saved["key"]),
                     SecretSource.LOCAL_FILE,
-                    "encrypted local file for this Windows user",
+                    "local file in this copy's data directory",
                 )
         except Exception:
-            # Never include exception text: decoders and OS errors can echo input.
-            problem = "saved key could not be unlocked; enter it again in SETUP"
+            # Never include exception text: a decoder error can echo file content.
+            problem = "saved key could not be read; enter it again in SETUP"
     variable = env_var_name(name)
     if value := os.environ.get(variable):
         return Credential(name, value, SecretSource.ENV, f"environment variable {variable}")
@@ -147,22 +105,21 @@ def get_credential(name: str) -> Credential:
 
 
 def set_credential(name: str, value: str) -> None:
-    """Replace the single saved credential atomically, writing ciphertext only."""
-    if not name.strip() or not value.strip() or len(value.encode("utf-8")) > 16384:
+    """Replace the single saved credential atomically, writing the local file only."""
+    if not name.strip() or not value.strip() or len(value.encode("utf-8")) > _MAX_KEY_BYTES:
         raise ValueError("Enter a non-empty API key of at most 16 KiB.")
     with _LOCK:
         payload = json.dumps({"v": 1, "name": name, "key": value}).encode("utf-8")
-        encrypted = _dpapi(payload)
-        if _dpapi(encrypted, decrypt=True) != payload:
-            raise RuntimeError("Credential encryption verification failed.")
         path = credential_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(prefix=".credential-", suffix=".tmp", dir=path.parent)
         try:
             with os.fdopen(fd, "wb") as stream:
-                stream.write(encrypted)
+                stream.write(payload)
                 stream.flush()
                 os.fsync(stream.fileno())
+            if Path(temporary).read_bytes() != payload:
+                raise RuntimeError("Credential file verification failed.")
             os.replace(temporary, path)
         finally:
             Path(temporary).unlink(missing_ok=True)

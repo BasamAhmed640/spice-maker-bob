@@ -7,18 +7,18 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import Signal
 
 from boardmodeler.domain.records import ReviewItem
 from boardmodeler.pipeline.project import create_project
 from boardmodeler.simulation.ltspice import SmokeResult
 from boardmodeler.ui.main_window import DEFAULT_USE_PROFILE, MainWindow
-from boardmodeler.ui.worker_client import jsonable_request
+from boardmodeler.ui.worker_client import WorkerClient, jsonable_request
 
 pytestmark = pytest.mark.gui
 
 
-class FakeWorker(QObject):
+class FakeWorker(WorkerClient):
     """Stands in for :class:`WorkerClient`: same signals, scripted by tests."""
 
     stage = Signal(dict)
@@ -39,7 +39,6 @@ class FakeWorker(QObject):
         self.projects: list[Path] = []
         self.running = False
         self.cancel_calls = 0
-        self.outcome = SimpleNamespace(cancelled=False, exit_code=None)
 
     def is_running(self) -> bool:
         return self.running
@@ -288,6 +287,7 @@ def test_error_event_is_recorded_and_shown(qapp, tmp_path: Path) -> None:
     window.start_run()
 
     fake.error.emit({"event": "error", "code": "project_not_found", "detail": "gone"})
+    assert window.last_error_event is not None
     assert window.last_error_event["code"] == "project_not_found"
     assert "project_not_found" in window.statusBar().currentMessage()
 
@@ -400,7 +400,7 @@ def test_settings_dialog_round_trip_and_smoke_result(qapp, tmp_path: Path, monke
     dialog.secret.setText("sk-top-secret")
     assert "sk-top-secret" not in json.dumps(dialog.values())
 
-    assert "stored in the encrypted local file" in dialog.store_credential()
+    assert "stored in this folder's local credential file" in dialog.store_credential()
     assert stored == [("http_inference", "sk-top-secret")]
     assert dialog.secret.text() == ""
 

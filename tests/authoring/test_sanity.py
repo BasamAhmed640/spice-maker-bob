@@ -27,7 +27,7 @@ VALID = "* TEST_FIXTURE: resistor, not device data\n.subckt TEST IN OUT\nR1 IN O
 class Backend:
     name = "synthetic-test"
 
-    def __init__(self, text=VALID, tamper=False):
+    def __init__(self, text: str | None = VALID, tamper: bool = False):
         self.text, self.tamper, self.calls = text, tamper, 0
 
     def availability(self):
@@ -385,7 +385,8 @@ def test_quick_pipeline_skips_planner_simulator_and_never_claims_accuracy(
     monkeypatch.setattr(engine._Run, "read", lambda self: None)
     monkeypatch.setattr(engine._Run, "extract", extract)
     monkeypatch.setattr(engine, "build_backend", lambda request: backend)
-    # Quick mode calls locate() for the bounded load check; no simulator installed.
+    # Quick mode calls locate() for the bounded load check; this test deliberately
+    # states that the simulator is unavailable, rather than relying on a machine state.
     monkeypatch.setattr(engine, "locate", lambda: None)
     monkeypatch.setattr(engine, "build_model", forbidden)
     monkeypatch.setattr(engine._Run, "_gather_supporting_material", forbidden)
@@ -403,6 +404,7 @@ def test_quick_pipeline_skips_planner_simulator_and_never_claims_accuracy(
     assert all(row.status == "UNKNOWN" for row in result.rows)
     if write_model:
         assert result.lib_path and result.asy_path
+        assert result.card_path is not None, "a published model must have a card"
         assert "electrical accuracy unverified" in result.card_path.read_text(encoding="utf-8")
         assert json.loads((out / "harness-report.json").read_text())["outcomes"] == []
         assert backend.calls == 1

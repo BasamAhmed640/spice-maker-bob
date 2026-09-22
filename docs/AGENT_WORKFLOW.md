@@ -1,10 +1,11 @@
 # Current default: quick model delivery
 
-In 1.3.0, GUI GO reads/extracts the datasheet, writes a model, runs local structural checks and a five-second unpowered LTspice load when available, and exports it as electrically unverified. Full test planning and electrical verification are opt-in. See [quick mode](QUICK_MODE.md) for the exact limits. The full workflow described below runs when full verification is selected.
+In 1.4.0, GUI GO reads/extracts the datasheet, writes a model, runs local structural checks and a five-second unpowered LTspice load when available, and exports it as electrically unverified. Full test planning and electrical verification are opt-in. See [quick mode](QUICK_MODE.md) for the exact limits. The full workflow described below runs when full verification is selected.
 
 # What happens after GO
 
-The elapsed clock beside GO shows hours:minutes:seconds. It updates while the agent
+The elapsed clock beside GO shows hours:minutes:seconds, with a small hourglass beside it
+that drains only while a build runs. It updates while the agent
 is quiet, includes cancellation cleanup, and keeps the final duration after success,
 a blocked run or an error. The next accepted GO resets it. It measures elapsed time;
 it does not predict completion or show the agent's private reasoning.

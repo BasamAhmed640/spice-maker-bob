@@ -55,7 +55,7 @@ from boardmodeler.models.templates import (
     validate_rendered_subckt,
     write_application_deck,
 )
-from boardmodeler.simulation.ltspice import locate
+from boardmodeler.simulation.ltspice import discover, locate
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES_DIR = REPO_ROOT / "fixtures" / "templates"
@@ -384,9 +384,15 @@ def test_baseline_is_reproduced_by_a_real_run(
 def generate_baseline(family: str, workdir: Path) -> Path:
     """Run one family's deck and write the observed values as its baseline."""
     contract = load_contract(TEMPLATES_DIR / f"{family}.json")
-    install = locate()
+    # Regenerating a baseline is an explicit ask (``--generate``), not a startup
+    # probe: a configured path wins, and only then is the well-known locations
+    # search used, exactly like the ``ltspice_install`` test fixture.
+    install = locate() or discover().install
     if install is None:
-        raise SystemExit("LTspice was not found, so no baseline can be produced")
+        raise SystemExit(
+            "no LTspice executable was configured or found, so no baseline can be "
+            "produced; set LTSPICE_EXE to an LTspice.exe and re-run"
+        )
     run = run_family_deck(contract, exe=install.path, workdir=workdir / family)
     document = describe_baseline(contract, run)
     return write_baseline(BASELINE_DIR / f"{family}.json", document)

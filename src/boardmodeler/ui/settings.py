@@ -1,7 +1,7 @@
 """Settings dialog: LTspice, provider, data policy and credentials.
 
 The dialog writes configuration only through ``config.save_config`` and writes
-secrets only into the encrypted local credential file (``security.credentials.set_credential``); the
+secrets only into the folder's plain local credential file (``security.credentials.set_credential``); the
 API key never appears in the config file, in a log line, or in ``values()``.
 The smoke test button runs the same ``simulation.ltspice.smoke_test`` the CLI
 uses and displays exactly what it observed.
@@ -99,8 +99,8 @@ class SettingsDialog(QDialog):
         self.model_name.setPlaceholderText("model id from vendor documentation")
         self.secret = QLineEdit(self)
         self.secret.setEchoMode(QLineEdit.EchoMode.Password)
-        self.secret.setPlaceholderText("API key (stored in the encrypted local credential file)")
-        store = QPushButton("Save encrypted key", self)
+        self.secret.setPlaceholderText("API key (saved in this folder as a plain local file)")
+        store = QPushButton("SAVE KEY", self)
         store.clicked.connect(self.store_credential)
         self.credential_label = QLabel(self._last_credential, self)
         self.credential_label.setWordWrap(True)
@@ -228,7 +228,7 @@ class SettingsDialog(QDialog):
         return self.selected_provider_name()
 
     def store_credential(self) -> str:
-        """Write only encrypted ciphertext to the app credential file."""
+        """Write only the key itself to the app's plain local credential file."""
         secret = self.secret.text()
         if not secret:
             self._last_credential = "no secret entered; nothing stored"
@@ -237,9 +237,9 @@ class SettingsDialog(QDialog):
         try:
             set_credential(self.credential_name(), secret)
         except Exception:
-            self._last_credential = "credential NOT stored: encryption or local file access failed"
+            self._last_credential = "credential NOT stored: could not write the local file"
         else:
-            self._last_credential = "credential stored in the encrypted local file"
+            self._last_credential = "stored in this folder's local credential file"
             self.secret.clear()
         self.credential_label.setText(self._last_credential)
         return self._last_credential

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 
 def test_unknown_simulation_feedback_survives_without_becoming_cached_pass(tmp_path):
     from boardmodeler.authoring.harness import HarnessReport, ProbeOutcome
@@ -126,14 +128,13 @@ def test_active_stream_cannot_reset_the_total_response_deadline(monkeypatch):
 
 
 @pytest.mark.ltspice
-def test_ground_reference_normalization_preserves_zero_ground_and_floats(tmp_path):
+def test_ground_reference_normalization_preserves_zero_ground_and_floats(
+    tmp_path: Path, ltspice_exe: Path
+):
     from boardmodeler.authoring.model_reference import normalize_ground_reference
-    from boardmodeler.simulation.ltspice import locate, run_batch
+    from boardmodeler.simulation.ltspice import run_batch
     from boardmodeler.simulation.raw import read_raw
 
-    install = locate()
-    if install is None:
-        pytest.skip("LTspice not installed")
     model = tmp_path / "fixture.lib"
     model.write_text(
         "* TEST_FIXTURE with the observed global-reference mistake\n.subckt DUT A Y VCC GND\nBdriver Y GND I=(V(Y)-V(VCC)*(V(A)>0.5*V(VCC)))/10\n.ends DUT\n"
@@ -152,19 +153,19 @@ def test_ground_reference_normalization_preserves_zero_ground_and_floats(tmp_pat
             deck.write_text(
                 f'* TEST_FIXTURE\n.include "{model.as_posix()}"\nVg g 0 {offset}\nVcc vcc g 3.3\nVa a g {3.3 * level}\nRload y g 100000\nXdut a y vcc g DUT\n.options plotwinsize=0 numdgt=15\n.tran 0 1m 0 1u\n.save V(y)\n.end\n'
             )
-            run = run_batch(install.path, deck, folder, timeout_s=30)
+            run = run_batch(ltspice_exe, deck, folder, timeout_s=30)
             assert run.raw_path
             value = read_raw(run.raw_path).column("V(y)")[-1] - offset
             assert value == pytest.approx(3.3 * level, abs=0.001)
 
 
 @pytest.mark.ltspice
-def test_long_windows_evidence_path_launches_simulator(tmp_path):
+def test_long_windows_evidence_path_launches_simulator(tmp_path: Path, ltspice_exe: Path):
     import os
 
-    from boardmodeler.simulation.ltspice import _native_path, locate, run_batch
+    from boardmodeler.simulation.ltspice import _native_path, run_batch
 
-    if os.name != "nt" or (install := locate()) is None:
+    if os.name != "nt":
         pytest.skip("Windows LTspice required")
     folder = tmp_path / ("a" * 90) / ("b" * 90)
     folder.mkdir(parents=True)
@@ -176,5 +177,5 @@ def test_long_windows_evidence_path_launches_simulator(tmp_path):
         _native_path(deck)
     except OSError:
         pytest.skip("NTFS short names disabled on this volume")
-    result = run_batch(install.path, deck, folder, timeout_s=30)
+    result = run_batch(ltspice_exe, deck, folder, timeout_s=30)
     assert result.raw_path and result.raw_path.stat().st_size > 0

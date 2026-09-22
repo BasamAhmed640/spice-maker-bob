@@ -1,7 +1,7 @@
 """Copy shared source/tests/packaging between explicit checkouts, retaining flavor.
 
-Run without flags in CI/development to detect drift; --apply updates tracked shared
-files without deleting destination files. Repository history and docs remain local.
+Run without --apply in CI/development to detect drift; --apply updates tracked
+shared files without deleting destination files. Repository history and docs remain local.
 """
 
 from __future__ import annotations

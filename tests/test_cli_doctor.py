@@ -1,7 +1,8 @@
 """CLI tests (Phase 0 step 11).
 
 `doctor --json` is the environment contract used by the GUI and by CI, so its
-keys are asserted, and a forced-bad `LTSPICE_EXE` must produce
+keys are asserted; an unconfigured machine must say SETUP is required rather than
+find an installation by itself, and a forced-bad `LTSPICE_EXE` must produce
 ``smoke_test == "fail"`` with a non-empty detail rather than a crash or a false
 pass.
 """
@@ -46,7 +47,13 @@ def test_version_command() -> None:
 
 
 def test_doctor_json_keys_and_real_smoke_pass(ltspice_exe: Path, tmp_path: Path) -> None:
-    proc = _run_cli(["doctor", "--json"], env={"BOARDMODELER_CONFIG": str(tmp_path / "cfg.json")})
+    proc = _run_cli(
+        ["doctor", "--json"],
+        env={
+            "BOARDMODELER_CONFIG": str(tmp_path / "cfg.json"),
+            "LTSPICE_EXE": str(ltspice_exe),
+        },
+    )
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
 
@@ -57,7 +64,9 @@ def test_doctor_json_keys_and_real_smoke_pass(ltspice_exe: Path, tmp_path: Path)
 
     ltspice = payload["ltspice"]
     assert ltspice["found"] is True, ltspice
-    assert Path(ltspice["path"]).is_file()
+    assert Path(ltspice["path"]) == ltspice_exe
+    assert ltspice["source"] == "env:LTSPICE_EXE"
+    assert ltspice["reason"] == "env"
     assert ltspice["version"] == "26.0.0"
     assert ltspice["smoke_test"] == "pass", ltspice.get("smoke_detail")
     assert ltspice["smoke_detail"].strip()
@@ -72,6 +81,32 @@ def test_doctor_json_keys_and_real_smoke_pass(ltspice_exe: Path, tmp_path: Path)
     assert backend["agreement_tolerance"] == 1e-9
     assert backend["detail"].strip()
     assert payload["ok"] is True
+
+
+def test_doctor_reports_setup_required_and_searches_nothing(tmp_path: Path) -> None:
+    """No configured path and no override: say SETUP is required, probe nothing."""
+    proc = _run_cli(
+        ["doctor", "--json", "--no-smoke"],
+        env={"BOARDMODELER_CONFIG": str(tmp_path / "cfg.json"), "LTSPICE_EXE": ""},
+    )
+    assert proc.returncode == 0, proc.stderr
+    ltspice = json.loads(proc.stdout)["ltspice"]
+    assert ltspice["found"] is False and ltspice["path"] is None
+    assert ltspice["reason"] == "unset" and ltspice["setup_required"] is True
+    assert ltspice["probed"] == []
+    assert "SETUP" in ltspice["smoke_detail"]
+
+
+def test_doctor_find_ltspice_searches_only_when_asked(tmp_path: Path) -> None:
+    """The explicit flag reports what it probed, without saving anything."""
+    proc = _run_cli(
+        ["doctor", "--json", "--no-smoke", "--find-ltspice"],
+        env={"BOARDMODELER_CONFIG": str(tmp_path / "cfg.json"), "LTSPICE_EXE": ""},
+    )
+    assert proc.returncode == 0, proc.stderr
+    ltspice = json.loads(proc.stdout)["ltspice"]
+    assert ltspice["searched"] is True and ltspice["probed"], ltspice
+    assert not (tmp_path / "cfg.json").exists(), "a search must never save a setting"
 
 
 def test_doctor_reports_failure_for_bad_ltspice_env(tmp_path: Path) -> None:
@@ -89,13 +124,15 @@ def test_doctor_reports_failure_for_bad_ltspice_env(tmp_path: Path) -> None:
     # A configured-but-absent executable must be reported, not silently replaced
     # by the installed one.
     assert ltspice["found"] is False, ltspice
+    assert ltspice["reason"] == "env_missing"
     assert ltspice["smoke_test"] == "fail"
     assert ltspice["smoke_detail"].strip()
     assert str(bogus) in ltspice["smoke_detail"]
     assert payload["ok"] is False
 
 
-def test_doctor_no_smoke_never_reports_pass(tmp_path: Path) -> None:
+def test_doctor_no_smoke_never_reports_pass(ltspice_exe: Path, monkeypatch) -> None:
+    monkeypatch.setenv("LTSPICE_EXE", str(ltspice_exe))
     payload = doctor_payload(run_smoke=False)
     assert payload["ltspice"]["smoke_test"] is None
     assert "skipped" in payload["ltspice"]["smoke_detail"]
@@ -103,7 +140,11 @@ def test_doctor_no_smoke_never_reports_pass(tmp_path: Path) -> None:
 
 def test_doctor_human_output_is_printable(ltspice_exe: Path, tmp_path: Path) -> None:
     proc = _run_cli(
-        ["doctor", "--no-smoke"], env={"BOARDMODELER_CONFIG": str(tmp_path / "cfg.json")}
+        ["doctor", "--no-smoke"],
+        env={
+            "BOARDMODELER_CONFIG": str(tmp_path / "cfg.json"),
+            "LTSPICE_EXE": str(ltspice_exe),
+        },
     )
     assert proc.returncode == 0, proc.stderr
     assert "boardmodeler" in proc.stdout

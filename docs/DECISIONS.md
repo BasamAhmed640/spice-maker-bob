@@ -101,6 +101,19 @@ documents and cannot change the provider, model or reasoning choice. Bob license
 acceptance is explicit and is never performed automatically by the application.
 
 
+## 2026-09-21 — the credential file is plain local JSON, not DPAPI ciphertext
+
+Supersedes the 2026-09-20 entry below. At the owner's requirement that no Windows
+keys be saved anywhere, DPAPI is no longer used: the key is an ordinary local JSON
+file, `data/credentials.bob.json` in this edition's extracted folder (`credentials.json`
+for the main edition). Nothing is bound to Windows — no ciphertext, registry entry,
+Credential Manager entry or user-profile location — and no credential is written outside
+the extracted copy. The tradeoff is accepted and stated in `AGENTS.md` §7 and
+`INSTALL.txt`: the file is not encrypted, so anyone who can read the folder can read the
+key. Saving a provider replaces the prior saved key; explicit environment variables still
+support CLI automation.
+
+
 ## 2026-09-20 — one encrypted local credential per edition
 
 At the user's request, Windows Credential Manager is no longer read or written.
@@ -128,7 +141,8 @@ can run on GitHub's hosted runner; this does not change local Windows security p
 The user requires installation and all application-owned state under the extracted
 GitHub folder. Do not restore global config or keys. First launch requires explicit
 setup. The installer creates no global install/shortcut/credential entries. Updates
-replace app/ only. DPAPI ciphertext, scratch directories and model exports stay local.
+replace app/ only. Scratch directories and model exports stay local; the credential file is
+plain local JSON in `data/`, not DPAPI ciphertext (see the 2026-09-21 entry above).
 Normalize only unambiguous flat citation page numbers; conflicting page numbers remain
 validation errors. Preserve all numeric requirements and reasoning settings.
 

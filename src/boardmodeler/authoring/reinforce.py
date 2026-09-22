@@ -93,8 +93,10 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pypdf import PdfReader
 
+from boardmodeler.agent_providers import CATALOG
 from boardmodeler.authoring.probes import PROBES
 from boardmodeler.domain.hashing import sha256_bytes
+from boardmodeler.domain.records import DocumentRecord
 
 if TYPE_CHECKING:  # the backends module imports nothing from here, but keep it lazy
     from boardmodeler.authoring.backends import AuthorBackend
@@ -108,6 +110,7 @@ __all__ = [
     "parse_agent_reply",
     "query_agent_backend",
     "reinforce",
+    "vendor_hosts",
 ]
 
 #: Where the report lives inside the build's ``out_dir``; the frozen
@@ -138,6 +141,13 @@ _MAX_CAVEAT_CHARS = 400
 
 _MAX_JSON_OBJECTS = 200
 _MAX_JSON_NESTING = 2
+
+#: A vendor's own web host is often published with one of these labels in front
+#: of the registrable domain; the label says nothing about ownership, so it is
+#: dropped before a host is stored or compared.
+_WWW_PREFIXES = ("www.", "ww1.", "www1.")
+#: How many allowed hosts a refusal reason names before it is abbreviated.
+_MAX_HOSTS_IN_REASON = 6
 
 _HTTP_URL_SCHEMES = ("http", "https")
 
@@ -257,7 +267,10 @@ class ReinforcementReport:
 
     @classmethod
     def from_json(cls, text: str) -> ReinforcementReport:
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"report is not valid JSON: {exc}") from exc
         if not isinstance(data, Mapping):
             raise ValueError(f"report must be a JSON object, got {type(data).__name__}")
         return cls(
@@ -320,6 +333,117 @@ def _utc_now() -> str:
 
 # --------------------------------------------------------------------------- #
 # fetching
+
+
+def _normalize_host(value: str | None) -> str | None:
+    """A comparable host: lowercase, no port, no trailing root dot, no ``www.`` label.
+
+    Accepts a URL or a bare host. ``None`` means "no host to compare", which a
+    caller must treat as a refusal, never as a wildcard.
+    """
+    if not value or not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    parts = urllib.parse.urlsplit(text)
+    if parts.hostname is None:  # a bare ``example.com/path`` never has a scheme
+        parts = urllib.parse.urlsplit(f"//{text}")
+    host = parts.hostname
+    if host is None:
+        return None
+    host = host.strip().strip(".").lower()
+    for prefix in _WWW_PREFIXES:
+        if host.startswith(prefix) and len(host) > len(prefix):
+            host = host[len(prefix) :]
+            break
+    return host or None
+
+
+def _host_belongs_to(host: str, vendor_host: str) -> bool:
+    """Whether ``host`` is the vendor host or a subdomain of it.
+
+    Suffix matching demands the label boundary: ``evil-ti.com`` and
+    ``www.ti.com.evil.test`` are both outside ``ti.com``, while ``e2e.ti.com``
+    is a host the vendor's own DNS controls.
+    """
+    return host == vendor_host or host.endswith(f".{vendor_host}")
+
+
+def _host_list(hosts: Sequence[str]) -> str:
+    if not hosts:
+        return "none"
+    shown = list(hosts[:_MAX_HOSTS_IN_REASON])
+    if len(hosts) > len(shown):
+        shown.append(f"+{len(hosts) - len(shown)} more")
+    return ", ".join(shown)
+
+
+def _document_source_urls(out_dir: Path) -> Iterator[str]:
+    """``source_url`` of every readable ``docs/*.json`` :class:`DocumentRecord`.
+
+    A record that cannot be read or validated contributes no host; that is a
+    narrower allowlist, never a wider one, so the stage does not raise here.
+    """
+    for path in sorted((out_dir / "docs").glob("*.json")):
+        try:
+            record = DocumentRecord.model_validate_json(path.read_text(encoding="utf-8"))
+        except OSError, ValueError:
+            continue
+        if record.source_url:
+            yield record.source_url
+
+
+def _vendor_io_source_urls(out_dir: Path) -> Iterator[str]:
+    """``source_url`` of every readable ``vendor-io/*/manifest.json`` attribution."""
+    for path in sorted((out_dir / "vendor-io").glob("*/manifest.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except OSError, ValueError:
+            continue
+        url = payload.get("source_url") if isinstance(payload, Mapping) else None
+        if isinstance(url, str) and url:
+            yield url
+
+
+def vendor_hosts(out_dir: Path | str, *, extra: Sequence[str] = ()) -> tuple[str, ...]:
+    """The hosts the reinforcement stage may fetch from, in stable order.
+
+    Derived from evidence the project already recorded, never guessed:
+
+    * the ``source_url`` of every document record in ``out_dir``/``docs`` (the
+      datasheet's own provenance) and of every ``vendor-io`` attribution
+      manifest, plus any ``extra`` URL a caller already knows;
+    * the documented hosts of this build's :data:`CATALOG` entries (their
+      documentation and, when present, endpoint URLs), so a vendor whose own
+      documentation is shipped with the application stays reachable.
+
+    A host matches itself and its subdomains; nothing else. The set is never
+    empty in a shipped build, because every catalog entry carries documentation.
+    """
+    hosts: list[str] = []
+    root = Path(out_dir)
+    urls: list[str] = [*extra, *_document_source_urls(root), *_vendor_io_source_urls(root)]
+    for entry in CATALOG:
+        urls.extend(url for url in (entry.docs, entry.endpoint) if url)
+    for url in urls:
+        host = _normalize_host(url)
+        if host is not None and host not in hosts:
+            hosts.append(host)
+    return tuple(hosts)
+
+
+def _outside_vendor_reason(url: str, allowed_hosts: Sequence[str]) -> str | None:
+    """``None`` when ``url`` belongs to the vendor, else the machine-readable reason."""
+    host = _normalize_host(url)
+    if host is None:
+        return f"vendor_refused: {_safe_url(url)} names no host to match against the vendor"
+    if any(_host_belongs_to(host, vendor_host) for vendor_host in allowed_hosts):
+        return None
+    return (
+        f"vendor_refused: host {host!r} is outside the part vendor's sites "
+        f"(allowed: {_host_list(allowed_hosts)})"
+    )
 
 
 def _is_public_address(address: str) -> bool:
@@ -663,11 +787,22 @@ def _scan_objects(text: str) -> Iterator[dict[str, Any]]:
         index = text.find("{", end)
 
 
-def build_candidate_prompt(part: str, max_sources: int) -> str:
-    """The read-only question the agent backend is asked for candidate URLs."""
+def build_candidate_prompt(part: str, max_sources: int, vendor_hosts: Sequence[str] = ()) -> str:
+    """The read-only question the agent backend is asked for candidate URLs.
+
+    ``vendor_hosts`` names the sites the stage is allowed to fetch from, so the
+    asking turn already stays on the part vendor instead of proposing URLs the
+    policy will refuse.
+    """
     shape = (
         '{"sources": [{"url": "https://...", "claim": "one line: what this source '
         'shows about the part"}]}'
+    )
+    vendor_rule = (
+        "\nOnly name URLs on the part vendor's own sites ("
+        f"{_host_list(vendor_hosts)}); the search may not leave the vendor."
+        if vendor_hosts
+        else ""
     )
     return (
         f"List up to {max_sources} public sources a SPICE model author should read about the "
@@ -677,7 +812,7 @@ def build_candidate_prompt(part: str, max_sources: int) -> str:
         f"{shape}\n"
         "Rules: only URLs you are confident exist; never guess or construct a URL from a "
         "pattern; one short line per claim; do not repeat a URL; no prose outside the JSON "
-        "object."
+        f"object.{vendor_rule}"
     )
 
 
@@ -835,6 +970,28 @@ def _write_report(out_dir: Path, text: str) -> Path:
     return target
 
 
+def _seconds(value: object, name: str) -> float:
+    """``value`` as a number of seconds, or a ``ValueError`` naming the argument."""
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a number of seconds, got {value!r}") from exc
+
+
+MIN_AGENT_TURN_S = 90.0
+"""The least budget a supporting-material search is worth starting.
+
+The search's first step is a single agent turn, and a reasoning-class model spends
+minutes on one. A smaller budget is therefore *arithmetically* unspendable: the
+recorded 1.4.0 build set ``reinforce_timeout_s=45.0``, that turn could not finish
+inside it, and the stage burned its entire allowance to return nothing — the log
+read ``search_budget_exceeded: the supporting-material search did not finish
+within 45 s`` on every build. Below this floor the stage now declines *before*
+spending anything, because "give up fast" has to mean giving up before the time is
+gone rather than after it.
+"""
+
+
 def reinforce(
     *,
     part: str,
@@ -847,6 +1004,7 @@ def reinforce(
     max_sources: int = 6,
     fetch_timeout_s: float = 30.0,
     timeout_s: float | None = None,
+    vendor_urls: Sequence[str] = (),
     cancel: threading.Event | None = None,
 ) -> ReinforcementReport:
     """Find supporting sources around a model build and record what was retrieved.
@@ -857,13 +1015,22 @@ def reinforce(
     provider is built. ``timeout_s`` bounds the whole search (``None``
     leaves it unbounded); when it expires the stage is ``unavailable`` with a
     reason naming the budget and the build continues. ``cancel`` is the build's
-    cancellation event, passed to the candidate agent turn. Statuses:
+    cancellation event, passed to the candidate agent turn.
+
+    The search never leaves the part vendor: a candidate URL is fetched only
+    when its host belongs to :func:`vendor_hosts` (the datasheet provenance this
+    project recorded, any ``vendor_urls`` the caller already knows, and this
+    build's catalog documentation hosts). A candidate outside that set is
+    recorded as an ``unverified_claim`` with a ``vendor_refused:`` reason and is
+    never fetched; when *no* candidate is inside the set the stage finishes
+    immediately as ``no_vendor_source_found`` instead of spending its budget.
+    Statuses:
 
     * ``skipped`` — ``enabled`` is False; zero candidate lookups, zero fetches;
     * ``unavailable`` — enabled, but nothing could be retrieved (no candidates,
-      every fetch refused, only unreadable bodies, or the search budget ran out).
-      Never a failure: the build continues, and every reason is on its source
-      record;
+      every candidate outside the vendor, every fetch refused, only unreadable
+      bodies, or the search budget ran out). Never a failure: the build
+      continues, and every reason is on its source record;
     * ``ok`` — at least one candidate's bytes were retrieved and hashed.
 
     This function never raises for a retrieval, agent or provider problem; only
@@ -889,7 +1056,9 @@ def reinforce(
                 return saved
         except OSError, ValueError, KeyError, TypeError:
             pass
-    deadline = None if timeout_s is None else time.monotonic() + float(timeout_s)
+    budget_s = None if timeout_s is None else _seconds(timeout_s, "timeout_s")
+    fetch_budget_s = _seconds(fetch_timeout_s, "fetch_timeout_s")
+    deadline = None if budget_s is None else time.monotonic() + budget_s
 
     def budget_left() -> float | None:
         if deadline is None:
@@ -897,9 +1066,10 @@ def reinforce(
         return max(0.0, deadline - time.monotonic())
 
     def budget_reason() -> str:
+        seconds = 0.0 if budget_s is None else budget_s
         return (
             "search_budget_exceeded: the supporting-material search did not finish within "
-            f"{float(timeout_s):g} s"
+            f"{seconds:g} s"
         )
 
     def finish(
@@ -932,10 +1102,25 @@ def reinforce(
     if budget_left() == 0.0:
         return finish("unavailable", budget_reason())
 
+    allowed_hosts = vendor_hosts(out_root, extra=vendor_urls)
+
     if candidate_provider is None:
+        # Declining here rather than handing the turn a budget it cannot use is the
+        # whole point: the previous behaviour spent the full allowance and then
+        # reported the budget as exceeded, which is both slower and less honest than
+        # saying up front that the allowance was too small to try.
+        left = budget_left()
+        if left is not None and left < MIN_AGENT_TURN_S:
+            return finish(
+                "unavailable",
+                f"search_budget_too_small: {left:g} s remained of "
+                f"{0.0 if budget_s is None else budget_s:g} s, and one candidate-query turn "
+                f"needs about {MIN_AGENT_TURN_S:g} s, so the search was not started; raise "
+                "reinforce_timeout_s to enable it",
+            )
         with tempfile.TemporaryDirectory(prefix="boardmodeler-reinforce-") as scratch:
             reply, note = query_agent_backend(
-                build_candidate_prompt(part, max_sources),
+                build_candidate_prompt(part, max_sources, allowed_hosts),
                 Path(scratch),
                 backend=backend,
                 cancel=cancel,
@@ -957,18 +1142,35 @@ def reinforce(
     now = _utc_now()
     prior = _prior_retrievals(out_root)
     records: list[SourceRecord] = []
+    attempted = 0
+    refused_urls: list[str] = []
     for url, claim in candidates:
+        refusal = _outside_vendor_reason(url, allowed_hosts)
+        if refusal is not None:
+            # A destination outside the vendor is refused here, before any socket and
+            # without retry; the record keeps the claim visible as unverified.
+            refused_urls.append(url)
+            records.append(
+                SourceRecord(
+                    url=url,
+                    claim=claim,
+                    retrieved=False,
+                    excerpt=None,
+                    sha256=None,
+                    content_type=None,
+                    retrieved_utc=None,
+                    reason=f"unverified_claim: {refusal}",
+                )
+            )
+            continue
         left = budget_left()
         if left == 0.0:
             return finish("unavailable", budget_reason())
+        attempted += 1
         if fetcher is not None:
             fetch: Callable[[str], tuple[bytes, str]] = fetcher
         else:
-            per_fetch = (
-                float(fetch_timeout_s)
-                if left is None
-                else max(min(float(fetch_timeout_s), left), 1e-6)
-            )
+            per_fetch = fetch_budget_s if left is None else max(min(fetch_budget_s, left), 1e-6)
             fetch = partial(default_fetcher, timeout_s=per_fetch)
         data, media_type, failure = _fetch(url, fetch)
         if data is None:
@@ -1018,6 +1220,14 @@ def reinforce(
         )
 
     retrieved = tuple(record for record in records if record.retrieved)
+    if refused_urls and not attempted:
+        return finish(
+            "unavailable",
+            f"no_vendor_source_found: {len(refused_urls)} candidate(s) offered, none on the "
+            f"part vendor's sites ({_host_list(allowed_hosts)}); first: {records[0].url}: "
+            f"{records[0].reason}",
+            records,
+        )
     if not retrieved:
         first = records[0]
         return finish(

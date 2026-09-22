@@ -32,14 +32,43 @@ from boardmodeler.authoring.reinforce import (
     default_fetcher,
     parse_agent_reply,
     reinforce,
+    vendor_hosts,
 )
 from boardmodeler.domain.hashing import sha256_bytes
+from boardmodeler.domain.records import DocumentRecord
 
 PART = "TPS54320"
 DIGEST = "d" * 64
-URL = "https://example.invalid/tps54320-errata"
+#: The datasheet's own provenance: the part vendor's site, and the only kind of
+#: host the stage may fetch from once a document records it.
+VENDOR_SOURCE_URL = "https://www.ti.com/lit/ds/symlink/tps54320.pdf"
+#: A candidate source on the vendor's own site.
+URL = "https://www.ti.com/lit/an/tps54320-errata"
 REPORT_NAME = Path("spec") / "supporting.json"
 FROZEN_UTC = "2026-09-18T12:00:00Z"
+
+
+def _write_provenance(out_dir: Path) -> None:
+    """Record the datasheet the project was analysed from, which names the vendor."""
+    docs = Path(out_dir) / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    record = DocumentRecord(
+        doc_id="DOC_TPS54320",
+        title="TPS54320 datasheet",
+        manufacturer="Texas Instruments",
+        doc_type="datasheet",
+        file_hash="0" * 64,
+        source_url=VENDOR_SOURCE_URL,
+        provenance="user_supplied",
+        classification="public",
+    )
+    (docs / "DOC_TPS54320.json").write_text(record.model_dump_json(), encoding="utf-8")
+
+
+@pytest.fixture(autouse=True)
+def vendor_provenance(tmp_path: Path) -> None:
+    """Give every build the datasheet provenance the stage derives its allowlist from."""
+    _write_provenance(tmp_path)
 
 
 @pytest.fixture(autouse=True)
@@ -513,6 +542,48 @@ def test_an_expired_search_budget_is_recorded_as_unavailable(
     assert report.sources == ()
 
 
+class _CountsTurns:
+    """A backend that records every turn, so a test can prove none was taken."""
+
+    def __init__(self) -> None:
+        self.turns = 0
+
+    def author(self, request, cancel=None, *, timeout_s=None):
+        self.turns += 1
+        raise AssertionError(
+            "the search was given a budget too small for a turn, so it must not start one"
+        )
+
+
+def test_a_budget_too_small_for_one_turn_gives_up_without_spending_it(
+    tmp_path: Path,
+) -> None:
+    """The recorded 1.4.0 build paid its whole allowance and got nothing back.
+
+    The search's first step is one agent turn, and a reasoning-class model needs
+    minutes for it, while ``reinforce_timeout_s`` defaulted to 45 s. The budget was
+    therefore arithmetically unspendable: every build spent 45 s and received
+    ``search_budget_exceeded``. Declining before the spend is the fix — the reason
+    has to distinguish "too small to try" from "tried and ran out", because only the
+    first is something the user can act on.
+    """
+    backend = _CountsTurns()
+
+    report = reinforce(
+        part=PART,
+        spec_digest=DIGEST,
+        out_dir=tmp_path,
+        backend=backend,
+        timeout_s=reinforce_module.MIN_AGENT_TURN_S - 1.0,
+    )
+
+    assert report.status == "unavailable"
+    assert report.detail.startswith("search_budget_too_small:"), report.detail
+    assert "reinforce_timeout_s" in report.detail, "the reason must name the setting"
+    assert backend.turns == 0, "a budget too small to try must not spend anything"
+    assert report.sources == ()
+
+
 def test_candidate_prompt_states_the_part_limit_and_the_json_shape() -> None:
     prompt = build_candidate_prompt(PART, 4)
     assert PART in prompt
@@ -533,6 +604,8 @@ def test_same_inputs_produce_byte_identical_reports(
     fetcher = _fetcher(body, "text/plain")
     first = tmp_path / "first"
     second = tmp_path / "second"
+    _write_provenance(first)
+    _write_provenance(second)
 
     report_a = reinforce(
         part=PART, spec_digest=DIGEST, out_dir=first, candidate_provider=provider, fetcher=fetcher
@@ -861,7 +934,7 @@ def test_unretrieved_claim_never_becomes_a_caveat_or_a_probe(tmp_path: Path) -> 
 
 
 def test_caveats_come_only_from_retrieved_sources(tmp_path: Path) -> None:
-    reachable = "https://example.invalid/notes"
+    reachable = "https://www.ti.com/notes"
     body = b"The output is not supported below 2.5 V."
 
     def fetch(url: str) -> tuple[bytes, str]:
@@ -912,7 +985,7 @@ def test_unusable_candidate_provider_is_recorded(
 
 
 def test_max_sources_caps_fetches_and_keeps_candidate_order(tmp_path: Path) -> None:
-    pairs = [(f"https://example.invalid/{index}", f"claim {index}") for index in range(10)]
+    pairs = [(f"https://www.ti.com/notes/{index}", f"claim {index}") for index in range(10)]
     calls: list[str] = []
     report = reinforce(
         part=PART,
@@ -926,3 +999,148 @@ def test_max_sources_caps_fetches_and_keeps_candidate_order(tmp_path: Path) -> N
     assert calls == [pair[0] for pair in pairs[:3]]
     assert [record.url for record in report.sources] == [pair[0] for pair in pairs[:3]]
     assert [record.claim for record in report.sources] == [pair[1] for pair in pairs[:3]]
+
+
+# --------------------------------------------------------------------------- #
+# egress: the search never leaves the part vendor, and gives up when it would
+
+
+def test_vendor_hosts_derives_the_allowlist_from_provenance_and_catalog(tmp_path: Path) -> None:
+    hosts = vendor_hosts(tmp_path)
+
+    # The datasheet's own source_url names the vendor; the ``www.`` label is noise.
+    assert "ti.com" in hosts
+    assert "www.ti.com" not in hosts
+    # This build's catalog documentation hosts are always part of the allowlist.
+    assert "api-docs.deepseek.com" in hosts
+    assert "example.invalid" not in hosts
+    assert len(hosts) == len(set(hosts)), "hosts stay deduplicated"
+
+
+def test_a_caller_supplied_vendor_url_widens_the_allowlist(tmp_path: Path) -> None:
+    hosts = vendor_hosts(
+        tmp_path / "no-provenance-here", extra=("https://www.analog.com/ds/ad8232.pdf",)
+    )
+    assert "analog.com" in hosts
+
+
+def test_catalog_documentation_hosts_are_always_allowed(tmp_path: Path) -> None:
+    plain = tmp_path / "no-provenance"
+    plain.mkdir()
+    calls: list[str] = []
+    report = reinforce(
+        part=PART,
+        spec_digest=DIGEST,
+        out_dir=plain,
+        candidate_provider=_provider(("https://api-docs.deepseek.com/notes", "a documented note")),
+        fetcher=_fetcher(b"UVLO threshold is 4.3 V typical.", "text/plain", calls),
+    )
+
+    assert report.status == "ok"
+    assert calls == ["https://api-docs.deepseek.com/notes"]
+
+
+def test_a_non_vendor_public_host_is_refused_and_reported(tmp_path: Path) -> None:
+    def fetch(url: str) -> tuple[bytes, str]:
+        raise AssertionError("a non-vendor destination must not be fetched")
+
+    report = reinforce(
+        part=PART,
+        spec_digest=DIGEST,
+        out_dir=tmp_path,
+        candidate_provider=_provider(("https://example.invalid/tps54320-errata", "errata")),
+        fetcher=fetch,
+    )
+
+    assert report.status == "unavailable"
+    assert report.detail.startswith("no_vendor_source_found:")
+    assert "example.invalid" in report.detail
+    assert "ti.com" in report.detail
+    record = report.sources[0]
+    assert record.retrieved is False
+    assert record.sha256 is None
+    assert record.reason is not None
+    assert record.reason.startswith("unverified_claim: vendor_refused:")
+    # The refusal is reported, not silent: the reason is in the written report.
+    written = _report_text(tmp_path)
+    assert written["status"] == "unavailable"
+    assert written["detail"].startswith("no_vendor_source_found:")
+    assert written["sources"][0]["reason"].startswith("unverified_claim: vendor_refused:")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.ti.com.evil.test/tps54320",
+        "https://evil-ti.com/tps54320",
+        "https://notti.com/tps54320",
+        "https://ti.com.evil.test/tps54320",
+    ],
+)
+def test_a_lookalike_vendor_host_is_refused(tmp_path: Path, url: str) -> None:
+    def fetch(candidate: str) -> tuple[bytes, str]:
+        raise AssertionError(f"a lookalike host must not be fetched: {candidate}")
+
+    report = reinforce(
+        part=PART,
+        spec_digest=DIGEST,
+        out_dir=tmp_path,
+        candidate_provider=_provider((url, "lookalike")),
+        fetcher=fetch,
+    )
+
+    assert report.status == "unavailable"
+    assert report.sources[0].reason is not None
+    assert report.sources[0].reason.startswith("unverified_claim: vendor_refused:")
+
+
+def test_a_vendor_subdomain_is_fetched(tmp_path: Path) -> None:
+    candidate = "https://e2e.ti.com/support/tps54320"
+    calls: list[str] = []
+    report = reinforce(
+        part=PART,
+        spec_digest=DIGEST,
+        out_dir=tmp_path,
+        candidate_provider=_provider((candidate, "vendor forum note")),
+        fetcher=_fetcher(b"UVLO threshold is 4.3 V typical.", "text/plain", calls),
+    )
+
+    assert report.status == "ok"
+    assert calls == [candidate]
+    assert report.sources[0].retrieved is True
+
+
+def test_nothing_vendor_owned_gives_up_without_spending_the_budget(tmp_path: Path) -> None:
+    def fetch(url: str) -> tuple[bytes, str]:
+        raise AssertionError("no candidate is on the vendor's site, so nothing may be fetched")
+
+    report = reinforce(
+        part=PART,
+        spec_digest=DIGEST,
+        out_dir=tmp_path,
+        candidate_provider=_provider(
+            ("https://example.invalid/a", "one"), ("https://example.invalid/b", "two")
+        ),
+        fetcher=fetch,
+        timeout_s=45.0,
+    )
+
+    assert report.status == "unavailable"
+    assert report.detail.startswith("no_vendor_source_found:")
+    assert "2 candidate(s) offered" in report.detail
+    assert "search_budget_exceeded" not in report.detail
+    for record in report.sources:
+        assert record.reason is not None
+        assert record.reason.startswith(
+            "unverified_claim: vendor_refused: host 'example.invalid' is outside the part "
+            "vendor's sites"
+        )
+        assert "ti.com" in record.reason
+        assert "api-docs.deepseek.com" in record.reason
+
+
+def test_the_candidate_prompt_names_the_vendor_hosts() -> None:
+    prompt = build_candidate_prompt(PART, 4, ("ti.com", "api-docs.deepseek.com"))
+
+    assert "ti.com" in prompt
+    assert "may not leave the vendor" in prompt

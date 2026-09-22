@@ -24,6 +24,19 @@ def data_dir() -> Path:
     return app_root() / "data"
 
 
+def state_file(name: str) -> Path:
+    """A named file in this copy's data directory: the only home for saved state.
+
+    A name that would land outside ``app_root()`` — one containing a separator or
+    ``..``, or an absolute path — is refused, so no caller can save configuration
+    or credentials anywhere but inside this extracted copy.
+    """
+    target = (data_dir() / name).resolve()
+    if not target.is_relative_to(app_root()):
+        raise ValueError(f"Application state must stay inside {app_root()}: {target}")
+    return target
+
+
 def local_path(path: str | Path) -> Path:
     value = Path(path)
     resolved = (app_root() / value).resolve() if not value.is_absolute() else value.resolve()
@@ -73,9 +86,26 @@ def bob_environment(env: dict[str, str]) -> dict[str, str]:
     return result
 
 
+_write_guard_installed = False
+"""``sys.addaudithook`` cannot be uninstalled, so a process gets at most one guard."""
+
+
 def install_write_guard() -> None:
-    """Refuse Python file mutations outside the portable root, including CLI exports."""
-    if not getattr(sys, "frozen", False):
+    """Refuse Python file mutations outside the portable root, including CLI exports.
+
+    Containment follows the process, not the build. The folder-local ``env/python``
+    runtime (``python.exe -m boardmodeler.cli`` from ``Boardmodeler.cmd``) sets
+    ``SPICE_MAKER_ROOT`` and leaves ``sys.frozen`` false; that process is contained too,
+    so it is guarded as well. A developer run from a checkout is neither frozen nor
+    rooted, installs nothing, and keeps every dev workflow unconfined.
+
+    The audit hook is process-wide and cannot be removed once installed, so this is
+    called from an entry point (``boardmodeler.cli.main``, the frozen
+    ``installer/entry.py``), never as an import side effect and never from a test that
+    shares the runner process.
+    """
+    global _write_guard_installed
+    if _write_guard_installed or not portable():
         return
     base = app_root()
 
@@ -102,3 +132,4 @@ def install_write_guard() -> None:
             check(args[0])
 
     sys.addaudithook(audit)
+    _write_guard_installed = True

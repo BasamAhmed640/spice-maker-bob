@@ -6,7 +6,7 @@ parsed JSON object to the caller — which validates it against the D4 schemas
 (:mod:`boardmodeler.requirements.extract`). It never guesses an endpoint, never
 guesses a model string, and never reads a secret out of configuration text:
 ``ProviderConfig.endpoint``/``.model`` must have been observed in vendor
-documentation (D-005), and the API key comes from the encrypted local credential file or
+documentation (D-005), and the API key comes from this folder's plain local credential file or
 ``BOARDMODELER_<NAME>_API_KEY`` through :func:`boardmodeler.security.credentials.get_credential`.
 
 Transport, TLS, and secrets:
@@ -24,7 +24,10 @@ Failure behaviour: retries are bounded by ``ProviderConfig.retries`` and only
 apply to transport errors and the retryable status set (429/5xx); 401/403 fail
 immediately as ``http_auth_error`` and any other status as ``http_error``. A
 response that is not a JSON object, or whose assistant message is not a JSON
-object, fails as ``response_not_json`` rather than being coerced.
+object, fails as ``response_not_json`` rather than being coerced. Egress is
+catalog-bound: :func:`require_vendor_endpoint` refuses a destination outside the
+selected entry's own documented host before any header, credential lookup or
+socket, so no retry or redirect can reach it.
 """
 
 from __future__ import annotations
@@ -40,6 +43,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from boardmodeler.agent_providers import endpoint_is_vendor
 from boardmodeler.config import ProviderConfig
 from boardmodeler.domain.enums import ProviderKind
 from boardmodeler.domain.records import ProviderIdentity
@@ -67,6 +71,7 @@ __all__ = [
     "extract_json_object",
     "probe_endpoint",
     "render_user_content",
+    "require_vendor_endpoint",
     "urllib_transport",
 ]
 
@@ -121,6 +126,22 @@ class ChatResult:
 
 # --------------------------------------------------------------------------- #
 # transport
+
+
+def require_vendor_endpoint(provider: str | None, url: str) -> None:
+    """Refuse a URL that is not the selected provider's documented vendor host.
+
+    The check is the catalog's own :func:`boardmodeler.agent_providers.endpoint_is_vendor`
+    and it runs before any header, credential lookup or socket: a destination outside
+    the vendor cannot be reached by a retry, a redirect or a fallback. A loopback
+    destination for a provider this build has no catalog entry for stays allowed —
+    that is a local fixture, not internet egress. This edition's one entry is the Bob
+    CLI, which declares no HTTP endpoint at all, so naming it refuses every URL: there
+    is no wire here to carry an inference request to Bob.
+    """
+    allowed, reason = endpoint_is_vendor(provider, url)
+    if not allowed:
+        raise ProviderError("endpoint_not_vendor", reason)
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -322,17 +343,25 @@ def chat_completion(
     cancel: threading.Event | None = None,
     sleep: Callable[[float], None] = time.sleep,
     secrets: Sequence[str] = (),
+    provider: str | None = None,
 ) -> ChatResult:
     """POST ``body`` to ``url`` and return the parsed assistant payload.
 
     Retries transport failures and :data:`RETRYABLE_STATUSES` up to ``retries``
     extra attempts, waiting between attempts via ``sleep`` (injectable so tests
     do not spend wall-clock time). Cancellation is checked before every attempt.
+
+    ``provider`` names the catalog entry the caller selected; when it is given,
+    the destination is checked against that vendor's documented host *before*
+    the first attempt, so a misdirected endpoint raises
+    ``endpoint_not_vendor`` instead of being sent and retried.
     """
     if retries < 0:
         raise ValueError(f"retries must be >= 0, got {retries}")
     if not url:
         raise ValueError("url must be a non-empty string")
+    if provider is not None:
+        require_vendor_endpoint(provider, url)
     encoded = json.dumps(dict(body), ensure_ascii=False).encode("utf-8")
     request = HttpRequest(
         method="POST",
@@ -516,6 +545,10 @@ class HttpInferenceProvider:
         if problem is not None:
             return problem
         try:
+            require_vendor_endpoint(self.name, str(self.provider_config.endpoint))
+        except ProviderError as exc:
+            return ProviderHealth(ok=False, code=exc.code, detail=exc.detail)
+        try:
             headers, secrets = self._auth_headers()
         except ProviderError as exc:
             return ProviderHealth(ok=False, code=exc.code, detail=exc.detail)
@@ -535,6 +568,7 @@ class HttpInferenceProvider:
             raise ProviderError("cancelled", f"cancelled before {request.task.value} extraction")
         endpoint = self._require_endpoint()
         model = self._require_model()
+        require_vendor_endpoint(self.name, endpoint)
         headers, secrets = self._auth_headers()
         body = build_chat_body(
             model=model,
@@ -554,6 +588,7 @@ class HttpInferenceProvider:
             cancel=cancel,
             sleep=self.sleep,
             secrets=secrets,
+            provider=self.name,
         )
         return ExtractionResponse(
             payload=result.payload,
@@ -614,7 +649,8 @@ class HttpInferenceProvider:
             raise ProviderError(
                 "credential_missing",
                 f"provider {self.name!r} has no credential: {credential.detail}. "
-                "Store it in the encrypted local credential file (boardmodeler / provider:<name>:api_key) or set "
+                "Store it in the plain local credential file in this folder "
+                "(boardmodeler / provider:<name>:api_key) or set "
                 f"{env_var_name(self.name)}.",
             )
         header = self.provider_config.auth_header or "Authorization"

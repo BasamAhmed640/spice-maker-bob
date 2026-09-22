@@ -39,6 +39,7 @@ from boardmodeler.domain.records import (
 from boardmodeler.models.regulator import write_regulator_library
 from boardmodeler.pipeline.runner import RunContext, run_case
 from boardmodeler.simulation.deck import DeckSpec, Include, Source, TranSpec, write_deck
+from boardmodeler.simulation.ltspice import LtspiceInstall
 from boardmodeler.verification.engine import evaluate_case, gate_from_capability
 
 pytestmark = pytest.mark.ltspice
@@ -237,12 +238,7 @@ def buck_deck(
     return write_deck(deck, run_dir / "app.cir")
 
 
-def simulate(tmp_path: Path, *, name: str, **deck_options: object):
-    from boardmodeler.simulation.ltspice import locate
-
-    install = locate()
-    if install is None:
-        pytest.skip("LTspice is not installed")
+def simulate(tmp_path: Path, *, name: str, install: LtspiceInstall, **deck_options: object):
     ctx = RunContext(project_dir=tmp_path, ltspice=install.path, timeout_s=300)
     test_case = case(name, ["REQ_TPS54320_ELEC_020"])
     artifacts = run_case(
@@ -255,22 +251,24 @@ def simulate(tmp_path: Path, *, name: str, **deck_options: object):
 
 
 @pytest.fixture(scope="module")
-def nominal(tmp_path_factory: pytest.TempPathFactory):
-    return simulate(tmp_path_factory.mktemp("nominal"), name="nominal", rfbt=RFBT_NOMINAL)
+def nominal(ltspice_install: LtspiceInstall, tmp_path_factory: pytest.TempPathFactory):
+    return simulate(
+        tmp_path_factory.mktemp("nominal"),
+        name="nominal",
+        rfbt=RFBT_NOMINAL,
+        install=ltspice_install,
+    )
 
 
 @pytest.fixture(scope="module")
-def broken(tmp_path_factory: pytest.TempPathFactory):
-    return simulate(tmp_path_factory.mktemp("broken"), name="broken", rfbt=30e3)
+def broken(ltspice_install: LtspiceInstall, tmp_path_factory: pytest.TempPathFactory):
+    return simulate(
+        tmp_path_factory.mktemp("broken"), name="broken", rfbt=30e3, install=ltspice_install
+    )
 
 
-def simulate_overload(tmp_path: Path, *, rfbt: float):
+def simulate_overload(tmp_path: Path, *, rfbt: float, install: LtspiceInstall):
     """Run the overload scenario with its own shorter, switch-free deck."""
-    from boardmodeler.simulation.ltspice import locate
-
-    install = locate()
-    if install is None:
-        pytest.skip("LTspice is not installed")
     ctx = RunContext(project_dir=tmp_path, ltspice=install.path, timeout_s=300)
     test_case = case("overload", ["REQ_TPS54320_ELEC_020"])
     artifacts = run_case(
@@ -358,9 +356,11 @@ def test_power_good_follows_the_rail(nominal) -> None:
     assert result.status is Status.PASS, result.detail
 
 
-def test_current_limit_engages_and_recovers(tmp_path: Path) -> None:
+def test_current_limit_engages_and_recovers(
+    tmp_path: Path, ltspice_install: LtspiceInstall
+) -> None:
     """With ILIM=1.0 A and a ~2 A demand the template must limit, then recover."""
-    artifacts, _ = simulate_overload(tmp_path, rfbt=RFBT_NOMINAL)
+    artifacts, _ = simulate_overload(tmp_path, rfbt=RFBT_NOMINAL, install=ltspice_install)
     assert artifacts.usability.usable, artifacts.detail
     assert artifacts.raw is not None
     axis = artifacts.raw.time_column()

@@ -26,19 +26,22 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QSize, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
     QFileDialog,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
+    QWidget,
 )
 
 from boardmodeler import agent_providers
@@ -53,6 +56,11 @@ __all__ = ["SetupDialog", "configured_provider", "describe_settings", "ltspice_u
 _HINT = f"color: {CGA['bright_cyan']}; font-family: Consolas; font-size: 9pt;"
 _STATUS = f"color: {CGA['grey']}; font-family: Consolas; font-size: 9pt;"
 
+#: How small the page may be dragged. The settings grid is wider than this at its own
+#: minimum, so the scroll area below keeps every row reachable at this size instead of
+#: clipping it; the page still opens at its content size, with no dead space.
+MINIMUM_SIZE = QSize(560, 340)
+
 
 def ltspice_user_lib(home: Path | None = None) -> Path:
     """The per-user LTspice library (never the installation directory)."""
@@ -60,6 +68,21 @@ def ltspice_user_lib(home: Path | None = None) -> Path:
         return library_dir()
     base = home if home is not None else Path.home()
     return base / "AppData" / "Local" / "LTspice" / "lib"
+
+
+def credential_file_label() -> str:
+    """Where the API key is saved, relative to this extracted folder when it is inside it.
+
+    Resolved, never hard-coded: the Bob edition writes a different file name, and the
+    page must not name a file that this build does not use.
+    """
+    from boardmodeler.security.credentials import credential_path
+
+    path = credential_path()
+    try:
+        return str(path.relative_to(app_root())).replace(os.sep, "/")
+    except ValueError:  # pragma: no cover - the credential file is always inside the copy
+        return str(path)
 
 
 def configured_provider(config: AppConfig) -> tuple[AgentProvider | None, str]:
@@ -109,7 +132,12 @@ def describe_settings(config: AppConfig) -> dict[str, object]:
 class SetupDialog(QDialog):
     """One page of persistent settings; SAVE writes them, CLOSE discards nothing else."""
 
-    def __init__(self, parent: object | None = None) -> None:
+    #: Always an :class:`AgentProvider`: a configured id this build does not accept
+    #: leaves the default provider owning the key row, so ``None`` never survives
+    #: ``__init__`` and the row-building code below can rely on that.
+    _provider: AgentProvider
+
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._key_check = None
         self._key_timer = QTimer(self)
@@ -117,17 +145,37 @@ class SetupDialog(QDialog):
         self._key_timer.timeout.connect(self._poll_key_check)
         self.finished.connect(self._cancel_key_check)
         self.setWindowTitle("Spice Maker setup")
-        self.setStyleSheet(RETRO_STYLESHEET)
+        self.setStyleSheet(
+            RETRO_STYLESHEET
+            + f"""
+QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; border: 0; }}
+"""
+        )
         self._config = load_config()
-        self._provider, self._provider_problem = configured_provider(self._config)
+        configured, self._provider_problem = configured_provider(self._config)
         #: The id SAVE must write, or ``None`` while the configured id is left alone.
-        self._provider_choice: str | None = None if self._provider is None else self._provider.id
-        if self._provider is None:
-            # Something on this page must own the key row; the line below says whose
-            # key it is *not*, and SAVE keeps the configured id until the user picks.
-            self._provider = agent_providers.default_provider()
+        self._provider_choice: str | None = None if configured is None else configured.id
+        # Something on this page must own the key row; the line below says whose
+        # key it is *not*, and SAVE keeps the configured id until the user picks.
+        self._provider = (
+            configured if configured is not None else agent_providers.default_provider()
+        )
 
-        layout = QVBoxLayout(self)
+        # The page lives in a scroll area: the window is resizable (and maximisable) without
+        # ever clipping a setting — at the small end the rows scroll, at the large end the
+        # page grows with the window.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setObjectName("setupScroll")
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        outer.addWidget(self.scroll_area)
+        self.page = QWidget()
+        self.page.setObjectName("setupPage")
+        self.scroll_area.setWidget(self.page)
+        layout = QVBoxLayout(self.page)
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(7)
         grid = QGridLayout()
@@ -137,17 +185,39 @@ class SetupDialog(QDialog):
         row = 0
 
         # --- LTspice ---------------------------------------------------------
+        #: Where the path in the field came from: "" (nothing set), "config", "env",
+        #: "browsed" or "found"/"find_empty" (the user's own FIND press). Only FIND
+        #: ever searches, so the status line can say what actually happened.
+        self._ltspice_source = ""
+        self._ltspice_probed: list[str] = []
         self.ltspice_edit = QLineEdit(self._resolved_ltspice())
-        choose_exe = QPushButton("Choose…")
-        choose_exe.clicked.connect(self._choose_ltspice)
+        find_exe = QPushButton("FIND")
+        find_exe.setToolTip(
+            "Search this PC's usual install locations for LTspice. Nothing is searched "
+            "until you press this, and nothing is saved until you press SAVE."
+        )
+        find_exe.clicked.connect(self._find_ltspice)
+        browse_exe = QPushButton("BROWSE")
+        browse_exe.setToolTip("Pick an LTspice.exe yourself with a file dialog.")
+        browse_exe.clicked.connect(self._choose_ltspice)
+        #: The two explicit ways to fill the path in. Neither runs by itself, and
+        #: only FIND is allowed to call ``discover``.
+        self.find_ltspice_button = find_exe
+        self.browse_ltspice_button = browse_exe
         smoke = QPushButton("RUN SMOKE TEST")
         smoke.clicked.connect(self._run_smoke)
+        choose_row = QHBoxLayout()
+        choose_row.setContentsMargins(0, 0, 0, 0)
+        choose_row.setSpacing(4)
+        choose_row.addWidget(find_exe)
+        choose_row.addWidget(browse_exe)
         grid.addWidget(QLabel("LTSPICE"), row, 0)
         grid.addWidget(self.ltspice_edit, row, 1)
-        grid.addWidget(choose_exe, row, 2)
+        grid.addLayout(choose_row, row, 2)
         grid.addWidget(smoke, row, 3)
         row += 1
         self.ltspice_status = QLabel("")
+        self.ltspice_status.setWordWrap(True)
         self.ltspice_status.setStyleSheet(_STATUS)
         grid.addWidget(self.ltspice_status, row, 1, 1, 3)
         row += 1
@@ -191,6 +261,7 @@ class SetupDialog(QDialog):
             self.provider_status = QLabel(
                 f"The saved agent selection is incompatible with this Bob edition.\n{guidance}"
             )
+            self.provider_status.setWordWrap(True)
             self.provider_status.setStyleSheet(_HINT)
             grid.addWidget(self.provider_status, row, 1, 1, 3)
             row += 1
@@ -211,6 +282,7 @@ class SetupDialog(QDialog):
         grid.addWidget(self.key_status, row, 1, 1, 3)
         row += 1
         self.key_hint = QLabel("")
+        self.key_hint.setWordWrap(True)
         self.key_hint.setStyleSheet(_HINT)
         self.key_hint.setMaximumWidth(620)
         grid.addWidget(self.key_hint, row, 1, 1, 3)
@@ -269,22 +341,123 @@ class SetupDialog(QDialog):
         row.addWidget(save)
         row.addWidget(close)
         layout.addLayout(row)
+        # Any room left over after a resize belongs below the settings, not stretched
+        # between the rows of the grid.
+        layout.addStretch(1)
 
         self._show_provider(self._provider)
         self._refresh_status()
-        self.adjustSize()
-        self.setFixedSize(self.size())
+        self.setMinimumSize(MINIMUM_SIZE)
+        # Open at the size the content needs, measured while the dialog sits at its own
+        # minimum: the scroll area's viewport only follows a resize once the widget is
+        # laid out, so measuring after a grow counts that lag as frame overhead and
+        # overshoots. From that floor the fit below only grows, as it does everywhere else.
+        self.resize(self.minimumSize())
+        self._fit_to_content()
 
     # ------------------------------------------------------------------ helpers
-    def _resolved_ltspice(self) -> str:
-        if self._config.ltspice.path:
-            return self._config.ltspice.path
-        if portable():
-            return ""
-        from boardmodeler.simulation.ltspice import locate
+    def sizeHint(self) -> QSize:  # Qt signature
+        """The content the page needs, so a page of settings opens showing all of it.
 
-        install = locate()
-        return str(install.path) if install is not None else ""
+        ``QScrollArea``'s own hint says nothing about its contents, so the dialog would
+        otherwise open at a frame constant and scroll a page that fits. The window is
+        still freely resizable: this is the size it opens at, not a cage.
+        """
+        return self.content_size()
+
+    def content_size(self) -> QSize:
+        """The dialog size that shows the whole page without scrolling.
+
+        The page's hint, not the scroll area's: a scroll area's own hint says nothing about
+        how much room its contents need, which is exactly what the content-sized rule is
+        about. The frame overhead between dialog and viewport is measured, not assumed.
+        """
+        overhead = self.size() - self.scroll_area.viewport().size()
+        return self.page.sizeHint() + QSize(max(0, overhead.width()), max(0, overhead.height()))
+
+    def _fit_to_content(self) -> None:
+        """Grow the page when its content needs the room; never shrink the user's window."""
+        needed = self.content_size()
+        self.resize(max(self.width(), needed.width()), max(self.height(), needed.height()))
+
+    def _resolved_ltspice(self) -> str:
+        """The *configured* executable; opening this page never searches the machine.
+
+        :func:`boardmodeler.simulation.ltspice.locate_outcome` reads only the saved
+        ``ltspice.path`` and ``LTSPICE_EXE`` — no install location is probed here, so
+        SETUP cannot find LTspice behind the user's back. :meth:`_find_ltspice` is the
+        only search in this page and the user has to press it. Which of the two
+        answered is remembered, so the status line can say it instead of implying a
+        discovery that never happened.
+        """
+        from boardmodeler.simulation.ltspice import locate_outcome
+
+        outcome = locate_outcome()
+        if outcome.install is None:
+            self._ltspice_source = ""
+            return ""
+        if portable() and not self._config.ltspice.path:
+            # A portable copy asks for its own executable once. An inherited
+            # ``LTSPICE_EXE`` is not adopted as if the user had chosen it here.
+            self._ltspice_source = ""
+            return ""
+        self._ltspice_source = "config" if outcome.reason == "config" else "env"
+        return str(outcome.install.path)
+
+    def _find_ltspice(self) -> None:
+        """Search this PC because the user pressed FIND, and only then.
+
+        This is the page's one and only
+        :func:`boardmodeler.simulation.ltspice.discover` call: opening the page, a
+        timer, a provider change and SAVE all resolve the configured setting and stop
+        there. What the search finds fills the field but is written nowhere — SAVE is
+        what stores it — so a search is always discardable.
+        """
+        from boardmodeler.simulation.ltspice import discover
+
+        outcome = discover()
+        self._ltspice_probed = list(outcome.probed_paths)
+        if outcome.install is None:
+            self._ltspice_source = "find_empty"
+        else:
+            self.ltspice_edit.setText(str(outcome.install.path))
+            self._ltspice_source = "found"
+        self._refresh_status()
+        self._fit_to_content()
+
+    def _ltspice_status_text(self) -> str:
+        """What is true about the LTspice path, in the state this page is really in.
+
+        Five states, and a search is named as the user's search only when FIND was
+        actually pressed: nothing set yet, found by that press, that press finding
+        nothing, chosen by hand with BROWSE, or taken from the saved configuration (or
+        the ``LTSPICE_EXE`` override). Nothing here probes the machine.
+        """
+        if self._ltspice_source == "found":
+            return (
+                "FIND found this executable and put it in the field — it is not saved "
+                "yet; press SAVE to keep it."
+            )
+        if self._ltspice_source == "find_empty":
+            checked = len(self._ltspice_probed)
+            return (
+                f"the FIND search you asked for checked {checked} usual install "
+                f"location{'s' if checked != 1 else ''} and found no LTspice — "
+                "use BROWSE to pick an executable."
+            )
+        if self._ltspice_source == "browsed":
+            return "chosen by hand with BROWSE — press SAVE to keep it."
+        if self._ltspice_source == "env":
+            return (
+                "not set here yet: this path comes from the LTSPICE_EXE environment "
+                "variable; SAVE writes it into your configuration."
+            )
+        if self._ltspice_source == "config":
+            return "set from your saved configuration; SAVE replaces it."
+        return (
+            "LTspice is not set yet — press FIND to search this PC, or BROWSE to pick "
+            "LTspice.exe, then SAVE. Nothing is searched automatically."
+        )
 
     def _show_provider(self, provider: AgentProvider) -> None:
         """Point the key and model rows at ``provider`` without touching the config."""
@@ -294,7 +467,9 @@ class SetupDialog(QDialog):
         self.key_hint.setText(
             f"{provider.key_hint}\n{provider.docs}\n"
             "GO sends your chosen datasheet and model text to this provider.\n"
-            "The key is encrypted in this folder's data/credentials.bin; a new provider replaces it.\n"
+            f"The key is saved in {credential_file_label()} in this folder as plain "
+            "text, not encrypted, so anyone who can read this folder can read it; "
+            "a new provider replaces it.\n"
             "Saving a key runs a small connection check (may use a little API credit)."
         )
         self.model_edit.setText(self._model_for(provider))
@@ -317,23 +492,14 @@ class SetupDialog(QDialog):
         self._show_provider(provider)
         self._provider_choice = provider.id
         self._refresh_status()
-        self.adjustSize()
+        self._fit_to_content()
 
     def _refresh_status(self) -> None:
         from boardmodeler.security.credentials import describe_credential
 
         provider = self._provider
         self.key_status.setText(f"stored key: {describe_credential(provider.credential)}")
-        chosen = self._config.ltspice.path
-        self.ltspice_status.setText(
-            "using the path set here"
-            if chosen
-            else (
-                "choose your LTspice executable once"
-                if portable()
-                else "path discovered automatically"
-            )
-        )
+        self.ltspice_status.setText(self._ltspice_status_text())
 
     def _choose_ltspice(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -344,6 +510,9 @@ class SetupDialog(QDialog):
         )
         if path:
             self.ltspice_edit.setText(path)
+            self._ltspice_source = "browsed"
+            self._refresh_status()
+            self._fit_to_content()
 
     def _choose_model_dir(self) -> None:
         path = QFileDialog.getExistingDirectory(
@@ -387,7 +556,7 @@ class SetupDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Could not store the key",
-                "Could not encrypt or save the local credential file.",
+                "Could not save the local credential file in this folder.",
             )
             return
         self.key_edit.clear()
@@ -396,7 +565,7 @@ class SetupDialog(QDialog):
         self._save()
         self._refresh_status()
         self.saved_label.setText(
-            f"{self._provider.label} key stored in the encrypted local credential file"
+            f"{self._provider.label} key saved to {credential_file_label()} in this folder"
         )
         self._start_key_check(value)
 
@@ -437,7 +606,7 @@ class SetupDialog(QDialog):
         self.key_status.setText(f"Key saved — {result.status.upper()}: {result.detail}")
         self.key_status.setWordWrap(True)
         self.key_status.setMaximumWidth(620)
-        self.setFixedSize(self.sizeHint())
+        self._fit_to_content()
 
     def _cancel_key_check(self, *_args) -> None:
         if self._key_check is not None:
@@ -481,6 +650,10 @@ class SetupDialog(QDialog):
             QMessageBox.warning(self, "Could not save", str(exc))
             return
         self.saved_label.setText(f"saved to {path}")
+        if self._config.ltspice.path:
+            # SAVE is what makes the path a setting, so say that, not what it was before.
+            self._ltspice_source = "config"
+            self._refresh_status()
         if portable():
             self.accept()
 

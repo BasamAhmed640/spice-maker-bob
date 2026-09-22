@@ -28,6 +28,7 @@ from boardmodeler.simulation.backend import probe_backend
 from boardmodeler.simulation.ltspice import (
     BATCH_RESOLUTION_NOTES,
     default_lib_dir,
+    discover,
     locate_outcome,
     smoke_test,
 )
@@ -71,6 +72,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="directory for the smoke artifacts (default: a fresh temp directory)",
+    )
+    doctor.add_argument(
+        "--find-ltspice",
+        action="store_true",
+        help="search well-known install locations once (never saved; SETUP saves a path)",
     )
 
     version_cmd = sub.add_parser("version", help="print the version")
@@ -256,7 +262,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="output-token budget for one --backend api turn (default: the config file's "
-        "agent_max_tokens, else 32768 - reasoning models spend part of it before writing)",
+        "agent_max_tokens, else a model-aware default; reasoning shares this budget)",
     )
     model_build.add_argument(
         "--allow-remote", action="store_true", help="permit sending the datasheet to the provider"
@@ -311,10 +317,15 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _ltspice_section(*, run_smoke: bool, smoke_workdir: Path | None) -> dict[str, Any]:
+def _ltspice_section(
+    *, run_smoke: bool, smoke_workdir: Path | None, find_ltspice: bool = False
+) -> dict[str, Any]:
     config = load_config()
     explicit = config.ltspice.path
-    outcome = locate_outcome(explicit)
+    # Only an explicit request searches the machine; the normal report resolves the
+    # saved setting (source="config") or LTSPICE_EXE and says SETUP is required
+    # when neither is set.
+    outcome = discover(explicit) if find_ltspice else locate_outcome()
     install = outcome.install
 
     section: dict[str, Any] = {
@@ -322,6 +333,8 @@ def _ltspice_section(*, run_smoke: bool, smoke_workdir: Path | None) -> dict[str
         "path": str(install.path) if install else None,
         "source": install.source if install else None,
         "reason": outcome.reason,
+        "setup_required": outcome.reason == "unset",
+        "searched": find_ltspice,
         "env_override": os.environ.get("LTSPICE_EXE"),
         "config_path_setting": explicit,
         "probed": outcome.probed_paths,
@@ -332,18 +345,25 @@ def _ltspice_section(*, run_smoke: bool, smoke_workdir: Path | None) -> dict[str
 
     if install is None:
         override = os.environ.get("LTSPICE_EXE")
-        if outcome.reason == "configured_missing":
+        if outcome.reason in ("configured_missing", "config_missing"):
             detail = (
                 f"configured LTspice path does not exist: {explicit} "
-                "(discovery does not fall back to another installation)"
+                "(it does not fall back to another installation)"
             )
         elif outcome.reason == "env_missing":
             detail = (
                 f"LTSPICE_EXE points at a file that does not exist: {override} "
-                "(discovery does not fall back to another installation)"
+                "(it does not fall back to another installation)"
             )
-        else:
+        elif outcome.reason == "unset":
+            detail = (
+                "LTspice is not configured: SETUP is required to choose the LTspice "
+                "executable (or set LTSPICE_EXE, or run doctor --find-ltspice)"
+            )
+        elif outcome.probed_paths:
             detail = "LTspice executable not found; probed: " + ", ".join(outcome.probed_paths)
+        else:
+            detail = "LTspice executable not found"
         section.update(
             {
                 "version": None,
@@ -408,10 +428,14 @@ def _credentials_section() -> dict:
     }
 
 
-def doctor_payload(*, run_smoke: bool = True, smoke_workdir: Path | None = None) -> dict[str, Any]:
+def doctor_payload(
+    *, run_smoke: bool = True, smoke_workdir: Path | None = None, find_ltspice: bool = False
+) -> dict[str, Any]:
     """Collect the environment report. Every field is observed, never assumed."""
     cfg_path = config_path()
-    ltspice = _ltspice_section(run_smoke=run_smoke, smoke_workdir=smoke_workdir)
+    ltspice = _ltspice_section(
+        run_smoke=run_smoke, smoke_workdir=smoke_workdir, find_ltspice=find_ltspice
+    )
     smoke_raw = None
     if ltspice.get("smoke_workdir"):
         candidate = Path(str(ltspice["smoke_workdir"])) / "smoke_rc.raw"
@@ -456,7 +480,7 @@ def _render_doctor_human(payload: dict[str, Any]) -> str:
             lines.append(f"  {ltspice.get('smoke_detail')}")
     else:
         lines.append("ltspice: NOT FOUND")
-        lines.append(f"  probed: {ltspice.get('smoke_detail')}")
+        lines.append(f"  {ltspice.get('smoke_detail')}")
 
     backend = payload["reader_backend"]
     lines.append(
@@ -543,23 +567,27 @@ def _cmd_run_tests(args: argparse.Namespace) -> int:
     ctx = project.run_context(
         ltspice=install, timeout_s=args.timeout or 120.0, ascii_raw=args.ascii_raw
     )
+    try:
+        capability_gate = _capability_gate(project)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}")
+        return 2
     artifacts = run_deck_tests(ctx, cases)
 
     results = []
     summary: dict[str, int] = {}
     for case, artifact in zip(cases, artifacts, strict=True):
-        cap_gate = _capability_gate(project, case)
         result = evaluate_case(
             case,
             artifact,
             requirements,
             supply_domains=project.config.supply_domains,
-            capability_gate=cap_gate,
+            capability_gate=capability_gate,
         )
         summary[result.status.value] = summary.get(result.status.value, 0) + 1
         results.append(
             {
-                "result": json.loads(result.model_dump_json()),
+                "result": result.model_dump(mode="json"),
                 "run": {
                     "run_id": artifact.run_id,
                     "run_dir": str(artifact.run_dir),
@@ -602,12 +630,14 @@ def _cmd_run_tests(args: argparse.Namespace) -> int:
     return 0
 
 
-def _capability_gate(project: object, case: object) -> dict[str, str] | None:
+def _capability_gate(project: object) -> dict[str, str] | None:
     """Capability gate for a project, built from its declared capabilities.
 
     Reads ``models/capabilities/*.json`` (``ModelCapability`` records) and
     ``evidence/capability_map.json`` (``{requirement_id: behavior}``). A project
-    without either file has no capability declaration, so nothing is gated.
+    without either file has no capability declaration, so nothing is gated. A
+    file that cannot be read or parsed raises ``ValueError`` naming the path, so
+    the CLI reports the offending file instead of a bare traceback.
     """
     from boardmodeler.domain.records import ModelCapability
     from boardmodeler.verification.engine import gate_from_capability
@@ -618,11 +648,20 @@ def _capability_gate(project: object, case: object) -> dict[str, str] | None:
     if not caps_dir.is_dir() or not behavior_map_file.is_file():
         return None
 
-    capabilities = [
-        ModelCapability.model_validate_json(path.read_text(encoding="utf-8"))
-        for path in sorted(caps_dir.glob("*.json"))
-    ]
-    raw_map = json.loads(behavior_map_file.read_text(encoding="utf-8"))
+    capabilities = []
+    for path in sorted(caps_dir.glob("*.json")):
+        try:
+            capabilities.append(
+                ModelCapability.model_validate_json(path.read_text(encoding="utf-8"))
+            )
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"capability file {path}: {exc}") from exc
+    try:
+        raw_map = json.loads(behavior_map_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"capability map {behavior_map_file}: {exc}") from exc
+    if not isinstance(raw_map, dict):
+        raise ValueError(f"capability map {behavior_map_file}: expected a JSON object")
     requirement_behaviors = {str(k): str(v) for k, v in raw_map.items()}
     gate = gate_from_capability(capabilities, requirement_behaviors)
     return gate or None
@@ -694,8 +733,8 @@ def _cmd_circuit_check(args: argparse.Namespace) -> int:
         "status": result.status.value,
         "summary": result.summary(),
         "coverage": result.coverage,
-        "findings": [json.loads(f.model_dump_json()) for f in result.findings],
-        "results": [json.loads(r.model_dump_json()) for r in result.results],
+        "findings": [f.model_dump(mode="json") for f in result.findings],
+        "results": [r.model_dump(mode="json") for r in result.results],
         "results_path": str(out),
         "report_path": str(report),
         "fault_matrix": fault_matrix,
@@ -766,7 +805,7 @@ def _cmd_export(args: argparse.Namespace) -> int:
         "command": "export",
         "out": str(result.out_dir),
         "files": result.relative_files(),
-        "findings": [json.loads(f.model_dump_json()) for f in result.findings],
+        "findings": [f.model_dump(mode="json") for f in result.findings],
         "ok": result.ok,
     }
     if args.json:
@@ -808,7 +847,7 @@ def _cmd_model(args: argparse.Namespace) -> int:
         return _cmd_model_test(args)
     if action == "install":
         return _cmd_model_install(args)
-    print("error: specify a model subcommand: build, test, install or import")
+    print("error: specify a model subcommand: build, import, test or install")
     return 2
 
 
@@ -1307,7 +1346,7 @@ def _cmd_extract(args: argparse.Namespace) -> int:
         "pins": len(result.pins),
         "cache_hits": result.cache_hits,
         "issues": [issue.code for issue in result.issues],
-        "disclosures": [json.loads(d.model_dump_json()) for d in result.disclosures],
+        "disclosures": [d.model_dump(mode="json") for d in result.disclosures],
     }
     if args.json:
         print(json.dumps(payload, indent=2))
@@ -1320,9 +1359,12 @@ def _cmd_extract(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    from boardmodeler.storage import initialize
+    from boardmodeler.storage import initialize, install_write_guard
 
     initialize()
+    # The contained venv runtime enters here (Boardmodeler.cmd sets SPICE_MAKER_ROOT
+    # and runs ``python -m boardmodeler.cli``); a repository checkout installs nothing.
+    install_write_guard()
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -1340,6 +1382,7 @@ def main(argv: list[str] | None = None) -> int:
         payload = doctor_payload(
             run_smoke=not getattr(args, "no_smoke", False),
             smoke_workdir=getattr(args, "smoke_workdir", None),
+            find_ltspice=getattr(args, "find_ltspice", False),
         )
         if getattr(args, "json", False):
             print(json.dumps(payload, indent=2))

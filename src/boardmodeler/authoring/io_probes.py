@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-if TYPE_CHECKING:  # pragma: no cover - typing only, avoids a runtime import cycle
+if TYPE_CHECKING:
     from boardmodeler.authoring.probes import ProbeSpec
 
 
