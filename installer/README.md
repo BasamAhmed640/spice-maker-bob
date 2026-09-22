@@ -1,6 +1,6 @@
 # Animated portable installer
 
-Run `uv sync --frozen --all-extras`, then `installer/build.ps1 -Version 1.3.0`.
+Run `uv sync --frozen --all-extras`, then `installer/build.ps1 -Version 1.4.0`.
 The build vendors the in-folder Python environment (`vendor_env.py`, the only step that
 uses a package index), freezes the GUI, launches it to verify startup, then compiles
 `PortableInstaller.cs` using the .NET Framework compiler included with Windows.

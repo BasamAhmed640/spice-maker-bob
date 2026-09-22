@@ -101,7 +101,7 @@ uv run boardmodeler model test --out build/part --json
 The fixture/scripted backends remain clearly labeled deterministic test tools. No other
 AI catalog or author transport ships in this repository.
 
-Rebuild with `installer/build.ps1 -Version 1.1.11`. The build checks the frozen GUI before
+Rebuild with `installer/build.ps1 -Version 1.4.0`. The build checks the frozen GUI before
 packaging and refreshes Install.exe, INSTALL.txt and SHA256SUMS.txt at the repository
 root. These generated files must be committed for Code → Download ZIP to update.
 See [installer details](installer/README.md) and [current status](docs/STATUS.md).
