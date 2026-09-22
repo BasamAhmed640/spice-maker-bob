@@ -1,13 +1,21 @@
-Spice Maker Bob 1.4.0 for Windows x64
+﻿Spice Maker Bob 1.4.0 for Windows x64
 
 Extract this zip, then double-click Install.exe. The pepper animation plays during setup.
-Python is included. First launch requires SETUP: choose LTspice, a model folder inside this folder, and your key.
-The app is unpacked into app/ here. Start.cmd opens it next time.
-Settings, the key file, temporary work, logs and models stay inside this extracted folder.
-No registry installation, Start Menu entry, AppData settings, or Credential Manager entries.
-Delete this entire extracted folder for a fresh start. Reinstalling in it preserves data/.
+Setup unpacks the application into app/ and the Python runtime it is built from into env/,
+then creates this folder's own .venv and its launchers: Start.cmd starts the app,
+Boardmodeler.cmd runs the command line, and one "Spice Maker" shortcut does the same as
+Start.cmd. Python is included: the environment is built from the files already in env/ and
+never from the internet.
+First launch requires SETUP: choose LTspice, a model folder inside this folder, and your key.
+Settings, key, temporary work, logs and models stay inside this extracted folder.
+The shortcut is created inside this folder only: no registry installation, no Start Menu
+entry, no desktop shortcut, no AppData settings, no Credential Manager entries.
+Delete this entire extracted folder for a fresh start. Reinstalling in it preserves data/,
+models/ and .venv/. Copies in different folders never read or change each other; keep the two
+editions in separate folders.
+The .venv command line environment has no Qt, so commands that open a window (ui, setup) are
+served by the bundled app: use Start.cmd, or app\SpiceMaker.exe --cli <command>.
 LTspice and (for IBM Bob) Bob Shell must be installed separately.
-The API key is an ordinary local file, data/credentials.bob.json, inside this folder. It is not
-encrypted: anyone who can read this folder can read the key, so keep the copy private.
+The API key stays inside this extracted folder; no account login is needed in this app.
 GO sends the selected datasheet and model text to the chosen provider.
 This build is unsigned. Check the publisher/source and the SHA256 before running it.

@@ -49,6 +49,7 @@ from boardmodeler.agent_providers import AgentProvider
 from boardmodeler.config import AppConfig, config_path, load_config, save_config
 from boardmodeler.security.key_verification import CHECK_TIMEOUT_S, KeyVerification, verify_key
 from boardmodeler.storage import app_root, library_dir, local_path, model_dir, portable
+from boardmodeler.ui.file_dialogs import starting_directory
 from boardmodeler.ui.theme import CGA, RETRO_STYLESHEET
 
 __all__ = ["SetupDialog", "configured_provider", "describe_settings", "ltspice_user_lib", "main"]
@@ -505,7 +506,9 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Where is LTspice.exe?",
-            self.ltspice_edit.text() or str(Path.home()),
+            # A directory, always: the field holds LTspice.exe itself (see
+            # ``starting_directory``), which Qt cannot open a folder view at.
+            starting_directory(self.ltspice_edit.text()),
             "LTspice (*.exe)",
         )
         if path:
@@ -516,7 +519,10 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
 
     def _choose_model_dir(self) -> None:
         path = QFileDialog.getExistingDirectory(
-            self, "Where should finished models be saved?", self.model_dir_edit.text()
+            self,
+            "Where should finished models be saved?",
+            # Same rule as LTspice: the folder here can itself be stale or gone.
+            starting_directory(self.model_dir_edit.text()),
         )
         if path:
             self.model_dir_edit.setText(path)
@@ -681,4 +687,4 @@ def main(argv: Sequence[str] | None = None) -> int:
     from boardmodeler.ui.app import build_application
 
     build_application([sys.argv[0]])
-    return int(SetupDialog().exec())
+    return SetupDialog().exec()

@@ -13,6 +13,7 @@ surfaces cannot drift apart. Nothing here computes a verdict.
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -43,7 +44,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from boardmodeler.agent_providers import AgentProvider
 from boardmodeler.storage import local_path, model_dir, portable
+from boardmodeler.ui.file_dialogs import starting_directory
 from boardmodeler.ui.theme import CGA, RETRO_STYLESHEET
 
 __all__ = ["DoctorView", "HourglassWidget", "ModelMakerWindow", "readable_doctor_report"]
@@ -102,7 +105,7 @@ def _window_title() -> str:
     return f"Spice Maker {__version__} — IC model maker{suffix}"
 
 
-def _configured_provider() -> object:
+def _configured_provider() -> AgentProvider | None:
     """The accepted provider the persisted settings name, or ``None`` — never a substitute."""
     try:
         from boardmodeler.config import load_config
@@ -542,7 +545,9 @@ class ModelMakerWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Choose the datasheet",
-            self.datasheet_edit.text() or str(Path.home()),
+            # A folder, always: the field holds a PDF path, and Qt's third argument is
+            # where the dialog opens, so a PDF (or a stale one) would fall back to C:\\.
+            starting_directory(self.datasheet_edit.text()),
             "PDF (*.pdf)",
         )
         if path:
@@ -552,7 +557,10 @@ class ModelMakerWindow(QMainWindow):
 
     def _choose_out(self) -> None:
         path = QFileDialog.getExistingDirectory(
-            self, "Where should the model be saved?", self.out_edit.text() or str(Path.home())
+            self,
+            "Where should the model be saved?",
+            # Same rule: a configured folder can point at a file, or at nothing at all.
+            starting_directory(self.out_edit.text()),
         )
         if path:
             self.out_edit.setText(path)
@@ -584,7 +592,7 @@ class ModelMakerWindow(QMainWindow):
         seconds = self._elapsed_seconds
         if self._started_at is not None:
             seconds = time.monotonic() - self._started_at
-        hours, remainder = divmod(max(0, int(seconds)), 3600)
+        hours, remainder = divmod(max(0, math.floor(seconds)), 3600)
         minutes, seconds = divmod(remainder, 60)
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
@@ -765,6 +773,12 @@ class ModelMakerWindow(QMainWindow):
         self._run_cli(["doctor", "--json"])
 
     # ------------------------------------------------------------------ signals
+    def _stage_item(self, row: int, column: int) -> QTableWidgetItem:
+        """One cell of the stage table: every row is inserted complete, so items exist."""
+        item = self.stages.item(row, column)
+        assert item is not None
+        return item
+
     def _on_stage(self, event: object) -> None:
         stage = getattr(event, "stage", "?")
         status = getattr(event, "status", "?")
@@ -773,13 +787,13 @@ class ModelMakerWindow(QMainWindow):
         if counts:
             detail = f"{detail} {counts}".strip()
         for row in range(self.stages.rowCount()):
-            if self.stages.item(row, 0).text() == stage:
-                self.stages.item(row, 1).setText(status)
-                self.stages.item(row, 1).setForeground(
+            if self._stage_item(row, 0).text() == stage:
+                self._stage_item(row, 1).setText(status)
+                self._stage_item(row, 1).setForeground(
                     _colour(_STATUS_COLOUR.get(status, "#ffffff"))
                 )
-                self.stages.item(row, 2).setText(detail)
-                self.stages.item(row, 2).setToolTip(detail)
+                self._stage_item(row, 2).setText(detail)
+                self._stage_item(row, 2).setToolTip(detail)
                 break
         else:
             row = self.stages.rowCount()
@@ -789,7 +803,7 @@ class ModelMakerWindow(QMainWindow):
             item.setForeground(_colour(_STATUS_COLOUR.get(status, "#ffffff")))
             self.stages.setItem(row, 1, item)
             self.stages.setItem(row, 2, QTableWidgetItem(detail))
-            self.stages.item(row, 2).setToolTip(detail)
+            self._stage_item(row, 2).setToolTip(detail)
         self.status_label.setText(f"{stage}: {detail}".strip()[:160])
         self.status_label.setToolTip(detail)
 

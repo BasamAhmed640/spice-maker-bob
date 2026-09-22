@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import subprocess
+import tomllib
 import uuid
 import winreg
 from pathlib import Path
@@ -25,6 +26,18 @@ SETUP = "Boardmodeler.cmd"
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _declared_version(repo: Path) -> str:
+    """The version the sources declare, so no release check hard-codes one.
+
+    The frozen application's window title carries ``boardmodeler.__version__``, so
+    comparing it with this value is what proves the shipped app is the built source
+    rather than an older freeze that happened to sit in ``dist/``.
+    """
+    return str(
+        tomllib.loads((repo / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    )
 
 
 def _json(text: str, what: str) -> dict:
@@ -262,7 +275,8 @@ def run(repo: Path) -> dict:
     assert not (second / "data/credentials.bin").exists()
     assert _venv_python(first).is_file() and _venv_python(second).is_file()
     main = verify(exe, repo / "build/portable-main-window.png")
-    assert "1.3.0" in str(main["title"])
+    version = _declared_version(repo)
+    assert version in str(main["title"]), main["title"]
     env = _clean_environment()
     env["BOARDMODELER_CONFIG"] = str(data / "config.json")
     check = subprocess.run(
@@ -278,6 +292,7 @@ def run(repo: Path) -> dict:
     assert payload["model_dir"] is None
     report = {
         "status": "PASS",
+        "version": version,
         "first_launch": startup["title"],
         "relaunch": main["title"],
         "same_folder_update_preserves_data": True,
