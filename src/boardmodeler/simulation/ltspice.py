@@ -172,10 +172,6 @@ BATCH_RESOLUTION_NOTES = (
     "-I is unsupported (GUI modal hang), .step is unsupported (concatenated raw)"
 )
 
-#: Explicit override for automation. On its own it is a setting, never a search.
-_CANDIDATE_ENV = "LTSPICE_EXE"
-
-
 @dataclass(frozen=True)
 class LtspiceInstall:
     """A located LTspice executable and how it was found."""
@@ -272,41 +268,11 @@ class SmokeResult:
 
 
 def default_lib_dir() -> Path | None:
-    """The installation's read-only library directory, if it can be found."""
-    candidates = [
-        Path(os.environ.get("LOCALAPPDATA", "")) / "LTspice" / "lib",
-        Path(os.environ.get("APPDATA", "")) / "LTspice" / "lib",
-    ]
-    for candidate in candidates:
-        if candidate.is_dir():
-            return candidate
-    return None
+    """Only an explicitly configured LTspice library is visible to this copy."""
+    from boardmodeler.config import load_config
 
-
-def _install_candidates() -> list[tuple[Path, str]]:
-    """Well-known install locations, in probe order, for :func:`discover` only.
-
-    Nothing else may call this: an unconfigured machine reports ``unset`` instead of
-    inspecting the user's profile, so SETUP has to ask the user exactly once.
-    """
-    candidates: list[tuple[Path, str]] = []
-    localappdata = os.environ.get("LOCALAPPDATA")
-    if localappdata:
-        candidates.append(
-            (Path(localappdata) / "Programs" / "ADI" / "LTspice" / "LTspice.exe", "LOCALAPPDATA")
-        )
-    program_files = os.environ.get("PROGRAMFILES")
-    if program_files:
-        candidates.append((Path(program_files) / "ADI" / "LTspice" / "LTspice.exe", "ProgramFiles"))
-    program_files_x86 = os.environ.get("PROGRAMFILES(X86)")
-    if program_files_x86:
-        candidates.append(
-            (Path(program_files_x86) / "LTC" / "LTspiceXVII" / "XVIIx64.exe", "ProgramFiles(x86)")
-        )
-        candidates.append(
-            (Path(program_files_x86) / "LTC" / "LTspiceIV" / "scad3.exe", "ProgramFiles(x86)")
-        )
-    return candidates
+    value = load_config().ltspice.lib_dir
+    return Path(value) if value and Path(value).is_dir() else None
 
 
 LocateReason = Literal[
@@ -356,7 +322,7 @@ def locate_outcome(explicit: str | Path | None = None) -> LocateOutcome:
     """Resolve LTspice from what the user configured, never by searching the machine.
 
     The order is the ``explicit`` argument, then the saved ``ltspice.path`` from the
-    config file, then ``LTSPICE_EXE``. A configured entry that is missing is reported
+    config file. A configured entry that is missing is reported
     missing — it does **not** fall through to another installation, because silently
     simulating with a different binary than the one that was asked for would
     invalidate every result. With none of the three set, the outcome is ``unset``:
@@ -373,14 +339,6 @@ def locate_outcome(explicit: str | Path | None = None) -> LocateOutcome:
     configured = _configured_path()
     if configured:
         return _resolve_one(Path(configured), "config", found="config", missing="config_missing")
-    env_value = os.environ.get(_CANDIDATE_ENV)
-    if env_value:
-        return _resolve_one(
-            Path(env_value),
-            f"env:{_CANDIDATE_ENV}",
-            found="env",
-            missing="env_missing",
-        )
     return LocateOutcome(install=None, probed=[], reason="unset")
 
 
@@ -388,48 +346,28 @@ def locate(explicit: str | Path | None = None) -> LtspiceInstall | None:
     """The configured LTspice executable, or ``None`` when SETUP has not set one.
 
     Never searches: an unconfigured machine reports nothing until the user chooses
-    an executable in SETUP, or exports ``LTSPICE_EXE`` for automation.
+    an executable in SETUP.
     """
     return locate_outcome(explicit).install
 
 
 def discover(explicit: str | Path | None = None) -> LocateOutcome:
-    """Probe well-known install locations because the user explicitly asked.
-
-    This is the SETUP page's find button and the explicit CLI search. It never runs
-    as part of :func:`locate`, and never at startup; the probed list is returned so
-    the caller can show exactly which locations were inspected.
-    """
-    candidates = _install_candidates()
-    if explicit:
-        candidates.insert(0, (Path(explicit), "configured"))
-    env_value = os.environ.get(_CANDIDATE_ENV)
-    if env_value:
-        candidates.insert(0 if not explicit else 1, (Path(env_value), f"env:{_CANDIDATE_ENV}"))
-    for path, source in candidates:
-        if not path.is_file():
-            continue
-        if source == "configured":
-            reason: LocateReason = "configured"
-        elif source.startswith("env:"):
-            reason = "env"
-        else:
-            reason = "discovered"
-        return LocateOutcome(
-            install=LtspiceInstall(path=path, source=source), probed=candidates, reason=reason
-        )
-    return LocateOutcome(install=None, probed=candidates, reason="not_installed")
+    """Backward-compatible resolver; it never searches the computer."""
+    return locate_outcome(explicit)
 
 
 def version(exe: Path, *, timeout_s: float = 20.0) -> str | None:
     """Version reported by ``LTspice.exe -version`` (e.g. ``26.0.0``)."""
     try:
+        from boardmodeler.storage import ltspice_environment
+
         proc = subprocess.run(
             [str(exe), "-version"],
             capture_output=True,
             text=True,
             timeout=timeout_s,
             check=False,
+            env=ltspice_environment(),
         )
     except OSError, subprocess.SubprocessError:
         return None
@@ -588,6 +526,7 @@ def _run_locked(
     # in the same directory contains "Total elapsed time" and would make the
     # watchdog below kill a fresh run after its grace period.
     _purge_outputs(outputs)
+    from boardmodeler.storage import ltspice_environment
 
     started = time.monotonic()
     proc = subprocess.Popen(
@@ -598,6 +537,7 @@ def _run_locked(
         text=True,
         encoding="utf-8",
         errors="replace",
+        env=ltspice_environment(),
     )
 
     outputs = _output_paths(deck, deck.parent)
@@ -690,6 +630,8 @@ def netlist_step(
     work.mkdir(parents=True, exist_ok=True)
 
     started = time.monotonic()
+    from boardmodeler.storage import ltspice_environment
+
     proc = subprocess.Popen(
         [str(exe), "-netlist", str(schematic)],
         cwd=str(work),
@@ -698,6 +640,7 @@ def netlist_step(
         text=True,
         encoding="utf-8",
         errors="replace",
+        env=ltspice_environment(),
     )
     timed_out = False
     terminated_after_marker = False

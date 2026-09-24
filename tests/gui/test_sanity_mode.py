@@ -8,7 +8,7 @@ pytest.importorskip("PySide6")
 pytestmark = pytest.mark.gui
 
 
-def test_full_verification_is_opt_in_and_saved(qtbot, tmp_path, monkeypatch):
+def test_full_verification_is_default_and_saved(qtbot, tmp_path, monkeypatch):
     from boardmodeler.config import AppConfig
     from boardmodeler.ui import setup_dialog as setup
 
@@ -21,8 +21,7 @@ def test_full_verification_is_opt_in_and_saved(qtbot, tmp_path, monkeypatch):
     )
     dialog = setup.SetupDialog()
     qtbot.addWidget(dialog)
-    assert not dialog.full_verification_check.isChecked()
-    dialog.full_verification_check.setChecked(True)
+    assert dialog.full_verification_check.isChecked()
     dialog._save()
     assert saved[0].full_verification is True
 

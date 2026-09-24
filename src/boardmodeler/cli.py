@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
-import os
 import platform
 import sys
 import tempfile
@@ -28,7 +27,6 @@ from boardmodeler.simulation.backend import probe_backend
 from boardmodeler.simulation.ltspice import (
     BATCH_RESOLUTION_NOTES,
     default_lib_dir,
-    discover,
     locate_outcome,
     smoke_test,
 )
@@ -72,11 +70,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="directory for the smoke artifacts (default: a fresh temp directory)",
-    )
-    doctor.add_argument(
-        "--find-ltspice",
-        action="store_true",
-        help="search well-known install locations once (never saved; SETUP saves a path)",
     )
 
     version_cmd = sub.add_parser("version", help="print the version")
@@ -317,15 +310,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _ltspice_section(
-    *, run_smoke: bool, smoke_workdir: Path | None, find_ltspice: bool = False
-) -> dict[str, Any]:
+def _ltspice_section(*, run_smoke: bool, smoke_workdir: Path | None) -> dict[str, Any]:
     config = load_config()
     explicit = config.ltspice.path
-    # Only an explicit request searches the machine; the normal report resolves the
-    # saved setting (source="config") or LTSPICE_EXE and says SETUP is required
-    # when neither is set.
-    outcome = discover(explicit) if find_ltspice else locate_outcome()
+    outcome = locate_outcome()
     install = outcome.install
 
     section: dict[str, Any] = {
@@ -334,8 +322,7 @@ def _ltspice_section(
         "source": install.source if install else None,
         "reason": outcome.reason,
         "setup_required": outcome.reason == "unset",
-        "searched": find_ltspice,
-        "env_override": os.environ.get("LTSPICE_EXE"),
+        "searched": False,
         "config_path_setting": explicit,
         "probed": outcome.probed_paths,
         "batch_resolution": BATCH_RESOLUTION_NOTES,
@@ -344,21 +331,15 @@ def _ltspice_section(
     }
 
     if install is None:
-        override = os.environ.get("LTSPICE_EXE")
         if outcome.reason in ("configured_missing", "config_missing"):
             detail = (
                 f"configured LTspice path does not exist: {explicit} "
                 "(it does not fall back to another installation)"
             )
-        elif outcome.reason == "env_missing":
-            detail = (
-                f"LTSPICE_EXE points at a file that does not exist: {override} "
-                "(it does not fall back to another installation)"
-            )
         elif outcome.reason == "unset":
             detail = (
                 "LTspice is not configured: SETUP is required to choose the LTspice "
-                "executable (or set LTSPICE_EXE, or run doctor --find-ltspice)"
+                "executable"
             )
         elif outcome.probed_paths:
             detail = "LTspice executable not found; probed: " + ", ".join(outcome.probed_paths)
@@ -428,14 +409,10 @@ def _credentials_section() -> dict:
     }
 
 
-def doctor_payload(
-    *, run_smoke: bool = True, smoke_workdir: Path | None = None, find_ltspice: bool = False
-) -> dict[str, Any]:
+def doctor_payload(*, run_smoke: bool = True, smoke_workdir: Path | None = None) -> dict[str, Any]:
     """Collect the environment report. Every field is observed, never assumed."""
     cfg_path = config_path()
-    ltspice = _ltspice_section(
-        run_smoke=run_smoke, smoke_workdir=smoke_workdir, find_ltspice=find_ltspice
-    )
+    ltspice = _ltspice_section(run_smoke=run_smoke, smoke_workdir=smoke_workdir)
     smoke_raw = None
     if ltspice.get("smoke_workdir"):
         candidate = Path(str(ltspice["smoke_workdir"])) / "smoke_rc.raw"
@@ -998,7 +975,7 @@ def _cmd_model_build(args: argparse.Namespace) -> int:
                 "tool": "boardmodeler",
                 "command": "model build",
                 "status": "BLOCKED",
-                "detail": "LTspice was not found; run 'boardmodeler doctor' or set LTSPICE_EXE",
+                "detail": "LTspice is not configured; choose its executable in SETUP",
                 "history": [],
                 "probes": [],
                 "files": [],
@@ -1183,7 +1160,7 @@ def _cmd_model_test(args: argparse.Namespace) -> int:
             "tool": "boardmodeler",
             "command": "model test",
             "status": "BLOCKED",
-            "detail": "LTspice was not found; run 'boardmodeler doctor' or set LTSPICE_EXE",
+            "detail": "LTspice is not configured; choose its executable in SETUP",
         }
         print(json.dumps(payload, indent=2) if args.json else f"model test: {payload['detail']}")
         return 1
@@ -1382,7 +1359,6 @@ def main(argv: list[str] | None = None) -> int:
         payload = doctor_payload(
             run_smoke=not getattr(args, "no_smoke", False),
             smoke_workdir=getattr(args, "smoke_workdir", None),
-            find_ltspice=getattr(args, "find_ltspice", False),
         )
         if getattr(args, "json", False):
             print(json.dumps(payload, indent=2))

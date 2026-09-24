@@ -246,8 +246,7 @@ def test_select_provider_bob_direct_without_credentials(
 
     with pytest.raises(ProviderError) as info:
         select_provider(AppConfig(), requested=ProviderKind.BOB_DIRECT, allow_bob_shell=False)
-    assert info.value.code == "bob_credentials_unavailable"
-    assert "BOB_API_KEY" in info.value.detail
+    assert info.value.code == "bob_direct_unsupported"
 
 
 def test_select_provider_bob_shell_requires_policy_and_switch() -> None:
@@ -257,11 +256,11 @@ def test_select_provider_bob_shell_requires_policy_and_switch() -> None:
             requested=ProviderKind.BOB_SHELL,
             allow_bob_shell=False,
         )
-    assert info.value.code == "bob_shell_not_allowed"
+    assert info.value.code == "legacy_bob_shell_disabled"
 
     with pytest.raises(ProviderError) as info:
         select_provider(AppConfig(), requested=ProviderKind.BOB_SHELL, allow_bob_shell=True)
-    assert info.value.code == "bob_shell_not_allowed"
+    assert info.value.code == "legacy_bob_shell_disabled"
 
 
 def test_select_provider_rejects_unknown_kind_strings() -> None:
@@ -281,8 +280,8 @@ def test_walk_reports_every_rejection_when_nothing_is_usable(
     with pytest.raises(ProviderError) as info:
         select_provider(config, requested=None, allow_bob_shell=False)
     assert info.value.code == "no_provider_available"
-    assert "BOB_DIRECT: bob_credentials_unavailable" in info.value.detail
-    assert "HTTP_INFERENCE: endpoint_not_configured" in info.value.detail
+    assert "BOB_DIRECT: bob_direct_unsupported" in info.value.detail
+    assert "HTTP_INFERENCE: http_inference_unsupported" in info.value.detail
 
 
 def test_http_provider_requires_an_endpoint_and_model() -> None:
@@ -296,4 +295,4 @@ def test_http_provider_requires_an_endpoint_and_model() -> None:
     )
     with pytest.raises(ProviderError) as info:
         select_provider(config, requested=ProviderKind.HTTP_INFERENCE, allow_bob_shell=False)
-    assert info.value.code == "model_not_configured"
+    assert info.value.code == "http_inference_unsupported"

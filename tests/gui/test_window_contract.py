@@ -117,14 +117,14 @@ def setup_page(qtbot, tmp_path, monkeypatch):
     return page
 
 
-def test_the_setup_find_and_browse_buttons_render_legibly(setup_page) -> None:
+def test_the_setup_browse_button_renders_legibly(setup_page) -> None:
     """SETUP's LTspice buttons must not repeat the black-on-black regression.
 
     The window contract above is about the main window; this is the same property on
     the page that grew two new buttons next to the LTspice path, checked on pixels so
     a background rule that repaints a button cannot pass unnoticed.
     """
-    for button in (setup_page.find_ltspice_button, setup_page.browse_ltspice_button):
+    for button in (setup_page.browse_ltspice_button,):
         assert button.isEnabled(), f"{button.text()} must be pressable"
         # Sample the button's own padding, never its centre: the centre can be glyph
         # ink (black text), which says nothing about the button's background.

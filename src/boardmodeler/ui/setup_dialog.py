@@ -186,31 +186,18 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
         row = 0
 
         # --- LTspice ---------------------------------------------------------
-        #: Where the path in the field came from: "" (nothing set), "config", "env",
-        #: "browsed" or "found"/"find_empty" (the user's own FIND press). Only FIND
-        #: ever searches, so the status line can say what actually happened.
+        #: Where the path in the field came from: saved config or a manual choice.
         self._ltspice_source = ""
-        self._ltspice_probed: list[str] = []
         self.ltspice_edit = QLineEdit(self._resolved_ltspice())
-        find_exe = QPushButton("FIND")
-        find_exe.setToolTip(
-            "Search this PC's usual install locations for LTspice. Nothing is searched "
-            "until you press this, and nothing is saved until you press SAVE."
-        )
-        find_exe.clicked.connect(self._find_ltspice)
         browse_exe = QPushButton("BROWSE")
         browse_exe.setToolTip("Pick an LTspice.exe yourself with a file dialog.")
         browse_exe.clicked.connect(self._choose_ltspice)
-        #: The two explicit ways to fill the path in. Neither runs by itself, and
-        #: only FIND is allowed to call ``discover``.
-        self.find_ltspice_button = find_exe
         self.browse_ltspice_button = browse_exe
         smoke = QPushButton("RUN SMOKE TEST")
         smoke.clicked.connect(self._run_smoke)
         choose_row = QHBoxLayout()
         choose_row.setContentsMargins(0, 0, 0, 0)
         choose_row.setSpacing(4)
-        choose_row.addWidget(find_exe)
         choose_row.addWidget(browse_exe)
         grid.addWidget(QLabel("LTSPICE"), row, 0)
         grid.addWidget(self.ltspice_edit, row, 1)
@@ -384,12 +371,7 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
     def _resolved_ltspice(self) -> str:
         """The *configured* executable; opening this page never searches the machine.
 
-        :func:`boardmodeler.simulation.ltspice.locate_outcome` reads only the saved
-        ``ltspice.path`` and ``LTSPICE_EXE`` — no install location is probed here, so
-        SETUP cannot find LTspice behind the user's back. :meth:`_find_ltspice` is the
-        only search in this page and the user has to press it. Which of the two
-        answered is remembered, so the status line can say it instead of implying a
-        discovery that never happened.
+        Only the saved ``ltspice.path`` is read. There is no installation search.
         """
         from boardmodeler.simulation.ltspice import locate_outcome
 
@@ -397,67 +379,20 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
         if outcome.install is None:
             self._ltspice_source = ""
             return ""
-        if portable() and not self._config.ltspice.path:
-            # A portable copy asks for its own executable once. An inherited
-            # ``LTSPICE_EXE`` is not adopted as if the user had chosen it here.
-            self._ltspice_source = ""
-            return ""
-        self._ltspice_source = "config" if outcome.reason == "config" else "env"
+        self._ltspice_source = "config"
         return str(outcome.install.path)
-
-    def _find_ltspice(self) -> None:
-        """Search this PC because the user pressed FIND, and only then.
-
-        This is the page's one and only
-        :func:`boardmodeler.simulation.ltspice.discover` call: opening the page, a
-        timer, a provider change and SAVE all resolve the configured setting and stop
-        there. What the search finds fills the field but is written nowhere — SAVE is
-        what stores it — so a search is always discardable.
-        """
-        from boardmodeler.simulation.ltspice import discover
-
-        outcome = discover()
-        self._ltspice_probed = list(outcome.probed_paths)
-        if outcome.install is None:
-            self._ltspice_source = "find_empty"
-        else:
-            self.ltspice_edit.setText(str(outcome.install.path))
-            self._ltspice_source = "found"
-        self._refresh_status()
-        self._fit_to_content()
 
     def _ltspice_status_text(self) -> str:
         """What is true about the LTspice path, in the state this page is really in.
 
-        Five states, and a search is named as the user's search only when FIND was
-        actually pressed: nothing set yet, found by that press, that press finding
-        nothing, chosen by hand with BROWSE, or taken from the saved configuration (or
-        the ``LTSPICE_EXE`` override). Nothing here probes the machine.
+        A path is either unset, manually chosen, or saved in this copy.
         """
-        if self._ltspice_source == "found":
-            return (
-                "FIND found this executable and put it in the field — it is not saved "
-                "yet; press SAVE to keep it."
-            )
-        if self._ltspice_source == "find_empty":
-            checked = len(self._ltspice_probed)
-            return (
-                f"the FIND search you asked for checked {checked} usual install "
-                f"location{'s' if checked != 1 else ''} and found no LTspice — "
-                "use BROWSE to pick an executable."
-            )
         if self._ltspice_source == "browsed":
             return "chosen by hand with BROWSE — press SAVE to keep it."
-        if self._ltspice_source == "env":
-            return (
-                "not set here yet: this path comes from the LTSPICE_EXE environment "
-                "variable; SAVE writes it into your configuration."
-            )
         if self._ltspice_source == "config":
             return "set from your saved configuration; SAVE replaces it."
         return (
-            "LTspice is not set yet — press FIND to search this PC, or BROWSE to pick "
-            "LTspice.exe, then SAVE. Nothing is searched automatically."
+            "LTspice is not set yet — use BROWSE to pick LTspice.exe, then SAVE."
         )
 
     def _show_provider(self, provider: AgentProvider) -> None:

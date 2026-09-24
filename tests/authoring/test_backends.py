@@ -97,7 +97,7 @@ class Recorder:
         return self.result
 
 
-def test_text_reply_uses_last_message_and_author_resume_is_explicit(tmp_path, keyed):
+def test_text_reply_uses_last_message_and_never_resumes(tmp_path, keyed):
     from dataclasses import replace
 
     payload = json.loads(payload_line())
@@ -111,8 +111,8 @@ def test_text_reply_uses_last_message_and_author_resume_is_explicit(tmp_path, ke
     assert "--resume" not in runner.calls[0]["argv"]
     backend.author(replace(request(tmp_path), session_id="task-42"))
     argv = runner.calls[1]["argv"]
-    assert argv[argv.index("--resume") + 1] == "task-42"
-    assert runner.calls[1]["input_text"] == PROMPT
+    assert "--resume" not in argv
+    assert PROMPT in runner.calls[1]["input_text"]
 
 
 def completed(stdout: str = "", *, returncode: int = 0, timed_out: bool = False, stderr: str = ""):
@@ -172,18 +172,28 @@ def test_argv_matches_the_documented_bob_run_shape(
     assert recorder.calls[0]["argv"] == [
         EXE,
         "run",
+        "--workspace",
+        str(tmp_path.resolve()),
+        "--mode",
+        "ask",
         "--format",
         "json",
         "--max-turns",
         "5",
         "--disable-mcp",
         "--disable-subagents",
+        "--disable-tool-groups",
+        "read,edit,execute,mcp,skill,todo,subagent,mode",
     ]
     assert recorder.calls[0]["cwd"] == tmp_path
-    assert recorder.calls[0]["input_text"] == PROMPT
+    assert PROMPT in recorder.calls[0]["input_text"]
     assert recorder.calls[0]["timeout_s"] == TIMEOUT_S
     assert recorder.calls[0]["env"]["BOB_API_KEY"] == SENTINEL_KEY
     assert SENTINEL_KEY not in " ".join(recorder.calls[0]["argv"])
+    assert set(recorder.calls[0]["env"]) == {
+        "PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
+        "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "TEMP", "TMP", "TMPDIR", "BOB_API_KEY",
+    }
 
 
 def test_team_id_is_added_only_when_configured(
@@ -199,6 +209,10 @@ def test_team_id_is_added_only_when_configured(
     assert recorder.calls[0]["argv"] == [
         EXE,
         "run",
+        "--workspace",
+        str(tmp_path.resolve()),
+        "--mode",
+        "ask",
         "--format",
         "json",
         "--max-turns",
@@ -207,7 +221,63 @@ def test_team_id_is_added_only_when_configured(
         "team-7",
         "--disable-mcp",
         "--disable-subagents",
+        "--disable-tool-groups",
+        "read,edit,execute,mcp,skill,todo,subagent,mode",
     ]
+
+
+def test_tool_free_bob_reply_is_written_only_by_application(tmp_path, keyed) -> None:
+    from dataclasses import replace
+
+    payload = json.loads(payload_line())
+    payload["last_message"] = "```spice\n.subckt DEMO IN OUT\nR1 IN OUT 1k\n.ends DEMO\n```"
+    runner = Recorder(completed(json.dumps(payload)))
+    backend = BobShellBackend(runner=runner)
+    result = backend.author(replace(request(tmp_path), subckt="DEMO"))
+    assert result.ok
+    assert (tmp_path / "model" / "DEMO.lib").read_text(encoding="utf-8").startswith(".subckt DEMO")
+    argv = runner.calls[0]["argv"]
+    groups = argv[argv.index("--disable-tool-groups") + 1].split(",")
+    assert {"read", "edit", "execute"}.issubset(groups)
+
+
+def test_tool_free_bob_reply_rejects_external_file_directive(tmp_path, keyed) -> None:
+    from dataclasses import replace
+
+    payload = json.loads(payload_line())
+    payload["last_message"] = ".subckt DEMO IN OUT\n.include C:/private/file.lib\n.ends DEMO"
+    backend = BobShellBackend(runner=Recorder(completed(json.dumps(payload))))
+    result = backend.author(replace(request(tmp_path), subckt="DEMO"))
+    assert not result.ok and "unsupported model directive" in result.detail
+    assert not (tmp_path / "model" / "DEMO.lib").exists()
+
+
+def test_tool_free_bob_reply_rejects_scopedata_file(tmp_path, keyed) -> None:
+    from dataclasses import replace
+
+    payload = json.loads(payload_line())
+    payload["last_message"] = (
+        ".subckt DEMO IN OUT\nV1 IN OUT PWL(SCOPEDATA=C:/private/data.txt)\n.ends DEMO"
+    )
+    backend = BobShellBackend(runner=Recorder(completed(json.dumps(payload))))
+    result = backend.author(replace(request(tmp_path), subckt="DEMO"))
+    assert not result.ok and "external file reference" in result.detail
+    assert not (tmp_path / "model" / "DEMO.lib").exists()
+
+
+def test_tool_free_bob_reply_accepts_helper_subcircuits(tmp_path, keyed) -> None:
+    from dataclasses import replace
+
+    payload = json.loads(payload_line())
+    payload["last_message"] = (
+        ".model DS D(Is=1e-12)\n"
+        ".subckt HELPER A B\nD1 A B DS\n.ends HELPER\n"
+        ".subckt DEMO IN OUT\nX1 IN OUT HELPER\n.ends DEMO"
+    )
+    backend = BobShellBackend(runner=Recorder(completed(json.dumps(payload))))
+    result = backend.author(replace(request(tmp_path), subckt="DEMO"))
+    assert result.ok
+    assert "X1 IN OUT HELPER" in (tmp_path / "model" / "DEMO.lib").read_text(encoding="utf-8")
 
 
 # ------------------------------------------------------------ stdout parsing

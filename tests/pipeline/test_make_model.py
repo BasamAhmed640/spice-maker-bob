@@ -331,7 +331,7 @@ def test_scenario_c_missing_ltspice_is_blocked_and_never_runs_the_agent(
     result, events, _wall = run(tmp_path)
 
     assert result.status == "BLOCKED"
-    assert "ltspice" in result.detail.lower() and "LTSPICE_EXE" in result.detail
+    assert "ltspice" in result.detail.lower() and "choose LTspice.exe" in result.detail
     assert backend.turns == 0, "the agent must not run when the judge cannot"
     author = [event for event in result.stages if event.stage == "author"]
     assert author[-1].status == "failed"

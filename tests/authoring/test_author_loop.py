@@ -919,7 +919,7 @@ def test_build_prompt_states_the_whole_contract() -> None:
     assert OPEN_CHAR_ID in prompt
     assert OPEN_REASON in prompt
     assert "spec_tampered" in prompt
-    assert "model test --out" in prompt
+    assert "Reply with complete SPICE library text" in prompt
     for port in loop.required_ports_for(spec):
         assert port in prompt
 

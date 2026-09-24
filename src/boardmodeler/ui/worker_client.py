@@ -271,6 +271,7 @@ class WorkerClient(QObject):
         self._proc = subprocess.Popen(
             argv,
             cwd=str(project),
+            env={key: value for key, value in os.environ.items() if key.upper() != "LTSPICE_EXE"},
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

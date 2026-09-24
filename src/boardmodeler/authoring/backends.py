@@ -1,9 +1,9 @@
 """Author backends: the agent is a *proposal* source, never a verdict source.
 
-Honesty rule implemented here: a backend can only write files into its sandbox.
-Nothing it prints — a self-reported success, a token count, a status string — is
-ever treated as evidence. The loop re-runs the real simulator on the files that
-were actually written, and only an observed ``.raw``/``.log`` pair can produce a
+Honesty rule implemented here: Bob Shell has no tools. It returns model text, and
+the application alone validates and writes the candidate. Nothing Bob prints — a
+self-reported success, a token count, a status string — is treated as evidence.
+The loop runs the real simulator on the written candidate, and only observed output can produce a
 PASS. A backend that cannot run reports *why* (``availability``) and the loop
 returns BLOCKED instead of silently substituting another author.
 
@@ -19,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -78,17 +79,19 @@ _TOKEN_STAT_KEYS = (
     "cache_write_tokens",
 )
 _POLL_S = 0.2
+BOB_DISABLED_TOOL_GROUPS = "read,edit,execute,mcp,skill,todo,subagent,mode"
+_BOB_CHILD_ENV_KEYS = (
+    "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "SYSTEMDRIVE",
+    "LANG", "LC_ALL", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
+)
 
 
 @dataclass(frozen=True)
 class AuthorRequest:
     """One authoring turn: what the agent is told and where it may write.
 
-    ``expect_text`` asks for a *read-only* turn whose answer is the reply text
-    itself: the API-key backend then writes no file at all and returns the text in
-    :attr:`AuthorResult.stdout_tail`. Backends whose process decides for itself
-    what to write (Bob Shell) treat it as advice: the prompt asks for text only,
-    but the files a CLI writes are still whatever it wrote.
+    ``expect_text`` asks for a text-only turn. For model turns, ``subckt`` names
+    the candidate that the application writes after validating Bob's reply.
     """
 
     prompt: str
@@ -97,6 +100,7 @@ class AuthorRequest:
     max_turns: int
     expect_text: bool = False
     session_id: str | None = None
+    subckt: str | None = None
     progress: Callable[[str], None] | None = field(default=None, repr=False, compare=False)
 
 
@@ -329,6 +333,10 @@ class BobShellBackend:
         argv = [
             str(executable),
             "run",
+            "--workspace",
+            str(Path(request.workdir).resolve()),
+            "--mode",
+            "ask",
             "--format",
             "json",
             "--max-turns",
@@ -336,11 +344,10 @@ class BobShellBackend:
         ]
         if self.team_id:
             argv.extend(["--team-id", self.team_id])
-        argv.extend(["--disable-mcp", "--disable-subagents"])
-        if request.expect_text:
-            argv.extend(["--disable-tool-groups", "execute,edit"])
-        elif request.session_id:
-            argv.extend(["--resume", request.session_id])
+        argv.extend([
+            "--disable-mcp", "--disable-subagents",
+            "--disable-tool-groups", BOB_DISABLED_TOOL_GROUPS,
+        ])
         return argv
 
     def author(
@@ -360,7 +367,8 @@ class BobShellBackend:
             return self._failed(BOB_CREDENTIALS_UNAVAILABLE)
 
         argv = self.argv(request)
-        child_env = dict(self.env if self.env is not None else os.environ)
+        source_env = self.env if self.env is not None else os.environ
+        child_env = {name: source_env[name] for name in _BOB_CHILD_ENV_KEYS if name in source_env}
         from boardmodeler.storage import bob_environment
 
         child_env = bob_environment(child_env)
@@ -381,7 +389,10 @@ class BobShellBackend:
                 input_text=(
                     f"{request.prompt.rstrip()}\n\n{TEXT_ONLY_INSTRUCTION}"
                     if request.expect_text
-                    else request.prompt
+                    else request.prompt.rstrip()
+                    + "\n\nYou have no tools. Return only the complete .subckt library in one "
+                    "```spice code block. The application validates and writes it, then "
+                    "runs LTspice separately. Do not run commands or claim verification."
                 ),
             )
         except Exception as exc:
@@ -437,11 +448,22 @@ class BobShellBackend:
             detail += f" total_tokens={int(usage['total_tokens'])}"
         if not ok:
             detail += f"; exit={process.returncode}; stderr: {_oneline(process.stderr)[:200]}"
+        message = payload.get("last_message")
         if request.expect_text:
-            message = payload.get("last_message")
             if not isinstance(message, str) or not message.strip():
                 return self._failed("bob_text_missing: the result contained no last_message")
             tail = redact(message, [key])
+        elif ok and request.subckt is not None:
+            try:
+                library = _extract_library(message, request.subckt)
+                root = Path(request.workdir).resolve()
+                model_dir = Path(request.model_dir).resolve()
+                if not model_dir.is_relative_to(root):
+                    raise ValueError("model directory is outside this workspace")
+                model_dir.mkdir(parents=True, exist_ok=True)
+                (model_dir / f"{request.subckt}.lib").write_bytes(library.encode("utf-8"))
+            except (OSError, ValueError) as exc:
+                return self._failed(f"bob_model_rejected: {exc}")
         return AuthorResult(
             ok=ok,
             detail=redact(detail, [key]),
@@ -468,6 +490,53 @@ class BobShellBackend:
 
     def _failed(self, detail: str) -> AuthorResult:
         return AuthorResult(ok=False, detail=detail, usage={}, stdout_tail="", session_id=None)
+
+
+def _extract_library(message: object, subckt: str) -> str:
+    """Accept one self-contained model reply; the application owns the only write."""
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", subckt):
+        raise ValueError("invalid subcircuit name")
+    if not isinstance(message, str) or not message.strip():
+        raise ValueError("Bob returned no library text")
+    if len(message) > 1_000_000 or "\x00" in message:
+        raise ValueError("library text is too large or contains NUL")
+    fence = re.fullmatch(r"\s*```(?:spice|spice3|cir|lib)?\s*\n(.*?)\n```\s*", message, re.I | re.S)
+    library = fence.group(1) if fence else message.strip()
+    lines = library.splitlines()
+    meaningful = [line.strip() for line in lines if line.strip() and not line.lstrip().startswith(("*", ";"))]
+    allowed_directives = {
+        ".subckt", ".ends", ".model", ".param", ".func", ".if", ".elseif",
+        ".else", ".endif", ".nodeset", ".ic", ".options",
+    }
+    opened: list[str] = []
+    found_main = 0
+    subcircuit_count = 0
+    for line in meaningful:
+        fields = line.split()
+        first = fields[0].lower()
+        if first.startswith(".") and first not in allowed_directives:
+            raise ValueError(f"unsupported model directive {first}")
+        if first == ".subckt":
+            if len(fields) < 3 or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", fields[1]):
+                raise ValueError("invalid .subckt declaration")
+            if opened:
+                raise ValueError("nested .subckt is not supported")
+            opened.append(fields[1].lower())
+            subcircuit_count += 1
+            found_main += fields[1].lower() == subckt.lower()
+            if subcircuit_count > 64:
+                raise ValueError("too many helper subcircuits")
+        elif first == ".ends":
+            if not opened or (len(fields) > 1 and fields[1].lower() != opened[-1]):
+                raise ValueError("unmatched .ends")
+            opened.pop()
+        elif not first.startswith((".", "+")) and not opened:
+            raise ValueError("component text outside a .subckt")
+        if re.search(r"(?i)\b(?:file|wavefile|libfile|scopedata)\s*=", line):
+            raise ValueError("external file reference is not allowed")
+    if opened or found_main != 1:
+        raise ValueError("reply must contain the requested .subckt and matched .ends")
+    return library.rstrip() + "\n"
 
 
 class ScriptedBackend:

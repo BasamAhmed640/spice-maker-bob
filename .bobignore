@@ -1,0 +1,18 @@
+# Bob IDE project controls. A Bob Shell subprocess is separately launched with all tools disabled.
+.venv/
+env/
+app/
+data/
+models/
+build/
+dist/
+runs/
+projects/
+releases/
+*.raw
+*.log
+*.exe
+*.key
+.env
+credentials.bin
+fixtures/**/originals/

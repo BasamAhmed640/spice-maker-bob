@@ -1,11 +1,13 @@
 # Spice Maker Bob
 
-**1.4.0: the window is resizable, the doctor report is complete, and the LTspice path is only searched when you ask.** The main window and SETUP can be dragged and maximised; CHECK ENVIRONMENT shows the whole report on its own resizable page with COPY REPORT and a raw-JSON toggle (it used to show only the last 4000 characters in a message box); SETUP's LTspice row now has explicit **FIND** and **BROWSE** buttons, and nothing is searched until you press FIND. A small hourglass runs beside the elapsed clock while a build runs. Inference egress is now checked against the provider's own documented host, and the saved key is a plain local file — see below.
+**Safety update:** SETUP requires you to choose an LTspice executable with **BROWSE** and save it. The app does not search installed programs or adopt an inherited `LTSPICE_EXE`. Bob Shell receives the complete prompt through stdin with its read, edit, execute, MCP, skill, todo, subagent and mode tools disabled. The application writes Bob's model text and runs LTspice itself; a Bob reply cannot mark a model verified.
+
+The root `AGENTS.md` and `.bob/rules/` files guide work when this repository is opened as an IBM Bob project. Embedded model authoring uses a generated scratch workspace with the same tool restrictions; it does not load repository rules or hooks. The application supplies the model requirements and safety limits in the prompt.
 
 **IBM Bob is the only AI in this edition, in both the UI and the application source.** Bob is a CLI provider, so it declares no HTTP endpoint: an HTTP destination is refused for it rather than guessed. Bob reads a datasheet, authors an LTspice model and repairs it using actual simulator
 feedback. A model card records measured behavior and every uncovered requirement.
 
-**1.3.0: quick structural checks are now the GUI default.** Quick mode skips AI test-circuit planning and uses structural checks plus a five-second unpowered LTspice load when available. Electrical accuracy remains explicitly unverified. Enable **Full simulation verification (slower)** in SETUP, or use **Run full verification** after a quick build. [Modes and limitations](docs/QUICK_MODE.md).
+**Full electrical verification is the default.** Quick mode remains available in SETUP and reports electrical accuracy as unverified. [Modes and limitations](docs/QUICK_MODE.md).
 
 **This build is portable.** Extract the GitHub **Code > Download ZIP** archive and run
 **Install.exe** inside it. The animated installer puts the app in `app/` in that same
@@ -34,9 +36,8 @@ On the **main** branch, choose **Code → Download ZIP**, extract the archive an
 pepper setup. INSTALL.txt contains instructions; SHA256SUMS.txt authenticates the installer.
 Python is bundled. LTspice and IBM Bob Shell are separate prerequisites. This build is unsigned.
 
-Open IBM Bob Shell once to review and accept IBM's license. Then open SETUP, choose
-the LTspice executable (FIND searches this PC only when you press it, or BROWSE picks
-the file yourself), run its smoke test and save a Bob API key.
+Open IBM Bob Shell once to review and accept IBM's license. Then open SETUP, use
+**BROWSE** to choose the LTspice executable, run its smoke test and save a Bob API key.
 Bob Shell uses an Inference-scoped key through the process environment; the key is kept in
 `data/credentials.bob.json` inside this folder — plain text, **not encrypted**, so anyone who
 can read the folder can read the key — and is never passed on the command line. See the
@@ -62,8 +63,8 @@ revoke remote permission without changing its content identity. Invalid extracti
 gets bounded repair; failures identify the parse location with secrets redacted before
 any diagnostic excerpt is shortened.
 
-The frozen specification owns limits, citations and conditions. Bob may change model
-files, not weaken the tests. Repairs receive the current model and observed results,
+The frozen specification owns limits, citations and conditions. Bob proposes model
+text; only the application writes candidates. Repairs receive the current model and observed results,
 retain the best candidate and stop at the iteration/stall limit. Repeated valid builds
 can skip authoring calls; a fresh process re-establishes simulator evidence.
 
@@ -87,15 +88,16 @@ validation is required. See [coverage and limitations](docs/FAST_ACCURATE_MODELS
 ## Development
 
 ```powershell
-uv sync --frozen --all-extras
-uv run pytest -q -m "not ltspice"
-uv run pytest -q -m "ltspice"
-uv run ruff check .
-uv run ruff format --check .
-uv run boardmodeler doctor --json
-uv run boardmodeler model build --part PART --datasheet datasheet.pdf --out build/part --allow-remote
-uv run boardmodeler model test --out build/part --json
+py -3.14 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m boardmodeler.cli doctor --json
+.\.venv\Scripts\python.exe -m boardmodeler.cli ui
 ```
+
+The `.venv` is inside this project and `requirements.txt` pins the runtime
+dependencies. This source setup requires Python 3.14 already installed; the rebuilt
+`Install.exe` bundles Python for users who do not have it. For development tests,
+install `requirements-dev.txt` into the same `.venv` and run pytest there.
 
 `--backend api` is a compatibility alias for the Bob API-key adapter in this edition.
 The fixture/scripted backends remain clearly labeled deterministic test tools. No other

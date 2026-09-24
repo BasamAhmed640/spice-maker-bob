@@ -66,10 +66,12 @@ def initialize() -> None:
 
 
 def bob_environment(env: dict[str, str]) -> dict[str, str]:
-    """Give the child its own local profile; never copy a global key or profile."""
-    result = dict(env)
-    if not portable():
-        return result
+    """Give Bob an application-local profile for every invocation."""
+    kept = (
+        "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "SYSTEMDRIVE",
+        "LANG", "LC_ALL", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
+    )
+    result = {name: env[name] for name in kept if name in env}
     profile = data_dir() / "bob-profile"
     for key, folder in {
         "HOME": profile,
@@ -83,6 +85,20 @@ def bob_environment(env: dict[str, str]) -> dict[str, str]:
         result[key] = str(folder)
     for key in ("TEMP", "TMP", "TMPDIR"):
         result[key] = str(data_dir() / "temp")
+    return result
+
+
+def ltspice_environment() -> dict[str, str]:
+    """Run the selected simulator with only OS and its established profile settings."""
+    kept = (
+        "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "SYSTEMDRIVE",
+        "USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA",
+    )
+    result = {name: os.environ[name] for name in kept if name in os.environ}
+    scratch = data_dir() / "temp"
+    scratch.mkdir(parents=True, exist_ok=True)
+    result["TEMP"] = str(scratch)
+    result["TMP"] = str(scratch)
     return result
 
 

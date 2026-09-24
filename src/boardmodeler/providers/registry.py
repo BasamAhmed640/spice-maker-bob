@@ -18,7 +18,6 @@ name=<str>)``.
 from __future__ import annotations
 
 import importlib
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,7 +26,6 @@ from boardmodeler.config import AppConfig, ProviderConfig
 from boardmodeler.domain.enums import ProviderKind
 from boardmodeler.providers.base import Provider, ProviderError, ProviderHealth
 from boardmodeler.providers.fixture import FixtureProvider
-from boardmodeler.security.credentials import env_var_name, get_credential
 
 __all__ = [
     "DEFAULT_FIXTURE_DIR",
@@ -39,11 +37,6 @@ __all__ = [
 DEFAULT_FIXTURE_DIR = Path("fixtures") / "providers"
 """Fixture location relative to the working directory; the pipeline sets this explicitly."""
 
-_BOB_ENV_VAR = "BOB_API_KEY"
-_BOB_CREDENTIAL_NAMES: dict[ProviderKind, str] = {
-    ProviderKind.BOB_DIRECT: "bob_direct",
-    ProviderKind.BOB_SHELL: "bob_shell",
-}
 _LAZY_PROVIDERS: dict[ProviderKind, tuple[str, str]] = {
     ProviderKind.HTTP_INFERENCE: ("boardmodeler.providers.http_inference", "HttpInferenceProvider"),
     ProviderKind.BOB_DIRECT: ("boardmodeler.providers.bob", "BobDirectProvider"),
@@ -124,20 +117,6 @@ def _coerce_kind(requested: ProviderKind | str) -> ProviderKind:
     )
 
 
-def _bob_credentials(kind: ProviderKind) -> tuple[bool, str]:
-    """Whether Bob credentials exist, without ever reading their value into text."""
-    credential_name = _BOB_CREDENTIAL_NAMES[kind]
-    credential = get_credential(credential_name)
-    if credential.value is not None:
-        return True, f"credential {credential_name!r} found in {credential.source.value.lower()}"
-    if os.environ.get(_BOB_ENV_VAR):
-        return True, f"{_BOB_ENV_VAR} environment variable is set"
-    return False, (
-        f"no plain local credential {credential_name!r} in this folder and neither "
-        f"{env_var_name(credential_name)} nor {_BOB_ENV_VAR} is set"
-    )
-
-
 def _check_requirements(
     config: AppConfig, kind: ProviderKind, *, allow_bob_shell: bool
 ) -> ProviderHealth:
@@ -146,58 +125,29 @@ def _check_requirements(
         return ProviderHealth(
             ok=True, code="ok", detail="fixture replay needs no credentials or network"
         )
-    _, provider_config = _entry_for_kind(config, kind)
+    _entry_for_kind(config, kind)
 
     if kind is ProviderKind.HTTP_INFERENCE:
-        if not provider_config.endpoint:
-            return ProviderHealth(
-                ok=False,
-                code="endpoint_not_configured",
-                detail="ProviderConfig.endpoint is not set for the HTTP provider",
-            )
-        if not provider_config.model:
-            return ProviderHealth(
-                ok=False,
-                code="model_not_configured",
-                detail="ProviderConfig.model is not set for the HTTP provider",
-            )
         return ProviderHealth(
-            ok=True,
-            code="ok",
-            detail=f"endpoint={provider_config.endpoint} model={provider_config.model}",
+            ok=False,
+            code="http_inference_unsupported",
+            detail="HTTP inference extraction is unavailable in the Bob edition",
         )
 
     if kind is ProviderKind.BOB_DIRECT:
-        credentials_ok, detail = _bob_credentials(kind)
-        if not credentials_ok:
-            return ProviderHealth(ok=False, code="bob_credentials_unavailable", detail=detail)
-        if not provider_config.endpoint or not provider_config.model:
-            return ProviderHealth(
-                ok=False,
-                code="bob_endpoint_not_configured",
-                detail=(
-                    "ProviderConfig.endpoint and .model must be set from official Bob "
-                    "documentation before Bob Direct can be used"
-                ),
-            )
-        return ProviderHealth(ok=True, code="ok", detail=detail)
+        return ProviderHealth(
+            ok=False,
+            code="bob_direct_unsupported",
+            detail="Bob Direct extraction is unavailable; use the tool-free Bob Shell author backend",
+        )
 
-    if not config.data_policy.allow_bob_shell:
+    if kind is ProviderKind.BOB_SHELL:
         return ProviderHealth(
             ok=False,
-            code="bob_shell_not_allowed",
-            detail="data_policy.allow_bob_shell is False; Bob Shell is disabled by policy",
+            code="legacy_bob_shell_disabled",
+            detail="Legacy Bob extraction can enable tools; use the tool-free Bob Shell author backend",
         )
-    if not allow_bob_shell:
-        return ProviderHealth(
-            ok=False,
-            code="bob_shell_not_allowed",
-            detail="--allow-bob-shell was not passed; Bob Shell is disabled",
-        )
-    credentials_ok, detail = _bob_credentials(kind)
-    if not credentials_ok:
-        return ProviderHealth(ok=False, code="bob_credentials_unavailable", detail=detail)
-    return ProviderHealth(ok=True, code="ok", detail=detail)
+    raise ProviderError("unknown_provider", f"unsupported provider kind {kind.value}")
 
 
 def build_provider(
@@ -223,10 +173,14 @@ def build_provider(
             f"config.providers has no entry {name!r}; configured: {sorted(config.providers)}",
         )
 
-    if provider_config.kind is ProviderKind.BOB_SHELL and not config.data_policy.allow_bob_shell:
+    if provider_config.kind in {
+        ProviderKind.HTTP_INFERENCE,
+        ProviderKind.BOB_DIRECT,
+        ProviderKind.BOB_SHELL,
+    }:
         raise ProviderError(
-            "bob_shell_not_allowed",
-            "data_policy.allow_bob_shell is False; Bob Shell is disabled by policy",
+            "legacy_provider_disabled",
+            "Non-fixture extraction providers are unavailable in the Bob edition; use the tool-free Bob Shell author backend",
         )
     return _construct(provider_config.kind, entry_name, provider_config, fixture_dir)
 

@@ -293,8 +293,8 @@ def prompt_for(spec, unverified) -> str:
         for p in spec.pin_map
     ]
     return (
-        f"Create model/{spec.subckt}.lib, a self-contained LTspice behavioral model for {spec.part}. "
-        "Write only this model file. The application generates the symbol. Do not run simulations, "
+        f"Return one complete self-contained LTspice library for {spec.part} as plain text. "
+        "The application writes the returned text to the model file and generates the symbol. Do not run simulations, "
         "design test fixtures, or modify spec/. Model core function, every channel and physical pin, "
         "supply domains, stated operating limits, timing and output behavior from the supplied records. "
         "Respect units, relative limits and operating conditions. Absolute maximum ratings are not "
@@ -354,6 +354,7 @@ def author_model(
         raise ValueError(reason)
     prompt = prompt_for(spec, unverified)
     problem = ""
+    previous_model = ""
     for attempt in range(max_attempts):
         if cancel and cancel.is_set():
             raise ValueError("cancelled before sanity authoring")
@@ -362,11 +363,15 @@ def author_model(
         (folder / "spec").mkdir()
         frozen = folder / "spec/characteristics.json"
         frozen.write_text(spec.to_json(), encoding="utf-8")
-        request_text = prompt + ("\nRepair these structural errors: " + problem if problem else "")
+        request_text = prompt
+        if problem:
+            request_text += "\nRepair these structural errors: " + problem
+            if previous_model:
+                request_text += "\nPrevious library to revise:\n```spice\n" + previous_model + "\n```"
         (folder / "prompt.md").write_text(request_text, encoding="utf-8")
         progress(f"writing model, turn {attempt + 1}/{max_attempts}; no simulation test planning")
         result = backend.author(
-            AuthorRequest(request_text, folder, folder / "model", 1, progress=progress), cancel
+            AuthorRequest(request_text, folder, folder / "model", 1, subckt=spec.subckt, progress=progress), cancel
         )
         if cancel and cancel.is_set():
             raise ValueError("cancelled during sanity authoring")
@@ -389,6 +394,8 @@ def author_model(
             load = load_check(candidate, spec.subckt, folder / "load-check", ltspice, cancel)
         except (ValueError, OSError) as exc:
             problem = str(exc)
+            if candidate.is_file():
+                previous_model = candidate.read_text(encoding="utf-8", errors="replace")[:200_000]
             progress(f"structural check needs repair: {problem}")
             continue
         if cancel is not None and cancel.is_set():

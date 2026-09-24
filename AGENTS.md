@@ -3,22 +3,22 @@
 ## Commands
 
 ```powershell
-uv sync --all-extras                       # single setup command
-uv run pytest -q                           # unit + integration (LTspice-marked tests run locally)
-uv run pytest -q -m "not ltspice"          # simulator-free subset
-uv run ruff check . ; uv run ruff format --check .
-uv run boardmodeler doctor --json
+py -3.14 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\ruff.exe check .
+.\.venv\Scripts\python.exe -m boardmodeler.cli doctor --json
 
 # the product: datasheet -> agent-authored, simulator-judged model
-uv run boardmodeler ui                     # the model maker window
-uv run boardmodeler model build --part TPS54320 --datasheet <pdf> --out build/tps54320
-uv run boardmodeler model test  --out build/tps54320
-uv run boardmodeler model install --out build/tps54320 --user-lib --apply
+.\.venv\Scripts\python.exe -m boardmodeler.cli ui
+.\.venv\Scripts\python.exe -m boardmodeler.cli model build --part TPS54320 --datasheet <pdf> --out build/tps54320
+.\.venv\Scripts\python.exe -m boardmodeler.cli model test --out build/tps54320
 ```
 
 ## The model-maker path (D-014)
 
-The GUI defaults to `authoring/sanity.py`: no AI test planning, one bounded unpowered load per candidate when LTspice is available, at most two author turns, and UNKNOWN electrical status. Full verification remains optional and its rules below still apply. Never describe a structural check as measured accuracy.
+The GUI defaults to full electrical verification. Quick structural checks remain an explicit option and carry UNKNOWN electrical status. Never describe a structural check as measured accuracy. Bob Shell runs with all tool groups disabled; it returns model text, and the application alone writes the candidate and runs LTspice.
 
 * `authoring/` is the engine: `spec.py` (the frozen datasheet rows), `probes.py` (one deck
   per characteristic), `harness.py` (run + judge), `backends.py` + `loop.py` (the agent),
@@ -26,7 +26,7 @@ The GUI defaults to `authoring/sanity.py`: no AI test planning, one bounded unpo
   `boardmodeler model …` are two faces of that one chain.
 * The **spec is frozen**: `spec/characteristics.json` is hashed before the agent starts and
   re-checked after every turn. A changed spec stops the build as `UNKNOWN(spec_tampered)`;
-  the agent may write only `model/<SUBCKT>.lib` and `model/<SUBCKT>.asy`.
+  the application may write only `model/<SUBCKT>.lib` and `model/<SUBCKT>.asy`.
 * A row that a probe cannot answer is `UNKNOWN` with its reason; a datasheet row no probe can
   reach keeps a written `not_testable_reason` and appears on the card. Never stretch a probe
   to cover a row it does not exercise, and never relax a limit to make a model pass.

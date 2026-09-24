@@ -1,4 +1,43 @@
-# 1.4.0 source; 1.3.0 installer verification complete
+# 1.4.0 portable Bob safety update — 2026-09-24
+
+The Bob edition now uses a project-local Python `.venv` with pinned runtime
+`requirements.txt` and separate development requirements. Its root `AGENTS.md`,
+`.bob/rules/`, and `.bobignore` follow IBM Bob's documented project layout. Bob
+author turns run with `--workspace` set to a generated scratch folder and all
+documented tool groups disabled. Bob replies with library text; the application
+validates and writes the model. Legacy tool-enabled Bob Shell extraction and the
+undocumented Bob Direct HTTP extraction path are disabled, as is the old HTTP
+inference selection in this edition. IBM Bob project rules apply when editing the
+repository in Bob IDE; the embedded author uses app-supplied prompt rules instead.
+
+LTspice must be chosen and saved explicitly. An inherited `LTSPICE_EXE` and
+well-known install paths are never adopted. Simulator children receive a scrubbed
+environment without inference keys, retaining existing LTspice user profile
+variables needed for batch execution and using an app-local temp directory.
+GUI full electrical verification is the default; explicit quick mode labels its
+output electrically unverified. A PASS still requires a measured LTspice artifact.
+
+Local observed checks on Windows, Python 3.14.2: `uv sync --frozen --all-extras`
+and installation of `requirements.txt` into `.venv` passed; `ruff check src tests`,
+`compileall`, and `git diff --check` passed. The simulator-free suite reported
+**1206 passed, 14 skipped, 163 deselected**. A local doctor check without an
+LTspice selection reported not configured. After the path was explicitly saved,
+real LTspice batch smoke completed in 0.54 seconds with `.raw` and `.log` hashes
+and measured `V(out)=0.632119 V` for the fixture circuit. This is a simulator
+smoke check, not a generated IC model accuracy claim. `bob run --help` confirmed
+the tool-disabling CLI flags. No Bob API key was available, so live Bob authoring
+and a fresh generated model were **not tested**.
+
+The portable installer was rebuilt locally with the tracked `Install.exe` for
+GitHub Code → Download ZIP. Frozen GUI startup passed, and portable verification
+passed in two separate extracted copies, each with a separate bundled Python
+`.venv` and local data. The installer SHA-256 is
+`d0d50ea3b4de882e412356f4999a4029e37695e157e22458c2f0337da623efb2`.
+See `docs/BUILD_VERIFICATION.json` for exact artifact checks. The PowerShell build wrapper was blocked by the local
+execution policy; its reviewed Python steps were invoked directly without
+changing the policy. No OS security feature was disabled.
+
+## Prior status
 
 Installer run 35572967282 and source CI 35572967584 passed for `8abf88658c4effdd25fa31b96ae9701703730ba6`.
 The actual installer passed GUI startup, first-launch setup, same-folder data preservation

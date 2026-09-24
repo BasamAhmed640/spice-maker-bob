@@ -1,6 +1,6 @@
-# Current default: quick model delivery
+# Current default: full electrical verification
 
-In 1.4.0, GUI GO reads/extracts the datasheet, writes a model, runs local structural checks and a five-second unpowered LTspice load when available, and exports it as electrically unverified. Full test planning and electrical verification are opt-in. See [quick mode](QUICK_MODE.md) for the exact limits. The full workflow described below runs when full verification is selected.
+GUI GO runs the full electrical verification workflow by default. Quick mode is an explicit option and exports its model as electrically unverified after structural checks and a five-second unpowered LTspice load when available. See [quick mode](QUICK_MODE.md) for its limits.
 
 # What happens after GO
 
@@ -20,7 +20,7 @@ In the Bob edition, all of these AI jobs use IBM Bob.
 | Extract | Selected agent | Returns the exact part's identity, pins, electrical requirements with conditions and citations, and a capability summary in structured JSON. A malformed reply gets one correction request before extraction fails. Matching cached extraction can avoid this call. |
 | Check and bind | Local code | Validates the structure and cited text, plans and validates independent device-specific circuits (or uses a reviewed fixture), records unsupported rows, then freezes the specification and its hash. |
 | Reinforce, when enabled | Selected agent plus local retrieval | Suggests supporting URLs such as application notes and errata. The app retrieves sources and records evidence. These references cannot replace frozen limits or produce a passing verdict. |
-| Author | Selected agent | Writes a self-contained LTspice library against the frozen requirements and required ports. The application generates the symbol locally. On a repair turn, it receives the current model and the previous simulation failures. |
+| Author | Selected agent and local code | Bob returns a self-contained LTspice library as text against the frozen requirements and required ports. The application validates and writes the library, then generates the symbol locally. On a repair turn, Bob receives the current model and previous simulation failures in its prompt. |
 | Judge | LTspice plus local code | Runs the applicable test circuits, reads observed outputs, and compares measurements with the frozen requirements. The agent cannot award itself PASS or loosen the limits. |
 | Repair | Selected agent, then the judge again | Revises the model and repeats the applicable checks. The best observed candidate is retained. By default, two consecutive turns without measurable improvement stop the loop; cancellation, errors, or an explicitly configured turn cap can also stop it. |
 | Save | Local code | Publishes the model and symbol when available, the model card, row results, and recorded evidence. An early failure can leave diagnostics without a model. |

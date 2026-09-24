@@ -59,7 +59,7 @@ class SettingsDialog(QDialog):
         # ------------------------------------------------------------ ltspice
         ltspice = self._config.ltspice
         self.ltspice_path = QLineEdit(ltspice.path or "", self)
-        self.ltspice_path.setPlaceholderText("(auto-discover)")
+        self.ltspice_path.setPlaceholderText("Choose LTspice.exe explicitly")
         browse = QPushButton("Browse...", self)
         browse.clicked.connect(self._browse_ltspice)
         row = QHBoxLayout()

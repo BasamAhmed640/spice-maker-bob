@@ -43,8 +43,7 @@ class LtspiceConfig(BaseModel):
 
     ``path=None`` means SETUP has not chosen an executable yet. It is never taken
     as an instruction to search the machine: ``simulation.ltspice.locate`` resolves
-    only what is written here or in ``LTSPICE_EXE`` (see
-    ``simulation.ltspice.discover`` for the explicit, user-requested search).
+    only what is written here. Users choose the path in SETUP.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -119,7 +118,7 @@ class AppConfig(BaseModel):
     default_project_dir: str | None = None
     log_level: str = "INFO"
     setup_complete: bool = False
-    full_verification: bool = False
+    full_verification: bool = True
 
 
 def config_dir() -> Path:

@@ -340,6 +340,30 @@ def test_repairs_are_bounded_and_spec_tampering_stops(tmp_path):
         author_model(spec, Backend(tamper=True), tmp_path, None, lambda _: None, {})
 
 
+def test_quick_bob_request_has_subckt_and_prior_model_for_repair(tmp_path):
+    spec = SpecSet("TEST", "TEST", "TEST_FIXTURE", (), PINS)
+    prepare_workdir(spec=spec, subckt="TEST", workdir=tmp_path)
+
+    class RepairBackend(Backend):
+        def author(self, request, cancel):
+            assert request.subckt == "TEST"
+            assert "Return one complete self-contained LTspice library" in request.prompt
+            self.calls += 1
+            if self.calls == 1:
+                (request.model_dir / "TEST.lib").write_text(
+                    VALID.replace(".ends TEST", ""), encoding="utf-8"
+                )
+            else:
+                assert "Previous library to revise:" in request.prompt
+                assert "R1 IN OUT 1k" in request.prompt
+                (request.model_dir / "TEST.lib").write_text(VALID, encoding="utf-8")
+            return AuthorResult(True, "synthetic circuit written", {}, "", None)
+
+    backend = RepairBackend()
+    _, count = author_model(spec, backend, tmp_path, None, lambda _: None, {})
+    assert count == 2
+
+
 def test_cancellation_during_cached_load_keeps_receipt_and_never_reauthors(tmp_path, monkeypatch):
     import threading
 

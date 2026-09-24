@@ -88,7 +88,7 @@ model is judged against. It is frozen for the whole build:
 - the harness owns the limits and tolerances. Relaxing a target here is not
   possible by construction.
 
-Write the model to `../model/<subckt>.lib`. The application generates the symbol.
+Return the complete model text. The application writes `../model/<subckt>.lib` and generates the symbol.
 """
 
 
@@ -197,16 +197,17 @@ def build_prompt(spec: SpecSet, subckt: str, harness_summary: str = "") -> str:
         "",
         "You are the authoring agent for a reduced behavioural LTspice model of the part",
         f"{spec.part!r} (document {spec.doc_id!r}). A deterministic harness runs after every",
-        "turn of yours: it simulates the files you wrote with real LTspice and compares the",
+        "turn of yours: it simulates the model text the application wrote with real LTspice and compares the",
         "waveforms against the datasheet characteristics below. The harness decides PASS and",
         "FAIL — you never do, and nothing you report is taken as evidence.",
         "",
-        f"## Deliverable (one model file, under {MODEL_DIRNAME}/)",
-        f"1. `{MODEL_DIRNAME}/{subckt}.lib` — a single self-contained `.subckt {subckt} ...` block:",
-        "   no `.include`, no absolute paths, no other external files.",
+        f"## Deliverable (the application writes {MODEL_DIRNAME}/{subckt}.lib)",
+        f"Reply with complete SPICE library text containing `.subckt {subckt} ...` and",
+        "any helper subcircuits or internal .model definitions it needs. Do not use tools.",
+        "No `.include`, absolute paths, or other external files.",
         f"The application generates `{MODEL_DIRNAME}/{subckt}.asy` locally, with `PINATTR SpiceOrder`",
         "entries matching your `.subckt` port order. Do not spend tokens drawing a symbol.",
-        "Anything else you write is ignored by the harness.",
+        "The application validates and writes your reply; its harness judges the result.",
         "",
         f"## The `{subckt}` ports you MUST declare",
     ]
@@ -283,16 +284,9 @@ def build_prompt(spec: SpecSet, subckt: str, harness_summary: str = "") -> str:
     lines.extend(
         [
             "",
-            "## Testing it yourself",
-            "The harness runs automatically at the end of every turn and its feedback is appended",
-            "to this prompt. If the installed CLI offers it, you can also run the same harness on",
-            "the files written so far with:",
-            "",
-            "    uv run boardmodeler model test --out <this working directory>",
-            "",
             "## Rules",
-            f"1. Write only `{MODEL_DIRNAME}/{subckt}.lib`; the application draws the symbol.",
-            f"2. Never edit `{SPEC_DIRNAME}/`; the build aborts if it changes.",
+            f"1. Reply with the complete library for `{MODEL_DIRNAME}/{subckt}.lib`; the application draws the symbol.",
+            f"2. You cannot edit `{SPEC_DIRNAME}/`; the build aborts if it changes.",
             "3. Do not relax, reinterpret or delete a target, a limit or a requirement.",
             "4. Keep the model self-contained: the harness includes your file by absolute path.",
             "5. Report honestly in your notes: an untested behaviour stays untested.",
@@ -627,6 +621,7 @@ def _author(
         model_dir=Path(request.workdir) / MODEL_DIRNAME,
         max_turns=AUTHOR_MAX_TURNS,
         session_id=session_id,
+        subckt=request.subckt,
     )
     limit = request.turn_timeout_s
     if limit is None:

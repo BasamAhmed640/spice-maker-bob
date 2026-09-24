@@ -13,12 +13,15 @@ SECRET = "test-secret-never-log"
 
 def test_bob_uses_exact_supplied_key_and_disables_tools(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda _: "bob")
+    monkeypatch.setenv("UNRELATED_PRIVATE_TOKEN", "do-not-pass")
 
     def runner(argv, **kw):
         assert SECRET not in " ".join(argv)
         assert kw["env"]["BOB_API_KEY"] == SECRET
+        assert "UNRELATED_PRIVATE_TOKEN" not in kw["env"]
         assert kw["timeout_s"] == 15
         assert "read,edit,execute,mcp,skill,todo,subagent,mode" in argv
+        assert argv[argv.index("--workspace") + 1] == str(kw["cwd"].resolve())
         assert kw["input_text"].startswith("Connection check.")
         assert list(kw["cwd"].iterdir()) == []
         return GuardedProcess(0, '{"status":"success","last_message":"OK"}', "", 1, False)
