@@ -37,6 +37,7 @@ any other: the harness still judges the bytes that were on disk.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import uuid
@@ -72,6 +73,10 @@ _PROMPT_FILENAME = "prompt.md"
 
 AUTHOR_MAX_TURNS = 12
 """Internal turn budget handed to one agent invocation (the harness loop cap is separate)."""
+
+AUTHOR_EFFORT_ENV = "BOARDMODELER_AUTHOR_REASONING_EFFORT"
+"""Explicit authoring effort (e.g. ``low``) for providers that document the switch;
+unset means ``high``. The loop never lowers it on its own after a slow turn."""
 
 STALLED_PREFIX = "agent_stalled:"
 """The loop's reason when ``stall_patience`` consecutive turns made no progress."""
@@ -687,7 +692,7 @@ def _author(
         model_dir=Path(request.workdir) / MODEL_DIRNAME,
         max_turns=AUTHOR_MAX_TURNS,
         session_id=session_id,
-        reasoning_effort="high",
+        reasoning_effort=os.environ.get(AUTHOR_EFFORT_ENV, "").strip() or "high",
         subckt=request.subckt,
     )
     limit = request.turn_timeout_s
