@@ -32,10 +32,19 @@ The portable installer was rebuilt locally with the tracked `Install.exe` for
 GitHub Code → Download ZIP. Frozen GUI startup passed, and portable verification
 passed in two separate extracted copies, each with a separate bundled Python
 `.venv` and local data. The installer SHA-256 is
-`d0d50ea3b4de882e412356f4999a4029e37695e157e22458c2f0337da623efb2`.
+`0696da81daa23146e6d4c778e1199ae7731ea113c1cc1a3d698f62918fa773b8`.
 See `docs/BUILD_VERIFICATION.json` for exact artifact checks. The PowerShell build wrapper was blocked by the local
 execution policy; its reviewed Python steps were invoked directly without
 changing the policy. No OS security feature was disabled.
+
+Post-install correction: the first portable package contained an older bundled
+application wheel even though its frozen GUI had current source. Consequently,
+the installed `Boardmodeler.cmd` redirected LTspice's profile and its doctor
+smoke stalled. The wheel was rebuilt, its `storage.py` was verified byte-for-byte
+against source, and packaging now refuses a stale wheel. In a newly installed
+copy with LTspice explicitly set, `Boardmodeler.cmd doctor --json` reported
+LTspice 26.0.0, `searched=false`, smoke PASS in 0.63 seconds, recorded `.raw`/`.log`
+hashes and measured `V(out)=0.632119 V`. Bob authoring still awaits a key.
 
 ## Prior status
 

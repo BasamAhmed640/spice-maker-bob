@@ -92,7 +92,9 @@ def ltspice_environment() -> dict[str, str]:
     """Run the selected simulator with only OS and its established profile settings."""
     kept = (
         "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "SYSTEMDRIVE",
-        "USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA",
+        "USERPROFILE", "HOME", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
+        "PROGRAMDATA", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE",
+        "PROCESSOR_IDENTIFIER", "PASTE_OMEGA", "CAPITAL_KILO",
     )
     result = {name: os.environ[name] for name in kept if name in os.environ}
     scratch = data_dir() / "temp"

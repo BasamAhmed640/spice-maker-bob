@@ -3,12 +3,13 @@
   "date_utc": "2026-09-24",
   "source_commit": null,
   "source_note": "Built from the 2026-09-24 local working tree before the release commit",
-  "installer_sha256": "d0d50ea3b4de882e412356f4999a4029e37695e157e22458c2f0337da623efb2",
-  "installer_bytes": 89331200,
-  "frozen_executable_sha256": "23bdce5e522694290d0b08d6f839a1d50fc164176c9408ba89e45bf1b416d741",
+  "installer_sha256": "0696da81daa23146e6d4c778e1199ae7731ea113c1cc1a3d698f62918fa773b8",
+  "installer_bytes": 89326592,
+  "frozen_executable_sha256": "e443b654b57578f236638345025ca12e259d06462bbe357682631d7d7a027429",
   "frozen_gui_verification": "PASS",
   "portable_gui_and_isolation_verification": "PASS: two extracted copies, separate bundled Python virtual environments and data, no new outside-folder setup writes",
   "source_tests": "1206 passed, 14 skipped, 163 deselected; ruff, compileall and git diff --check passed",
-  "real_ltspice_smoke": "PASS after explicit saved executable path: raw/log recorded, fixture V(out)=0.632119 V; no generated-device accuracy claim",
+  "real_ltspice_smoke": "PASS from installed Boardmodeler.cmd after explicit saved executable path: LTspice 26.0.0, searched=false, raw/log recorded, fixture V(out)=0.632119 V, wall=0.63s; no generated-device accuracy claim",
+  "bundled_storage_py_sha256": "bddd093297bb914da32fec079afac0a89748ee02655d6409394117838f5f9741",
   "live_bob_authoring": "BLOCKED: no BOB_API_KEY was available"
 }

@@ -62,3 +62,23 @@ def test_doctor_reports_setup_required_without_search(isolated_config):
     assert section["setup_required"] is True
     assert section["probed"] == [] and section["searched"] is False
     assert "SETUP" in section["smoke_detail"]
+
+
+def test_ltspice_child_keeps_required_windows_profile_without_secrets(tmp_path, monkeypatch):
+    from boardmodeler import storage
+
+    monkeypatch.setattr(storage, "data_dir", lambda: tmp_path)
+    monkeypatch.setenv("HOMEDRIVE", "C:")
+    monkeypatch.setenv("HOMEPATH", r"\Users\fixture")
+    monkeypatch.setenv("PROGRAMDATA", r"C:\ProgramData")
+    monkeypatch.setenv("BOB_API_KEY", "secret-must-not-enter-simulator")
+    monkeypatch.setenv("LTSPICE_EXE", r"C:\other\LTspice.exe")
+
+    child = storage.ltspice_environment()
+
+    assert child["HOMEDRIVE"] == "C:"
+    assert child["HOMEPATH"] == r"\Users\fixture"
+    assert child["PROGRAMDATA"] == r"C:\ProgramData"
+    assert child["TEMP"] == str(tmp_path / "temp")
+    assert "BOB_API_KEY" not in child
+    assert "LTSPICE_EXE" not in child
