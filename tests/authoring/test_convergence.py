@@ -112,3 +112,35 @@ def test_log_diagnosis_names_the_rejected_line_and_the_nonconvergent_node(tmp_pa
     assert any("line 4" in h and "en_ok" in h and "V(node,GND)" in h for h in hints)
     assert any("node `en`" in h and "Rpu VIN EN 10Meg" in h for h in hints)
     assert any("No DC operating point" in h for h in hints)
+
+
+def test_an_independent_source_written_with_an_expression_becomes_a_b_source(tmp_path) -> None:
+    # Turn 1 of the 2026-09-24 low-effort TPS54332DDA rerun wrote exactly this line;
+    # LTspice answered "Unknown parameter" and the whole file was refused.
+    from boardmodeler.authoring.model_syntax import normalize_behavioral_sources
+
+    lib = tmp_path / "DUT.lib"
+    lib.write_bytes(
+        b".subckt DUT VIN EN GND\n"
+        b"Ven en_ok GND V=limit((V(EN,GND)-1.25)/0.05,0,1)\n"
+        b"Iq VIN GND I=82u*V(en_ok,GND)\n"
+        b"Bsense s GND V=I(Ven)\n"
+        b"Rok en_ok GND 1Meg\nRs s GND 1Meg\n"
+        b".ends DUT\n"
+    )
+    assert normalize_behavioral_sources(lib, tmp_path / "evidence")
+    text = lib.read_text(encoding="utf-8")
+    assert "B_Ven en_ok GND V=limit((V(EN,GND)-1.25)/0.05,0,1)" in text
+    assert "B_Iq VIN GND I=82u*V(en_ok,GND)" in text
+    assert "V=I(B_Ven)" in text
+    assert len(list((tmp_path / "evidence").glob("*.lib"))) == 1
+
+
+def test_ordinary_independent_sources_are_left_alone(tmp_path) -> None:
+    from boardmodeler.authoring.model_syntax import normalize_behavioral_sources
+
+    lib = tmp_path / "DUT.lib"
+    original = b".subckt DUT A GND\nV1 A GND PULSE(0 1 0 1n 1n 5u 10u)\nI1 A GND 1m\n.ends DUT\n"
+    lib.write_bytes(original)
+    assert not normalize_behavioral_sources(lib, tmp_path / "evidence")
+    assert lib.read_bytes() == original

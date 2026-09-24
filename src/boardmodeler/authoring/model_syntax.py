@@ -75,7 +75,7 @@ def normalize_behavioral_sources(path: Path, evidence: Path) -> bool:
         return False
     original_bytes = path.read_bytes()
     original = original_bytes.decode("utf-8")
-    source = re.compile(r"(?i)^[ \t]*([EG]\S*)[ \t]+\S+[ \t]+\S+[ \t]+([IV])[ \t]*=")
+    source = re.compile(r"(?i)^[ \t]*([EGVI]\S*)[ \t]+\S+[ \t]+\S+[ \t]+([IV])[ \t]*=")
     lines = original.splitlines(keepends=True)
     scopes: list[int] = []
     stack = [0]
@@ -104,7 +104,14 @@ def normalize_behavioral_sources(path: Path, evidence: Path) -> bool:
         if match is None:
             continue
         old, quantity = match[1], match[2]
-        if (old[0].upper(), quantity.upper()) not in {("G", "I"), ("E", "V")}:
+        # An independent V or I source written with V=/I= is the same slip as E/G:
+        # LTspice reads the expression as an unknown parameter; only B evaluates it.
+        if (old[0].upper(), quantity.upper()) not in {
+            ("G", "I"),
+            ("E", "V"),
+            ("V", "V"),
+            ("I", "I"),
+        }:
             continue
         scope = scopes[index]
         if names[scope][old.upper()] != 1:

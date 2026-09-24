@@ -8,7 +8,7 @@
   "authoring/io_probes.py": "fb15ca8ff0a27b2e4b32dbefeba25c57e34df58a79cb89f82690ed98de454f94",
   "authoring/lm358_reference.py": "f11d4be358343bb6d78f3e2bfa793222bc27109cc304e14376fc0657473c20ac",
   "authoring/model_reference.py": "8642f96e0309564c55d2c72f68a37eb95698d8194e8fd78b4e196a795308472a",
-  "authoring/model_syntax.py": "718d81fbd02df4fb919dc6b7b3f9246bd2e774efb47ef0ecfad3ecf4f04a7c46",
+  "authoring/model_syntax.py": "326cdbadcf1435e4ce835db86631fa2e994d204480583a1a03664d7ee8a6f0ab",
   "authoring/opamp_probes.py": "106eb8b1b66c35a75edcf819f89a22f6ae433a790ad88f19f966b7af51f6caee",
   "authoring/part_class.py": "8be53a39423be9dfe242791cb2d688f7e17c3d883393dd18d3aafbf7263c1dd3",
   "authoring/pin_roles.py": "5b52b9f823c968e8afecf9080c133617cb53f679e878b982e31e0a10ffee8da0",
