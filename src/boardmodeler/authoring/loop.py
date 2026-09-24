@@ -139,14 +139,77 @@ def _limits_text(characteristic: Characteristic) -> str:
     return ", ".join(parts) if parts else "no numeric limit recorded"
 
 
+#: Prompt bounds: the author needs the testable rows in full and only a pointer to the rest.
+EXCERPT_CHARS = 240
+UNCOVERED_LISTED = 20
+PIN_TEXT_CHARS = 160
+
+
+def _clip(text: str, limit: int) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
 def _citation_text(characteristic: Characteristic) -> str:
     where = (
         f"pdf page {characteristic.source_page} (0-based)"
         if characteristic.source_page is not None
         else "page not recorded"
     )
-    excerpt = " ".join(characteristic.excerpt.split())
+    excerpt = _clip(characteristic.excerpt, EXCERPT_CHARS)
     return f'{where}: "{excerpt}"' if excerpt else f"{where}: (no excerpt recorded)"
+
+
+def _compact_pin(pin: dict) -> dict:
+    """The pin fields an author uses, with long prose clipped."""
+    keep = ("name", "physical_pin", "direction", "supply_domain", "connection_requirement")
+    compact = {k: pin[k] for k in keep if pin.get(k) not in (None, "", [], {})}
+    if pin.get("function"):
+        compact["function"] = _clip(pin["function"], PIN_TEXT_CHARS)
+    behavior = [_clip(b, PIN_TEXT_CHARS) for b in (pin.get("behavior") or [])[:3]]
+    if behavior:
+        compact["behavior"] = behavior
+    return compact
+
+
+def repair_notes(model_path: Path, report: HarnessReport, pin_map: list[dict] | None) -> str:
+    """Targeted repair instructions: static findings plus the simulator's own complaints.
+
+    Only the lines the checks implicate are named, so a repair turn changes those
+    lines instead of regenerating a model that already works elsewhere.
+    """
+    from boardmodeler.authoring.convergence import (
+        diagnose_log,
+        floating_permitted,
+        lint_library,
+        read_log,
+    )
+
+    path = Path(model_path)
+    if not path.is_file():
+        return ""
+    text = path.read_text(encoding="utf-8", errors="replace")
+    notes = [
+        finding.text() for finding in lint_library(text, floating_ok=floating_permitted(pin_map))
+    ][:12]
+    logs: list[Path] = []
+    for outcome in report.outcomes:
+        if outcome.status == Status.PASS.value:
+            continue
+        logs.extend(Path(p) for p in outcome.artifacts if str(p).lower().endswith(".log"))
+    for log in logs[:3]:
+        try:
+            notes.extend(diagnose_log(read_log(log), text))
+        except OSError:
+            continue
+    unique = list(dict.fromkeys(notes))[:16]
+    if not unique:
+        return ""
+    return (
+        "\n## Targeted repair (static checks and the LTspice log of this exact model)\n"
+        + "\n".join(f"- {note}" for note in unique)
+        + "\nChange the implicated lines; keep every other working line as it is.\n"
+    )
 
 
 def _describe(characteristic: Characteristic) -> list[str]:
@@ -172,7 +235,7 @@ def _describe(characteristic: Characteristic) -> list[str]:
         lines.append(
             "  frozen independent test circuit: "
             + CircuitRecipe.model_validate(characteristic.probe_recipe).model_dump_json(
-                exclude_defaults=True, exclude_none=True
+                exclude_defaults=True, exclude_none=True, exclude={"condition_evidence"}
             )
         )
     if characteristic.relative_limits:
@@ -215,17 +278,7 @@ def build_prompt(spec: SpecSet, subckt: str, harness_summary: str = "") -> str:
         lines.extend(
             [
                 "Physical pin map (preserve pin identity and supply domains):",
-                json.dumps(
-                    [
-                        {
-                            k: v
-                            for k, v in p.items()
-                            if v not in (None, [], {}) and k not in ("schema_version", "evidence")
-                        }
-                        for p in spec.pin_map
-                    ],
-                    ensure_ascii=False,
-                ),
+                json.dumps([_compact_pin(p) for p in spec.pin_map], ensure_ascii=False),
             ]
         )
     if ports:
@@ -270,11 +323,16 @@ def build_prompt(spec: SpecSet, subckt: str, harness_summary: str = "") -> str:
         lines.append("")
     lines.append(f"## Characteristics that cannot be tested here ({len(uncovered)})")
     if uncovered:
-        for characteristic in uncovered:
+        # Behavioural context only: these rows stay NOT TESTED on the card whatever the
+        # model does, so the prompt carries a bounded sample instead of every row.
+        for characteristic in uncovered[:UNCOVERED_LISTED]:
             reason = characteristic.not_testable_reason or "no deterministic probe available"
-            lines.append(f"- [{characteristic.char_id}] {reason}")
-            lines.append(f"  requirement: {characteristic.statement}")
-            lines.append(f"  limits: {_limits_text(characteristic)}")
+            lines.append(
+                f"- [{characteristic.char_id}] {_clip(characteristic.statement, 110)}"
+                f" (not tested: {_clip(reason, 110)})"
+            )
+        if len(uncovered) > UNCOVERED_LISTED:
+            lines.append(f"- … {len(uncovered) - UNCOVERED_LISTED} more omitted from this prompt")
         lines.append(
             "These are reported as not testable with that reason. They must not be presented"
         )
@@ -294,6 +352,14 @@ def build_prompt(spec: SpecSet, subckt: str, harness_summary: str = "") -> str:
             "7. Every behavioural voltage must use an explicit local reference, e.g. V(A,GND), including internal state voltages. Global node 0 is not the device's ground pin. Clamp outputs and internal state to the physical supply range and model all channels, both signal polarities, and power-off behavior.",
             "8. A stable state primitive is: Cstate state GND C; Rdc state GND 1T; Bstate GND state I=(V(target,GND)-V(state,GND))*C/tau. tau must stay strictly positive. For different edge speeds choose tau with if(), do not distribute terms outside the feedback difference. Give capacitor/current-source nodes a DC path. Disable all pass/drive currents when disabled; a small line-regulation correction must not turn a disabled regulator back on. Close each subcircuit with .ends.",
             "9. Regulator pass elements must recover from a below-ground initial DC guess: do not let a foldback limit become zero while a positive load is demanding current. Keep the short-circuit current floor positive and include a weak output DC path. Avoid high-order discharge polynomials, which can create extra operating points. Use the observed failure details to make a small repair and preserve working characteristics.",
+            "",
+            "## Convergence contract (checked statically before every simulation)",
+            "10. Inside an expression, read a node only as V(node,GND) or V(a,b). A bare name is parsed as a .param and LTspice rejects the file.",
+            "11. Every node, internal ones included, needs a DC path of at most 1 GΩ to GND or a supply pin. A 1T resistor is not a DC path.",
+            "12. A pin the datasheet allows to float (for example 'float to enable') must bias itself: a pull-up current with a compliance limit, e.g. `Bpu VIN EN I=1u*limit((5-V(EN,GND))/0.2,0,1)`, plus `Ren EN GND 100Meg`. Never rely on the test circuit to drive it.",
+            "13. No behavioural source may read the node it drives, and do not build latches from B sources. For memory use an LTspice A-device, e.g. `A1 S R 0 0 0 QB Q 0 SRFLOP Vhigh=1 Vlow=0 Trise=5n`, or the capacitor state of rule 8.",
+            "14. Give every threshold a continuous transition, using limit() or tanh() with a width of at least 5 mV, or a voltage-controlled switch with hysteresis (`.model SWM SW(Ron=0.1 Roff=1Meg Vt=0.5 Vh=0.1)`). Nested if() steps on fed-back nodes are the most common cause of 'no operating point'.",
+            "15. Pass the DC operating point first. A model that converges and gets a few DC levels right is judged; one that does not converge is UNKNOWN on every row.",
         ]
     )
     if harness_summary.strip():
@@ -621,6 +687,7 @@ def _author(
         model_dir=Path(request.workdir) / MODEL_DIRNAME,
         max_turns=AUTHOR_MAX_TURNS,
         session_id=session_id,
+        reasoning_effort="high",
         subckt=request.subckt,
     )
     limit = request.turn_timeout_s
@@ -771,7 +838,11 @@ def build_model(
     harness_dir = workdir / HARNESS_DIRNAME
     previous = cached or read_feedback(cache_root, key, frozen, path)
     report = previous or _report_without_runs(request.part, digest, path)
-    prompt = build_prompt(frozen, request.subckt, _feedback_text(report) if previous else "")
+    prompt = build_prompt(
+        frozen,
+        request.subckt,
+        _feedback_text(report) + repair_notes(path, report, frozen.pin_map) if previous else "",
+    )
     best_score = progress_score(report, frozen) if previous else None
     best_bytes = path.read_bytes() if previous and path.is_file() else None
     best_report = previous
@@ -834,8 +905,16 @@ def build_model(
                 missing if authored.ok else f"{note}; {missing}",
             )
         try:
+            from boardmodeler.authoring.convergence import fix_bare_nodes
             from boardmodeler.authoring.model_reference import normalize_ground_reference
+            from boardmodeler.authoring.model_syntax import archive_original, write_library
 
+            original_bytes = path.read_bytes()
+            fixed, changes = fix_bare_nodes(original_bytes.decode("utf-8", errors="replace"))
+            if changes:
+                archive_original(workdir / "evidence" / "bare-node-references", original_bytes)
+                write_library(path, fixed)
+                note += f"; referenced {len(changes)} bare node name(s) as V(node,GND)"
             if normalize_ground_reference(
                 path, frozen.pin_map, workdir / "evidence" / "ground-reference", spec=frozen
             ):
@@ -908,7 +987,11 @@ def build_model(
             return _outcome(
                 Status.UNKNOWN, turn, report, history, _stall_detail(request, turn, report)
             )
-        prompt = build_prompt(frozen, request.subckt, _feedback_text(report))
+        prompt = build_prompt(
+            frozen,
+            request.subckt,
+            _feedback_text(report) + repair_notes(path, report, frozen.pin_map),
+        )
 
     unresolved = _failing(report)
     detail = (

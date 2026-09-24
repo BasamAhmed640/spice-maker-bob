@@ -168,3 +168,49 @@ electrical PASS. Full electrical verification remains optional.
 Repairing a behavioral source must update current references only in that source's
 own subcircuit, preserving unrelated circuits and original evidence. The sanity
 receipt version changes so candidates from the earlier repair logic are not reused.
+
+## D-034 — Convergence before accuracy; repair names lines, not whole models (2026-09-24)
+
+The TPS54332DDA build of 2026-09-24 spent two author turns (868 s, 182k tokens) on
+models LTspice could not use: turn 1 read the internal node `en_ok` as a bare name
+(LTspice: "No such parameter defined"), turn 2 held its PWM latch on a node whose only
+path to ground was 1 TΩ and whose driving source read its own output ("trouble with
+node en" after every operating-point method failed). The feedback the author received
+named the failing probes, never the lines that caused them.
+
+`authoring/convergence.py` now (1) lints every candidate for bare node names in
+expressions, undefined identifiers, self-reading behavioural sources, nodes without a
+≤1 GΩ DC path, and datasheet-floatable pins (for example EN, "float to enable") that
+the model does not bias itself; (2) reads the LTspice log of the model that just ran
+and quotes the rejected or non-convergent lines. The loop appends both as a targeted
+repair section. The one repair made without the author is syntactic — a bare node
+name inside a B-source expression becomes `V(node,GND)`, with the original bytes
+archived under `evidence/bare-node-references/` — because it cannot change what the
+model means. Nothing here edits limits, fixtures or verdicts: the harness is still the
+only source of PASS or FAIL, and a floating EN in a fixture is treated as valid input.
+
+The author prompt is bounded: testable rows in full (fixture JSON without the
+planner's prose), at most 20 not-testable rows as one line each, pin prose clipped.
+The same spec produced an 82 KB prompt before and 41 KB after. Reasoning effort is
+chosen per stage where the provider documents the switch: `low` for datasheet
+transcription, `high` for test planning and model authoring (it was `max` for all).
+
+## D-035 — One shared core, enforced by a manifest (2026-09-24)
+
+`shared_core.json` lists the 41 modules under `authoring/`, `documents/`,
+`requirements/`, `simulation/` and `verification/` that must be byte-identical in
+Spice Maker and Spice Maker Bob; `tests/test_shared_core.py` fails on drift and
+`tools/shared_core.py --compare <sibling>` checks both checkouts. Provider wiring, the
+author loop glue, OCR and simulator launch stay edition-specific. Bob keeps its
+`.bob/` rules, `.bobignore` and tool-free Bob Shell; nothing in the core gives an
+agent a shell or file tools.
+
+## D-036 — Extraction reads the pages that carry specifications (2026-09-24)
+
+`documents/relevance.py` scores each page (specification/pin/thermal headings,
+number-with-unit density; mechanical, packaging, revision and notice pages score
+negative) and extraction sends only the selected pages. Every page is accounted for in
+`evidence/page-selection.json`: selected with its signals, skipped with a reason, or a
+named gap. A page with no text layer goes to OCR when an engine is available and is
+otherwise an explicit `extract_page_gap` — never silently dropped. A provider reply cut
+off mid-JSON is refused as `extraction_response_truncated` before it can be cached.

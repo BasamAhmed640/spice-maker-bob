@@ -28,6 +28,13 @@ Rules the module enforces, because the pipeline's honesty depends on them:
   :func:`boardmodeler.providers.base.request_hash` and served from
   :class:`boardmodeler.providers.cache.ExtractionCache` when the same request was
   already answered.
+* **Relevant pages only, accounted for.** By default each document's pages are
+  scored by :mod:`boardmodeler.documents.relevance`; only electrical-spec pages
+  (plus the first two pages and any pin table) are sent. Every page is recorded as
+  selected (score + signals), skipped (reason) or a gap (no text layer and no OCR
+  text) in ``ExtractionResult.page_selection``; gaps are also findings.
+* **Truncation is named.** A response whose JSON was cut off is refused as
+  ``extraction_response_truncated``; nothing from it is parsed into rows.
 * Citation verification is left to :func:`boardmodeler.requirements.review.review`;
   the extracted ``citation_verified`` values are not trusted, and
   ``review.apply_review`` (called by the pipeline's BUILD_REQUIREMENTS stage)
@@ -46,8 +53,10 @@ from typing import Any
 from pydantic import ConfigDict, ValidationError, create_model
 
 from boardmodeler.config import load_config
-from boardmodeler.documents.chunk import chunk_document, select_pages
+from boardmodeler.documents.chunk import chunk_document, chunk_text, select_pages
+from boardmodeler.documents.ocr import OcrEngine, select_ocr_engine
 from boardmodeler.documents.pdf import PdfDocument, page_text, read_pdf
+from boardmodeler.documents.relevance import PageSelection, select_relevant_pages
 from boardmodeler.domain.enums import ProviderKind, Status
 from boardmodeler.domain.records import (
     DataDisclosure,
@@ -77,6 +86,7 @@ from boardmodeler.security.policy import DataPolicy, build_disclosure, evaluate_
 
 __all__ = [
     "ExtractionResult",
+    "check_pin_map",
     "extract_requirements",
     "schema_json",
     "tasks_for",
@@ -142,6 +152,9 @@ class ExtractionResult:
     #: Extraction-level problems that are not tied to a requirement (denied
     #: egress, an unreadable document). The pipeline records these as findings.
     findings: list[Finding] = field(default_factory=list)
+    #: Which pages were sent, skipped and unreadable, with reasons
+    #: (:meth:`PageSelection.to_evidence`); ``None`` when selection was disabled.
+    page_selection: dict[str, Any] | None = None
 
 
 def extract_requirements(
@@ -155,6 +168,8 @@ def extract_requirements(
     policy: DataPolicy | None = None,
     allow_remote: bool | None = None,
     cancel: threading.Event | None = None,
+    select_relevant: bool = True,
+    ocr_engine: OcrEngine | None = None,
 ) -> ExtractionResult:
     """Run the four extraction tasks over ``project``'s documents.
 
@@ -166,6 +181,13 @@ def extract_requirements(
     directory to control it, or set ``DataPolicy.cache_extraction=False`` to
     disable reuse. ``allow_remote`` overrides the policy's flag for this call
     (the CLI's ``--allow-remote``); ``None`` means "use the policy".
+
+    ``select_relevant`` (default on) sends only the pages
+    :func:`~boardmodeler.documents.relevance.select_relevant_pages` selects; an
+    explicit ``task_pages`` entry still narrows a task further. The full account is
+    on ``ExtractionResult.page_selection`` and in ``evidence/page-selection.json``.
+    Pages without a text layer go to ``ocr_engine`` (default: the detected engine,
+    or the explicit unavailable one); unreadable pages become findings.
     """
     policy = policy if policy is not None else load_config().data_policy
     remote = policy.allow_remote if allow_remote is None else bool(allow_remote)
@@ -180,7 +202,24 @@ def extract_requirements(
         records = {doc_id: record for doc_id, record in records.items() if doc_id in selected}
     findings, snippets_by_doc = _collect_snippets(project, records, max_chars=max_chars)
 
-    codec = _PageLookup(project, records, snippets_by_doc)
+    selection: PageSelection | None = None
+    lookup_snippets: Mapping[str, Sequence[DocSnippet]] = snippets_by_doc
+    if select_relevant and snippets_by_doc:
+        engine = ocr_engine if ocr_engine is not None else select_ocr_engine()
+        selection, snippets_by_doc, lookup_snippets = _select_pages(
+            project, records, snippets_by_doc, engine=engine, max_chars=max_chars
+        )
+        findings.extend(_selection_findings(selection))
+        _record_selection(project, selection, findings)
+        if not snippets_by_doc:
+            reasons = "; ".join(gap.reason for gap in selection.gaps) or "no page was selected"
+            raise ProviderError(
+                "no_readable_pages",
+                "no page of the selected documents could be read; nothing was sent to the "
+                f"provider: {reasons}",
+            )
+
+    codec = _PageLookup(project, records, lookup_snippets)
 
     sent_docs: list[DocumentRecord] = []
     allowed_snippets: list[DocSnippet] = []
@@ -268,6 +307,9 @@ def extract_requirements(
         response = fetched[task] if fetched is not None else provider.extract(request, cancel)
         if response.from_cache:
             cache_hits += 1
+        # A cut-off or non-object answer is refused by name before it can be
+        # cached, so a truncated batch is never replayed as if it were an answer.
+        _require_object(response, task)
         if cache is not None:
             cache.put(
                 key,
@@ -287,6 +329,7 @@ def extract_requirements(
     validation = validate_requirements(requirements, documents=records)
     outcome = review(requirements, records, excerpt_lookup=codec.page_text)
     issues = _merge_issues(validation.issues, outcome.issues)
+    issues.extend(check_pin_map(pins))
 
     disclosures = _disclosures(
         identity=identity,
@@ -304,6 +347,11 @@ def extract_requirements(
     )
     if identity.model:
         detail += f" model={identity.model}"
+    if selection is not None:
+        detail += (
+            f" pages_sent={len(selection.selected)} pages_skipped={len(selection.skipped)} "
+            f"page_gaps={len(selection.gaps)}"
+        )
 
     return ExtractionResult(
         requirements=requirements,
@@ -317,6 +365,7 @@ def extract_requirements(
         review=outcome,
         detail=detail,
         findings=findings,
+        page_selection=selection.to_evidence() if selection is not None else None,
     )
 
 
@@ -349,6 +398,120 @@ def _collect_snippets(
             continue
         snippets_by_doc[doc_id] = chunks
     return findings, snippets_by_doc
+
+
+def _select_pages(
+    project: Project,
+    records: Mapping[str, DocumentRecord],
+    snippets_by_doc: Mapping[str, Sequence[DocSnippet]],
+    *,
+    engine: OcrEngine,
+    max_chars: int,
+) -> tuple[PageSelection, dict[str, list[DocSnippet]], dict[str, list[DocSnippet]]]:
+    """The selection, the snippets to send, and the page text citations are checked on.
+
+    OCR text replaces the (empty) text of a page without a text layer in both, so
+    an excerpt is verified against the very text the provider was given.
+    """
+    selection = PageSelection((), (), ())
+    unavailable = engine.describe()
+    for doc_id in sorted(snippets_by_doc):
+        pages: dict[int, str] = {}
+        for snippet in snippets_by_doc[doc_id]:
+            pages[snippet.pdf_page] = pages.get(snippet.pdf_page, "") + snippet.text
+        ocr_page = None
+        if unavailable is None and any(not text.strip() for text in pages.values()):
+            ocr_page = _ocr_reader(project, records[doc_id], engine)
+        selection = selection.merged(
+            select_relevant_pages(
+                doc_id,
+                sorted(pages.items()),
+                ocr_page=ocr_page,
+                ocr_unavailable=(
+                    None if unavailable is None else f"{unavailable.reason}: {unavailable.detail}"
+                ),
+            )
+        )
+    keep = selection.selected_keys()
+    sent: dict[str, list[DocSnippet]] = {}
+    lookup: dict[str, list[DocSnippet]] = {}
+    for doc_id in sorted(snippets_by_doc):
+        chosen: list[DocSnippet] = []
+        seen: list[DocSnippet] = []
+        recognized: set[int] = set()
+        for snippet in snippets_by_doc[doc_id]:
+            key = (doc_id, snippet.pdf_page)
+            ocr_text = selection.ocr_text.get(key)
+            pieces = [snippet]
+            if ocr_text is not None:
+                if snippet.pdf_page in recognized:
+                    continue
+                recognized.add(snippet.pdf_page)
+                pieces = chunk_text(
+                    doc_id,
+                    ocr_text,
+                    pdf_page=snippet.pdf_page,
+                    max_chars=max_chars,
+                    printed_label=snippet.printed_label,
+                )
+            seen.extend(pieces)
+            if key in keep:
+                chosen.extend(pieces)
+        lookup[doc_id] = seen
+        if chosen:
+            sent[doc_id] = chosen
+    return selection, sent, lookup
+
+
+def _ocr_reader(project: Project, record: DocumentRecord, engine: OcrEngine):
+    """A ``pdf_page -> OCR text`` callable for ``record``'s PDF, rendered on demand."""
+    path = Path(record.path or "")
+    if not path.is_absolute():
+        path = project.root / path
+    opened: list[PdfDocument] = []
+
+    def read(pdf_page: int) -> str:
+        from boardmodeler.documents.pages import render_page_png
+
+        if path.suffix.lower() in _TEXT_SUFFIXES:
+            raise ValueError("a text document has no page image to recognize")
+        if not opened:
+            opened.append(read_pdf(path, max_pages=1))
+        return engine.page_text(render_page_png(opened[0], pdf_page))
+
+    return read
+
+
+def _selection_findings(selection: PageSelection) -> list[Finding]:
+    """One finding per unreadable page: a gap is reported, never dropped."""
+    return [
+        Finding(
+            code="extract_page_gap",
+            status=Status.UNKNOWN,
+            message=f"document {gap.doc_id}: {gap.reason}",
+            detail={"doc_id": gap.doc_id, "pdf_page": str(gap.pdf_page), "reason": gap.code},
+        )
+        for gap in selection.gaps
+    ]
+
+
+def _record_selection(project: Project, selection: PageSelection, findings: list[Finding]) -> None:
+    """Write the page account beside the extraction evidence for audit."""
+    target = project.path("evidence/page-selection.json")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            json.dumps(selection.to_evidence(), indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+    except OSError as exc:
+        findings.append(
+            Finding(
+                code="extract_page_selection_unrecorded",
+                status=Status.UNKNOWN,
+                message=f"the page selection could not be written to {target}: {exc}",
+                detail={"path": str(target), "error": f"{type(exc).__name__}: {exc}"},
+            )
+        )
 
 
 class _PageLookup:
@@ -496,8 +659,89 @@ def _parse_behaviors(response: ExtractionResponse) -> dict[str, str]:
 def _require_object(response: ExtractionResponse, task: ExtractionTask) -> dict[str, Any]:
     payload = response.payload
     if not isinstance(payload, Mapping):
+        truncated = _truncation(payload if isinstance(payload, str) else response.raw_text)
+        if truncated is not None:
+            raise ProviderError(
+                "extraction_response_truncated",
+                f"{task.value}: the provider response ends mid-JSON ({truncated}); the batch "
+                "is failed and nothing from it was accepted",
+            )
         raise _invalid(task, f"the payload is a {type(payload).__name__}, expected an object")
     return dict(payload)
+
+
+def _truncation(text: object) -> str | None:
+    """Why ``text`` looks like JSON that was cut off before its end, or ``None``."""
+    if not isinstance(text, str):
+        return None
+    body = text.strip()
+    if not body.startswith(("{", "[")):
+        return None
+    try:
+        json.loads(body)
+    except json.JSONDecodeError as exc:
+        # Failing at the very end means the document stopped before it was complete,
+        # which is truncation rather than malformed content in the middle.
+        if exc.pos >= len(body) - 1 or exc.msg.startswith("Unterminated"):
+            return f"{exc.msg} at char {exc.pos} of {len(body)}"
+    return None
+
+
+# --------------------------------------------------------------------------- #
+# pin-map checks
+
+
+def check_pin_map(pins: Sequence[PinDefinition]) -> list[RequirementIssue]:
+    """Flag (never fix) pin-map inconsistencies; every pin is kept as extracted.
+
+    * one physical pin with *different* names is ``pin_physical_conflict`` (error):
+      the pin map is ambiguous and a model cannot be wired from it honestly;
+    * one physical pin repeated with the same name is ``pin_physical_duplicate``
+      (warning);
+    * one name on several physical pins (``GND``, ``NC``, a doubled ``VIN``) is
+      routine in datasheets and is ``pin_name_duplicate`` (warning).
+    """
+    issues: list[RequirementIssue] = []
+    by_pin: dict[str, list[PinDefinition]] = {}
+    by_name: dict[str, list[PinDefinition]] = {}
+    for pin in pins:
+        by_pin.setdefault(pin.physical_pin.strip().upper(), []).append(pin)
+        by_name.setdefault(pin.name.strip().upper(), []).append(pin)
+    for group in (by_pin[key] for key in sorted(by_pin)):
+        if len(group) < 2:
+            continue
+        names = sorted({pin.name for pin in group})
+        conflict = len({name.strip().upper() for name in names}) > 1
+        issues.append(
+            RequirementIssue(
+                severity="error" if conflict else "warning",
+                code="pin_physical_conflict" if conflict else "pin_physical_duplicate",
+                req_id=None,
+                message=(
+                    f"physical pin {group[0].physical_pin!r} is defined {len(group)} times"
+                    + (f" with different names {names}" if conflict else "")
+                    + "; kept as extracted, not merged"
+                ),
+                detail={"physical_pin": group[0].physical_pin, "names": ", ".join(names)},
+            )
+        )
+    for group in (by_name[key] for key in sorted(by_name)):
+        numbers = sorted({pin.physical_pin for pin in group})
+        if len(numbers) < 2:
+            continue
+        issues.append(
+            RequirementIssue(
+                severity="warning",
+                code="pin_name_duplicate",
+                req_id=None,
+                message=(
+                    f"pin name {group[0].name!r} appears on physical pins {numbers}; "
+                    "kept as extracted"
+                ),
+                detail={"name": group[0].name, "physical_pins": ", ".join(numbers)},
+            )
+        )
+    return issues
 
 
 def _validate(model: type[Any], data: object, *, task: ExtractionTask, where: str) -> Any:

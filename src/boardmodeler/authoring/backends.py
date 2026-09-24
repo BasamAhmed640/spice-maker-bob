@@ -102,6 +102,9 @@ class AuthorRequest:
     session_id: str | None = None
     subckt: str | None = None
     progress: Callable[[str], None] | None = field(default=None, repr=False, compare=False)
+    #: Per-stage reasoning effort for providers whose entry documents the switch
+    #: (``reasoning_effort`` in its ``extra_body``); ``None`` keeps the entry's own value.
+    reasoning_effort: str | None = None
 
 
 @dataclass(frozen=True)

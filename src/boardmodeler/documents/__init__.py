@@ -6,8 +6,9 @@
 * :mod:`boardmodeler.documents.ocr` — the pluggable OCR interface and the
   explicit "OCR is not available" state (tesseract is not installed here).
 * :mod:`boardmodeler.documents.store` — where a project's documents live.
+* :mod:`boardmodeler.documents.relevance` — which pages extraction reads, with reasons.
 """
 
 from __future__ import annotations
 
-__all__ = ["ocr", "pages", "pdf", "store"]
+__all__ = ["ocr", "pages", "pdf", "relevance", "store"]

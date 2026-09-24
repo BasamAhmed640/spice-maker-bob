@@ -44,6 +44,16 @@ can read the folder can read the key — and is never passed on the command line
 [Bob Shell setup documentation](https://bob.ibm.com/docs/shell/getting-started/install-and-setup).
 No interactive account login is required by this app.
 
+**What is and is not a sandbox.** The project `.venv` isolates Python packages only, and
+`.bobignore` only hides files from Bob's context. Neither is an OS sandbox: neither restricts
+filesystem, network or process access by this app, LTspice or the model provider. What does
+contain this app: LTspice runs only from the path you choose in SETUP (nothing searches for
+it); the simulator gets an allowlisted environment, so no API key reaches it; Bob Shell runs
+with every tool group disabled (no Bash, no file tools) and only returns model text; and only
+the application writes files (decks and the candidate model). The key file,
+`data/credentials.bob.json`, is plain text inside this folder. The optional `sim` extra (`spicelib`, not in `requirements.txt`) checks LTspice's default
+install locations when it is imported; the app imports it only after an LTspice path is set.
+
 If existing settings are incompatible, click **USE IBM BOB** and **SAVE** in SETUP.
 The app refuses incompatible settings until that explicit choice; it never silently
 substitutes an agent or displays the incompatible agent's name.

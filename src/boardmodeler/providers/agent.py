@@ -451,6 +451,7 @@ class AgentExtractionProvider:
                     1,
                     expect_text=True,
                     progress=progress,
+                    reasoning_effort="low",
                 )
                 started = time.monotonic()
                 result = self.backend.author(request, cancel)

@@ -353,7 +353,10 @@ def plan_bindings(
     for attempt in range(2):
         if progress:
             progress(f"planning independent test circuits, request {attempt + 1}/2")
-        result = backend.author(AuthorRequest(prompt, folder, folder, 1, expect_text=True), cancel)
+        result = backend.author(
+            AuthorRequest(prompt, folder, folder, 1, expect_text=True, reasoning_effort="high"),
+            cancel,
+        )
         (folder / f"{digest}-attempt-{attempt + 1}.json").write_text(
             json.dumps(
                 {
