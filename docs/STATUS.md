@@ -414,3 +414,20 @@ The installed GUI title displays 1.1.11, encrypted keys remained readable, and
 all seven TLV9002 real-LTspice checks passed. Root Install.exe and the release ZIP
 contain the same installer. The earlier general-desktop update block is resolved
 for this tested build; no local Windows security policy was changed.
+
+## 2026-09-24 — convergence-first authoring and the shared core (Bob edition)
+
+Branch `convergence-shared-core`. The 41 extraction/authoring/verification core modules are
+byte-identical to Spice Maker's (`shared_core.json`, `tests/test_shared_core.py`); `.bob/`
+rules, `.bobignore` and the tool-free Bob Shell are unchanged. The generated-model evidence
+(TPS54332DDA, LM358) was produced with the general edition's HTTPS provider, because this
+machine has no Bob API key. It is recorded in Spice Maker's
+`docs/evidence/2026-09-24/REPORT.md`.
+
+| Check | Result |
+|---|---|
+| `pytest -q -m "not gui and not network"` with `LTSPICE_EXE` set | 1215 passed, 7 failed. The same 7 fail at the untouched parent `aebf457` (`tests/test_cli_doctor.py` x2, `tests/test_cli_run_tests.py` x5), so they predate this change |
+| `pytest -q tests/authoring tests/test_shared_core.py` with LTspice configured | 389 passed, 7 skipped |
+| LM358 build with no Bob key | BLOCKED `bob_credentials_unavailable`; no fallback to the OpenCode/DeepSeek keys present in the environment. It used to crash while writing deliverables; fixed and tested |
+| LM358 build with no LTspice selected | BLOCKED "LTspice is not configured; choose its executable in SETUP" |
+| Fresh GitHub ZIP of the branch: venv, pinned install, startup without LTspice access, explicit `.op`, credential scan | PASS (7/7 steps) |
