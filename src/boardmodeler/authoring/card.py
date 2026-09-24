@@ -437,10 +437,13 @@ def write_deliverables(
     written.append(card)
 
     example = out_dir / "example.cir"
-    if any((row.probe or "").startswith("opamp_") for row in spec.covered()):
+    library = out_dir / model_file
+    # The op-amp example is rendered from the model's own port list, so it needs the
+    # file: a BLOCKED or model-less build falls back to the generic deck instead of
+    # crashing after its outcome was already decided.
+    if library.is_file() and any((row.probe or "").startswith("opamp_") for row in spec.covered()):
         from boardmodeler.authoring.probes import PROBES
 
-        library = out_dir / model_file
         text = PROBES["opamp_slew_rise"].render(model_lib=library, subckt=subckt, params={})
         text = text.replace(library.resolve().as_posix(), model_file)
     else:
