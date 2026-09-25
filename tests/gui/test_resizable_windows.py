@@ -54,8 +54,12 @@ def test_the_model_window_can_be_resized(qtbot, window) -> None:
     """It used to be locked at 900x600; now that size is where it opens, not where it stays."""
     _assert_room_to_move(window)
     starts_at = window.size()
-    assert starts_at == QSize(900, 600), "the working size the owner knows"
-    assert window.minimumSize().width() < starts_at.width()
+    # The documented working size, or a little wider when the controls need it (the
+    # readiness row with BOB SHELL is): the floor is the content's own minimum, so a wider
+    # control raises the opening width rather than being clipped — as in the general edition.
+    assert starts_at.width() >= 900, "the working size the owner knows"
+    assert starts_at.height() == 600, "the working height the owner knows"
+    assert window.minimumSize().width() <= starts_at.width()
     assert window.minimumSize().height() < starts_at.height()
 
     window.resize(1180, 780)

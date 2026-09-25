@@ -258,7 +258,7 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
         self.key_edit = QLineEdit()
         self.key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.key_edit.setPlaceholderText(f"paste your {self._provider.label} API key")
-        save_key = QPushButton("SAVE & CHECK KEY")
+        save_key = QPushButton("SAVE && CHECK KEY")  # "&&": one literal ampersand
         self.save_key_button = save_key
         save_key.clicked.connect(self._save_key)
         grid.addWidget(self.key_label, row, 0)
@@ -544,10 +544,21 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
         self._key_timer.stop()
         self._key_check = None
         self.save_key_button.setEnabled(True)
-        self.key_status.setText(f"Key saved — {result.status.upper()}: {result.detail}")
+        self.key_status.setText(f"\u25cf Key saved — {result.status.upper()}: {result.detail}")
+        self._colour_key_status(result.status)
         self.key_status.setWordWrap(True)
         self.key_status.setMaximumWidth(620)
         self._fit_to_content()
+
+    def _colour_key_status(self, status: str) -> None:
+        """The same cue as the build window's API KEY light: green, amber or red."""
+        colour = {
+            "verified": CGA["bright_green"],
+            "rejected": CGA["bright_red"],
+        }.get(status, CGA["yellow"])
+        self.key_status.setStyleSheet(
+            f"color: {colour}; font-family: Consolas; font-size: 9pt; font-weight: bold;"
+        )
 
     def _cancel_key_check(self, *_args) -> None:
         if self._key_check is not None:
