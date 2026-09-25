@@ -127,7 +127,8 @@ def _environment_report(root: Path) -> dict[str, object]:
     assert Path(payload["base"]) == root / "env/python", payload
     # The launcher runs the same package the interpreter reports, from this folder only.
     cli = subprocess.run(
-        ["cmd", "/c", SETUP, "version"],
+        # By full path: with NoDefaultCurrentDirectoryInExePath set, cmd will not look in cwd.
+        ["cmd", "/c", str(root / SETUP), "version"],
         capture_output=True,
         text=True,
         cwd=root,

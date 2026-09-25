@@ -56,6 +56,9 @@ _CONVERGENCE_MARKERS = (
     "convergence failed",
     "analysis failed",
 )
+#: The operating-point search messages that a later success supersedes.
+_STEPPING_FAILURES = ("gmin stepping failed", "source stepping failed")
+_OP_FOUND = "succeeded in finding the operating point"
 # LTspice prefixes errors with the offending file and line: "path(2): message"
 _FILELINE_RE = re.compile(r"^(?P<file>.+?)\((?P<line>\d+)\):\s*(?P<message>.+)$")
 
@@ -181,6 +184,20 @@ def parse_log(path: Path | None = None, *, text: str | None = None) -> LogSummar
         if meas is not None:
             summary.measurements[meas.name] = meas
 
+    if _OP_FOUND in text.lower():
+        # LTspice tries direct Newton, then Gmin stepping, then source stepping; a failed
+        # attempt followed by "... succeeded in finding the operating point" is an operating
+        # point found, not a convergence failure. The failed attempts stay visible as
+        # warnings; anything else (time step too small, singular matrix) still counts.
+        recovered = [
+            issue
+            for issue in summary.convergence_issues
+            if any(marker in issue.lower() for marker in _STEPPING_FAILURES)
+        ]
+        summary.convergence_issues = [
+            issue for issue in summary.convergence_issues if issue not in recovered
+        ]
+        summary.warnings.extend(f"recovered: {issue}" for issue in recovered)
     return summary
 
 
