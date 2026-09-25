@@ -13,7 +13,6 @@ checks that labels are visible, placed on the right side and do not collide.
 from __future__ import annotations
 
 import argparse
-import re
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -78,7 +77,7 @@ def render(paths: list[Path], out: Path) -> Path:
     font = _font(int(CHAR_UNITS * SCALE / 0.55))
     small = _font(18)
     x_offset = 0
-    for (path, symbol), (left, top, right, bottom) in zip(symbols, boxes, strict=True):
+    for (path, symbol), (left, top, right, _bottom) in zip(symbols, boxes, strict=True):
 
         def px(x: float, y: float, left=left, top=top, x_offset=x_offset) -> tuple[int, int]:
             return int(x_offset + (x - left) * SCALE), int((y - top) * SCALE)
