@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from boardmodeler.authoring.circuit_probe import CircuitRecipe, make_probe
@@ -162,6 +164,52 @@ def test_measurement_window_and_resource_budget_are_bounded():
     data["step"] = 1e-15
     with pytest.raises(ValueError, match="intervals"):
         CircuitRecipe.model_validate(data)
+
+
+@pytest.mark.parametrize("operation", ["frequency", "delay"])
+def test_frequency_uses_consecutive_device_edges_in_frozen_window(monkeypatch, operation):
+    data = recipe()
+    data.update(unit="Hz", stop=20e-6, step=1e-8)
+    data["measurement"] = {
+        "operation": operation,
+        "signal": "V(response)",
+        "start": 5e-6,
+        "end": 15e-6,
+        "level": 0.5,
+    }
+    if operation == "delay":
+        data["measurement"].update(trigger="V(response)", trigger_level=0.5)
+    axis = np.linspace(0, 20e-6, 2001)
+    wave = np.sin(2 * np.pi * 1e6 * axis)
+    raw = SimpleNamespace(
+        data=np.column_stack((axis, wave)),
+        complex_data=False,
+        column=lambda signal: wave,
+    )
+    monkeypatch.setattr("boardmodeler.simulation.raw.read_raw", lambda _: raw)
+    assert make_probe(data).measure(Path("synthetic.raw"), {})["recipe_value"] == pytest.approx(
+        1e6, rel=0.001
+    )
+
+
+def test_frequency_without_two_edges_is_unknown(monkeypatch):
+    data = recipe()
+    data.update(unit="Hz", stop=20e-6, step=1e-8)
+    data["measurement"] = {
+        "operation": "frequency",
+        "signal": "V(response)",
+        "start": 5e-6,
+        "end": 15e-6,
+        "level": 0.5,
+    }
+    axis = np.linspace(0, 20e-6, 2001)
+    wave = np.zeros_like(axis)
+    raw = SimpleNamespace(
+        data=np.column_stack((axis, wave)), complex_data=False, column=lambda signal: wave
+    )
+    monkeypatch.setattr("boardmodeler.simulation.raw.read_raw", lambda _: raw)
+    with pytest.raises(ProbeError, match="recipe_frequency_edges_missing"):
+        make_probe(data).measure(Path("synthetic.raw"), {})
 
 
 @pytest.mark.parametrize(

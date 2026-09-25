@@ -133,9 +133,10 @@ def render_card(
         "",
         f"Model: `{model_file}` · subcircuit `{subckt}` · sha256 `{report.model_sha256}`",
         f"Spec `{spec.digest()[:16]}` from {document or spec.doc_id}"
-        + (f" · authored via {backend} in {iterations} turn(s)" if backend else ""),
+        + (f" · built via {backend} in {iterations} agent turn(s)" if backend else ""),
         "",
-        "This model is the product of an agent's work judged by real LTspice runs against "
+        "This model comes from the recorded authoring path and is judged by real LTspice "
+        "runs against "
         "the datasheet rows listed below. A row is only `PASS` when a completed simulation "
         "produced the measured value shown; rows that could not be judged are `UNKNOWN` with "
         "the reason. Datasheet rows no probe can reach are listed as coverage gaps with the "

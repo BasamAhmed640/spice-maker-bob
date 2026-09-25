@@ -558,6 +558,54 @@ def test_judge_characteristic_never_upgrades_unavailable_evidence() -> None:
     assert harness_mod.judge_characteristic(char, shared)[0] == "PASS"
 
 
+def test_unsigned_current_limits_compare_magnitude_and_keep_the_observed_sign() -> None:
+    char = Characteristic(
+        char_id="REQ_SYNTH_CURRENT",
+        statement="Shutdown supply current is 1 uA typical.",
+        unit="A",
+        min_value=None,
+        max_value=None,
+        typ_value=1e-6,
+        target=1e-6,
+        source_page=1,
+        excerpt="Shutdown supply current 1 uA typical.",
+        req_class="TYPICAL_VALUE",
+        probe="circuit_measurement",
+        probe_params={},
+        not_testable_reason=None,
+    )
+    status, detail, _ = harness_mod._judge(char, "recipe_value", -1.001e-6)
+    assert status == "PASS"
+    assert "-1.001e-06" in detail and "magnitude 1.001e-06" in detail
+    assert (
+        harness_mod._judge(
+            dataclasses.replace(char, typ_value=None, max_value=4e-6), "recipe_value", -5e-6
+        )[0]
+        == "FAIL"
+    )
+
+
+def test_cited_current_polarity_and_voltage_keep_signed_comparison() -> None:
+    current = Characteristic(
+        char_id="REQ_SYNTH_SIGNED",
+        statement="Current flows into the input pin at 1 uA typical.",
+        unit="A",
+        min_value=None,
+        max_value=None,
+        typ_value=1e-6,
+        target=1e-6,
+        source_page=1,
+        excerpt="Current flows into the input pin.",
+        req_class="TYPICAL_VALUE",
+        probe="circuit_measurement",
+        probe_params={},
+        not_testable_reason=None,
+    )
+    assert harness_mod._judge(current, "recipe_value", -1e-6)[0] == "FAIL"
+    voltage = dataclasses.replace(current, unit="V", statement="Output is 1 V", excerpt="")
+    assert harness_mod._judge(voltage, "recipe_value", -1)[0] == "FAIL"
+
+
 def test_model_ports_is_reused_for_the_harness(tmp_path: Path) -> None:
     lib = write_regulator_library(tmp_path / "buck.lib", [SUBCKT])
     assert model_ports(lib, SUBCKT) == [

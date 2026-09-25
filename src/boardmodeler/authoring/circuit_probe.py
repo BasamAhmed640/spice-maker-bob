@@ -30,6 +30,7 @@ class Measurement(BaseModel):
         "slew",
         "gain",
         "unity_frequency",
+        "frequency",
         "hysteresis",
         "rail_headroom",
     ]
@@ -63,7 +64,7 @@ class Measurement(BaseModel):
             and self.trigger_level is None
         ):
             raise ValueError("this measurement needs an explicit trigger_level")
-        if self.operation in ("delay", "slew") and self.level is None:
+        if self.operation in ("delay", "slew", "frequency") and self.level is None:
             raise ValueError(
                 "this measurement needs an explicit output level; zero is not a default"
             )
@@ -180,15 +181,31 @@ class CircuitRecipe(BaseModel):
             raise ValueError("second measurement extends beyond the simulated window")
         if self.analysis == "ac" and self.measurement.operation not in ("gain", "unity_frequency"):
             raise ValueError("AC recipes require a gain measurement")
+        if self.measurement.operation == "frequency" and self.unit != "Hz":
+            raise ValueError("frequency measurement must use Hz")
+        if (
+            self.measurement.operation == "delay"
+            and self.unit == "Hz"
+            and not (
+                self.measurement.signal.casefold() == self.measurement.trigger.casefold()
+                and self.measurement.level == self.measurement.trigger_level
+                and self.measurement.rising == self.measurement.trigger_rising
+            )
+        ):
+            raise ValueError("Hz cannot be measured by a delay between different events")
         for line in self.components:
             # Only local primitive circuit elements. No .include, .lib, .control,
             # X instances, continuations, semicolon commands or newlines.
             if (
                 len(line) > 1000
                 or any(ch in line for ch in '\r\n;"\\')
-                or not re.match(r"^[RCLVIBEGFH][A-Za-z0-9_]*\s+", line, re.I)
+                or not re.match(r"^[RCLVIBEGFHD][A-Za-z0-9_]*\s+", line, re.I)
             ):
                 raise ValueError(f"unsupported fixture component: {line[:80]}")
+            if line[0].upper() == "D" and (
+                len(line.split()) != 4 or line.split()[3].upper() != "BM_CATCH"
+            ):
+                raise ValueError("fixture diode must use the fixed BM_CATCH model")
         if not self.condition_evidence.strip():
             raise ValueError("the test operating point needs an evidence explanation")
         return self
@@ -222,6 +239,25 @@ def _cross(t, y, level, rising):
     return float(t[i] + (level - y[i]) * (t[i + 1] - t[i]) / (y[i + 1] - y[i]))
 
 
+def _frequency(t, y, level, rising):
+    from boardmodeler.authoring.probes import ProbeError
+
+    changes = (
+        ((y[:-1] < level) & (y[1:] >= level)) if rising else ((y[:-1] > level) & (y[1:] <= level))
+    )
+    indices = np.flatnonzero(changes)
+    if len(indices) < 2:
+        raise ProbeError("recipe_frequency_edges_missing", "two device edges are required")
+    edge_times = t[indices] + (level - y[indices]) * (
+        (t[indices + 1] - t[indices]) / (y[indices + 1] - y[indices])
+    )
+    periods = np.diff(edge_times)
+    middle = float(np.median(periods))
+    if middle <= 0 or np.any(np.abs(periods - middle) > 0.1 * middle):
+        raise ProbeError("recipe_frequency_unstable", "device edges do not form a stable period")
+    return 1.0 / middle
+
+
 def make_probe(payload):
     from boardmodeler.authoring.probes import ProbeError, ProbeSpec, model_ports
     from boardmodeler.simulation.raw import read_raw
@@ -253,6 +289,11 @@ def make_probe(payload):
                 f"* Frozen fixture: {recipe.purpose}",
                 f'.include "{model.resolve().as_posix()}"',
                 *recipe.components,
+                *(
+                    [".model BM_CATCH D(Is=1u N=1.05 Rs=0.05)"]
+                    if any(line[0].upper() == "D" for line in recipe.components)
+                    else []
+                ),
                 f"Xdut {' '.join(recipe.terminals[p.upper()] for p in ports)} {subckt}",
                 ".temp 25",
                 ".options plotwinsize=0 numdgt=15",
@@ -322,11 +363,26 @@ def make_probe(payload):
                     falling = _cross(t, trigger, m.trigger_level, False)
                     value = abs(float(np.interp(rising, t, y) - np.interp(falling, t, y)))
                 elif m.operation == "delay":
-                    a = _cross(t, _trace(raw, m.trigger)[mask], m.trigger_level, m.trigger_rising)
-                    b = _cross(t, y, m.level, m.rising)
-                    if b < a:
-                        raise ProbeError("recipe_noncausal_transition")
-                    value = b - a
+                    if (
+                        m.signal.casefold() == m.trigger.casefold()
+                        and m.level == m.trigger_level
+                        and m.rising == m.trigger_rising
+                        and recipe.unit == "Hz"
+                    ):
+                        # Older frozen plans expressed switching frequency as a
+                        # self-delay. A first edge minus itself is always zero;
+                        # consecutive edges in the same frozen window answer Hz.
+                        value = _frequency(t, y, m.level, m.rising)
+                    else:
+                        a = _cross(
+                            t, _trace(raw, m.trigger)[mask], m.trigger_level, m.trigger_rising
+                        )
+                        b = _cross(t, y, m.level, m.rising)
+                        if b < a:
+                            raise ProbeError("recipe_noncausal_transition")
+                        value = b - a
+                elif m.operation == "frequency":
+                    value = _frequency(t, y, m.level, m.rising)
                 elif m.operation == "slew":
                     a = _cross(t, y, m.trigger_level, m.rising)
                     b = _cross(t, y, m.level, m.rising)

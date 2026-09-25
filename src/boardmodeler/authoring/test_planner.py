@@ -16,7 +16,7 @@ from boardmodeler.domain.enums import RequirementClass
 from boardmodeler.providers.http_inference import extract_json_object
 from boardmodeler.requirements.model import UnknownUnitError, normalize_unit, scale_factor
 
-VERSION = "frozen-circuit-planner-v1"
+VERSION = "frozen-circuit-planner-v2"
 
 
 def _envelope(req):
@@ -200,7 +200,9 @@ def plan_bindings(
                     entry["recipe"]["terminals"] = {
                         aliases.get(k, k): v for k, v in entry["recipe"]["terminals"].items()
                     }
-            entries = validate_plan(payload, requirements, terminals, unverified, pin_map)
+            entries = validate_plan(
+                payload, requirements, terminals, unverified, pin_map, context=_context
+            )
             cache.write_text(json.dumps({"bindings": entries}), encoding="utf-8")
             return complete(entries)
     if cache.is_file():
@@ -211,6 +213,7 @@ def plan_bindings(
                 terminals,
                 unverified,
                 pin_map,
+                context=_context,
             )
         )
     # A locally unsupported row must not force another paid rewrite of valid
@@ -220,7 +223,9 @@ def plan_bindings(
             payload = extract_json_object(
                 json.loads(saved.read_text(encoding="utf-8"))["response"], secrets=()
             )
-            entries = validate_plan(payload, requirements, terminals, unverified, pin_map)
+            entries = validate_plan(
+                payload, requirements, terminals, unverified, pin_map, context=_context
+            )
             cache.write_text(json.dumps(payload, indent=2), encoding="utf-8")
             return complete(entries)
         except ValueError, TypeError, KeyError:
@@ -255,6 +260,8 @@ def plan_bindings(
                 "statement": r.statement,
                 "limits": r.limits.model_dump() if r.limits else None,
                 "conditions": [c.model_dump() for c in r.conditions],
+                "citation_verified": r.citation_verified,
+                "evidence": [e.model_dump() for e in r.evidence],
             }
             for r in requirements
             if r.req_class != RequirementClass.ABSOLUTE_MAXIMUM
@@ -321,7 +328,15 @@ def plan_bindings(
         "(e.g. VCC) at the exact tested point in operating_point, in the limit's unit. "
         "Use terminals to connect EVERY listed physical terminal to a fixture node (NC may have "
         "a unique floating node). Do not invent terminals. Components may only be R,C,L,V,I,B,E,F,G,H "
+        "and the fixed-model Dcatch diode "
         "primitive lines, no directives or model instances. The program inserts the DUT and analysis. "
+        "For a cited external catch diode use Dcatch <ground> <switch_node> BM_CATCH; "
+        "BM_CATCH is the program's fixed diode model. A high-side-switch buck fixture needs "
+        "its cited catch diode, PH-to-output inductor and output capacitor, with a load when "
+        "the cited operating condition calls for one. Do not shunt "
+        "COMP to ground with a resistance so low that the cited error-amplifier output current "
+        "cannot raise COMP above its cited pulse-skip level. Use a physical series compensation "
+        "network where required. "
         "Include ALL supplies, enable/direction controls and loads required by this device. Terminate "
         "unused amplifier channels in stable followers; do not short outputs to a rail. Comparators "
         "need pullups if open-collector. Bidirectional translators need direction and both rails. "
@@ -332,6 +347,8 @@ def plan_bindings(
         "mean/min/max/peak_to_peak/rms operate on signal in the measurement window; start/end are "
         "seconds for tran, Hz for ac. crossing_value samples signal at trigger's rising/falling "
         "crossing of trigger_level. delay returns signal crossing time minus trigger crossing time. "
+        "For switching frequency use operation=frequency, unit=Hz, signal at the switching node, "
+        "and an explicit level; it measures consecutive like-direction edges in the frozen window. "
         "slew divides the signal's level change by crossing-time difference. gain measures the "
         "For Schmitt hysteresis use operation=hysteresis, signal=input voltage, trigger=output voltage, "
         "trigger_level=half the output rail and a slow triangular input covering both edges. "
@@ -372,7 +389,9 @@ def plan_bindings(
             raise ValueError(f"test_planning_failed: {result.detail}")
         try:
             payload = extract_json_object(result.stdout_tail, secrets=())
-            entries = validate_plan(payload, requirements, terminals, unverified, pin_map)
+            entries = validate_plan(
+                payload, requirements, terminals, unverified, pin_map, context=_context
+            )
             cache.write_text(json.dumps(payload, indent=2), encoding="utf-8")
             return complete(entries)
         except (ValueError, TypeError, KeyError) as exc:
@@ -383,7 +402,7 @@ def plan_bindings(
                 # A malformed row remains visible and cannot award a verdict.
                 payload = extract_json_object(result.stdout_tail, secrets=())
                 entries = validate_partial_plan(
-                    payload, requirements, terminals, unverified, pin_map
+                    payload, requirements, terminals, unverified, pin_map, context=_context
                 )
                 cache.write_text(json.dumps({"bindings": entries}), encoding="utf-8")
                 return complete(entries)
@@ -396,7 +415,242 @@ def plan_bindings(
     raise AssertionError("unreachable")
 
 
-def validate_partial_plan(payload, requirements, terminals, unverified, pin_map=None):
+def _source_rows(requirements, context):
+    """Verified source statements used only for fixture feasibility, never new limits."""
+    for req in requirements:
+        if req.citation_verified:
+            yield " ".join([req.statement, *(e.excerpt for e in req.evidence)]), req.limits
+    rows = context.get("records", []) if isinstance(context, dict) else context or []
+    for row in rows:
+        if row.get("citation_verified"):
+            yield (
+                " ".join(
+                    [
+                        row.get("statement", ""),
+                        *(e.get("excerpt", "") for e in row.get("evidence", [])),
+                    ]
+                ),
+                row.get("limits"),
+            )
+
+
+def _numeric_limit(limits, side):
+    if limits is None:
+        return None
+    value = limits.get(side) if isinstance(limits, dict) else getattr(limits, side)
+    unit = limits.get("unit") if isinstance(limits, dict) else limits.unit
+    if value is None:
+        return None
+    try:
+        return abs(float(value) * scale_factor(unit, normalize_unit(unit)))
+    except ValueError, TypeError, UnknownUnitError:
+        return None
+
+
+def _spice_scalar(token):
+    match = re.fullmatch(r"([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)([A-Za-z]*)", token)
+    if not match:
+        return None
+    suffix = match[2].lower()
+    factor = {
+        "": 1,
+        "f": 1e-15,
+        "p": 1e-12,
+        "n": 1e-9,
+        "u": 1e-6,
+        "m": 1e-3,
+        "k": 1e3,
+        "meg": 1e6,
+        "g": 1e9,
+    }.get(suffix)
+    return None if factor is None else float(match[1]) * factor
+
+
+def _fixture_disabled(recipe):
+    if recipe.operating_point.get("EN") == 0:
+        return True
+    enable = recipe.terminals.get("EN", "").casefold()
+    if not enable or enable == "0":
+        return enable == "0"
+    for line in recipe.components:
+        words = line.split()
+        if (
+            words[0][0].upper() == "V"
+            and len(words) >= 4
+            and words[1].casefold() == enable
+            and words[2] == "0"
+        ):
+            value = words[4] if words[3].upper() == "DC" and len(words) >= 5 else words[3]
+            if value == "0":
+                return True
+    return False
+
+
+def _has_catch_diode(lines, ph, ground):
+    if any(
+        parts[0][0].upper() == "D" and parts[1].casefold() == ground and parts[2].casefold() == ph
+        for parts in lines
+        if len(parts) >= 4
+    ):
+        return True
+    # Existing frozen benches used a one-way resistor as a simple catch
+    # diode. Admit only this exact negative-PH conduction law and polarity;
+    # a general B source is not evidence that the catch path is correct.
+    voltage = rf"V\({re.escape(ph)}(?:,{re.escape(ground)})?\)"
+    law = re.compile(rf"I=if\({voltage}<0,{voltage}/([0-9.eE+]+),0\)", re.I)
+    for parts in lines:
+        if (
+            parts[0][0].upper() == "B"
+            and len(parts) >= 4
+            and parts[1].casefold() == ph
+            and parts[2].casefold() == ground
+        ):
+            match = law.fullmatch("".join(parts[3:]))
+            if match and (resistance := _spice_scalar(match[1])) and resistance > 0:
+                return True
+    return False
+
+
+def _buck_fixture_issue(recipe, source_rows, statement):
+    """Reject a physically impossible active asynchronous-buck bench before freezing it.
+
+    This applies only where verified source rows establish the external diode or
+    COMP current/voltage budget. An inactive shutdown test needs no power stage.
+    """
+    terminals = {key.upper(): value.casefold() for key, value in recipe.terminals.items()}
+    if not {"PH", "VIN", "COMP", "VSENSE", "GND"} <= terminals.keys() or _fixture_disabled(recipe):
+        return None
+    ph, comp, ground = (terminals[name] for name in ("PH", "COMP", "GND"))
+    lines = [line.split() for line in recipe.components]
+    output_nodes = [
+        parts[2].casefold() if parts[1].casefold() == ph else parts[1].casefold()
+        for parts in lines
+        if len(parts) >= 4
+        and parts[0][0].upper() == "L"
+        and ph in (parts[1].casefold(), parts[2].casefold())
+    ]
+    if not output_nodes:
+        return None
+
+    has_catch_requirement = any(
+        re.search(r"\b(?:external\s+)?catch\s+diode\b", text, re.I) for text, _ in source_rows
+    )
+    if has_catch_requirement:
+        if not _has_catch_diode(lines, ph, ground):
+            return (
+                "buck_fixture_missing_catch_diode: cited external catch diode must connect "
+                "anode to ground and cathode to PH"
+            )
+        if not any(
+            parts[0][0].upper() == "C"
+            and {parts[1].casefold(), parts[2].casefold()} == {output, ground}
+            for parts in lines
+            for output in output_nodes
+            if len(parts) >= 4
+        ):
+            return (
+                "buck_fixture_missing_output_capacitor: active PH-to-output inductor "
+                "needs an output capacitor to ground"
+            )
+
+    if not re.search(r"(?:slow|soft)[ -]?start", statement, re.I):
+        charge_currents = [
+            value
+            for text, limits in source_rows
+            if re.search(r"(?:slow|soft)[ -]?start.*\bcharge\s+current\b", text, re.I)
+            for side in ("max", "typ", "min")
+            if (value := _numeric_limit(limits, side)) is not None and value > 0
+        ]
+        references = [
+            value
+            for text, limits in source_rows
+            if re.search(r"\bvoltage\s+reference\b", text, re.I)
+            for side in ("min", "typ", "max")
+            if (value := _numeric_limit(limits, side)) is not None and value > 0
+        ]
+        ss = terminals.get("SS")
+        if ss and charge_currents and references:
+            fastest_charge = max(charge_currents)
+            lowest_reference = min(references)
+            for parts in lines:
+                if (
+                    parts[0][0].upper() == "C"
+                    and len(parts) >= 4
+                    and {parts[1].casefold(), parts[2].casefold()} == {ss, ground}
+                ):
+                    capacitance = _spice_scalar(parts[3])
+                    if capacitance is None or capacitance <= 0:
+                        return (
+                            "buck_fixture_soft_start: SS capacitance is not a positive fixed value"
+                        )
+                    charge_time = capacitance * lowest_reference / fastest_charge
+                    if recipe.measurement.start < charge_time:
+                        return (
+                            "buck_fixture_soft_start: steady-state measurement starts at "
+                            f"{recipe.measurement.start:g} s before cited SS charging can reach "
+                            f"minimum reference ({charge_time:g} s with {capacitance:g} F, "
+                            f"{fastest_charge:g} A and {lowest_reference:g} V)"
+                        )
+
+    ea_currents = [
+        value
+        for text, limits in source_rows
+        if re.search(r"error.amplifier.*(?:source/sink|source and sink).*current", text, re.I)
+        for side in ("max", "typ", "min")
+        if (value := _numeric_limit(limits, side)) is not None
+    ]
+    eco_voltages = [
+        value
+        for text, limits in source_rows
+        if re.search(
+            r"(?:eco.mode|pulse.skip).*\bCOMP\b|\bCOMP\b.*(?:eco.mode|pulse.skip)", text, re.I
+        )
+        for side in ("typ", "min", "max")
+        if (value := _numeric_limit(limits, side)) is not None
+    ]
+    if ea_currents and eco_voltages:
+        # The largest cited source current is generous to the fixture. If even
+        # that cannot raise COMP to the pulse-skip boundary, the bench is invalid.
+        drive = max(ea_currents)
+        needed = min(eco_voltages)
+        for parts in lines:
+            if parts[0][0].upper() != "R" or len(parts) < 4:
+                continue
+            if {parts[1].casefold(), parts[2].casefold()} != {comp, ground}:
+                continue
+            resistance = _spice_scalar(parts[3])
+            if resistance is None or resistance <= 0:
+                return "buck_fixture_comp_shunt: COMP-to-ground resistance is not a positive fixed value"
+            if drive * resistance <= needed:
+                return (
+                    "buck_fixture_comp_shunt: cited error-amplifier source current "
+                    f"({drive:g} A) through {resistance:g} ohm reaches at most "
+                    f"{drive * resistance:g} V, below the cited COMP pulse-skip level "
+                    f"({needed:g} V)"
+                )
+    return None
+
+
+def _current_polarity_cited(req):
+    if req.limits and any(
+        value is not None and value < 0
+        for value in (req.limits.min, req.limits.typ, req.limits.max)
+    ):
+        return True
+    text = " ".join([req.statement, *(e.excerpt for e in req.evidence)])
+    return bool(
+        re.search(
+            r"\b(?:current\s+(?:flows?\s+)?(?:into|out\s+of)|"
+            r"(?:positive|negative|reverse|signed)\s+current|current\s+polarity)\b",
+            text,
+            re.I,
+        )
+    )
+
+
+def validate_partial_plan(
+    payload, requirements, terminals, unverified, pin_map=None, *, context=None
+):
     entries = payload.get("bindings")
     if not isinstance(entries, list) or any(not isinstance(e, dict) for e in entries):
         raise ValueError("bindings must be a list of objects")
@@ -404,7 +658,9 @@ def validate_partial_plan(payload, requirements, terminals, unverified, pin_map=
     for req in requirements:
         scoped = {"bindings": [e for e in entries if e.get("req_id") == req.req_id]}
         try:
-            result.extend(validate_plan(scoped, [req], terminals, unverified, pin_map))
+            result.extend(
+                validate_plan(scoped, [req], terminals, unverified, pin_map, context=context)
+            )
         except (ValueError, TypeError, KeyError) as exc:
             result.append(
                 {
@@ -416,7 +672,7 @@ def validate_partial_plan(payload, requirements, terminals, unverified, pin_map=
     return result
 
 
-def validate_plan(payload, requirements, terminals, unverified, pin_map=None):
+def validate_plan(payload, requirements, terminals, unverified, pin_map=None, *, context=None):
     entries = payload["bindings"]
     if not isinstance(entries, list):
         raise ValueError("bindings must be a list")
@@ -452,6 +708,7 @@ def validate_plan(payload, requirements, terminals, unverified, pin_map=None):
         ),
     ]
     result = []
+    source_rows = tuple(_source_rows(requirements, context))
     for entry in entries:
         req = by_id[entry["req_id"]]
 
@@ -489,6 +746,13 @@ def validate_plan(payload, requirements, terminals, unverified, pin_map=None):
         recipe = CircuitRecipe.model_validate(declared_delay_threshold(entry["recipe"], req))
         recipe = _ac_open_loop(recipe, pin_map)
         m = recipe.measurement
+        issue = _buck_fixture_issue(recipe, source_rows, req.statement)
+        if issue:
+            raise ValueError(f"{req.req_id}: {issue}")
+        if recipe.unit == "A" and m.absolute and _current_polarity_cited(req):
+            raise ValueError(
+                f"{req.req_id}: current polarity is cited; an absolute measurement would erase it"
+            )
         if m.operation in ("mean", "min", "max", "peak_to_peak", "rms"):
             if m.signal.upper() == "V(0)":
                 raise ValueError(

@@ -228,22 +228,43 @@ def _judge(char: Characteristic, key: str, value: float) -> tuple[str, str, str 
     """``(status, detail, likely cause)`` for one characteristic and one measurement."""
     label = f"{char.char_id} [{char.req_class}]"
     judged = f"{key}={value:.6g} {char.unit}".strip()
+    source = " ".join(
+        (char.statement, char.excerpt, *(str(c.get("text", "")) for c in char.conditions))
+    )
+    cited_polarity = bool(
+        re.search(
+            r"\b(?:current\s+(?:flows?\s+)?(?:into|out\s+of)|"
+            r"(?:positive|negative|reverse|signed)\s+current|current\s+polarity)\b",
+            source,
+            re.I,
+        )
+    ) or any(
+        bound is not None and bound < 0
+        for bound in (char.min_value, char.typ_value, char.max_value)
+    )
+    # SPICE's I(Vsource) sign follows the source's terminal order. A datasheet's
+    # unsigned supply/leakage-current limit is a magnitude; preserve the raw
+    # signed observation in the report while judging its magnitude. A cited
+    # direction or negative limit keeps the signed comparison.
+    compared = abs(value) if char.unit == "A" and not cited_polarity else value
+    if compared != value:
+        judged += f" (magnitude {compared:.6g} {char.unit})"
     if char.has_limits:
         slack = _LIMIT_SLACK * max(abs(char.min_value or 0.0), abs(char.max_value or 0.0), 1e-12)
-        if char.min_value is not None and value < char.min_value - slack:
+        if char.min_value is not None and compared < char.min_value - slack:
             return (
                 Status.FAIL.value,
                 f"{label}: measured {judged} is below the required minimum "
                 f"{char.min_value:g} {char.unit}",
-                f"measured {value:.6g} {char.unit} is {char.min_value - value:.6g} {char.unit} "
+                f"measured {compared:.6g} {char.unit} is {char.min_value - compared:.6g} {char.unit} "
                 f"below the {char.min_value:g} {char.unit} minimum: the model's {key} is too low",
             )
-        if char.max_value is not None and value > char.max_value + slack:
+        if char.max_value is not None and compared > char.max_value + slack:
             return (
                 Status.FAIL.value,
                 f"{label}: measured {judged} exceeds the required maximum "
                 f"{char.max_value:g} {char.unit}",
-                f"measured {value:.6g} {char.unit} is {value - char.max_value:.6g} {char.unit} "
+                f"measured {compared:.6g} {char.unit} is {compared - char.max_value:.6g} {char.unit} "
                 f"above the {char.max_value:g} {char.unit} maximum: the model's {key} is too high",
             )
         return (
@@ -253,7 +274,7 @@ def _judge(char: Characteristic, key: str, value: float) -> tuple[str, str, str 
         )
     if char.typ_value is not None:
         tolerance = _TYPICAL_TOLERANCE * abs(char.typ_value)
-        deviation = abs(value - char.typ_value)
+        deviation = abs(compared - char.typ_value)
         note = (
             "typical-value comparison, not a min/max limit check"
             if char.req_class == RequirementClass.TYPICAL_VALUE.value
@@ -266,7 +287,7 @@ def _judge(char: Characteristic, key: str, value: float) -> tuple[str, str, str 
         cause = None
         if deviation > tolerance:
             cause = (
-                f"measured {value:.6g} {char.unit} deviates {deviation:.6g} {char.unit} from the "
+                f"measured {compared:.6g} {char.unit} deviates {deviation:.6g} {char.unit} from the "
                 f"{char.typ_value:g} {char.unit} typical (10 % band {tolerance:.6g} {char.unit}): "
                 f"the model's {key} is not centred on the datasheet value"
             )
