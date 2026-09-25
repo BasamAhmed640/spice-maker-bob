@@ -431,3 +431,19 @@ machine has no Bob API key. It is recorded in Spice Maker's
 | LM358 build with no Bob key | BLOCKED `bob_credentials_unavailable`; no fallback to the OpenCode/DeepSeek keys present in the environment. It used to crash while writing deliverables; fixed and tested |
 | LM358 build with no LTspice selected | BLOCKED "LTspice is not configured; choose its executable in SETUP" |
 | Fresh GitHub ZIP of the branch: venv, pinned install, startup without LTspice access, explicit `.op`, credential scan | PASS (7/7 steps) |
+
+## 2026-09-24 — 1.5.0 (Bob edition): readiness lights, shared-core fixes, stale tests removed
+
+Shared core identical to Spice Maker 1.6.0 (41 files): pdfium fallback for PDF reads, gate-then-
+parallel harness, recovered operating points counted as found, A-device node-count lint. The
+build window shows API KEY / BOB SHELL / LTSPICE / PDF / OCR / INTERNET lights and VERIFY KEY &
+TOOLS: BOB SHELL is red when `bob` is missing or `bob run --help` lacks a flag builds pass, then
+Bob Shell answers once with every tool group disabled. Symbols follow the four-sided convention.
+Evidence: Spice Maker's `docs/evidence/2026-09-24-usability/REPORT.md`.
+
+| Check | Result |
+|---|---|
+| Bob Shell on this machine | 2.0.4 at `pi-node\current\bob`; all 7 build flags listed; no Bob key, so VERIFY stops at API KEY |
+| Full suite incl. GUI (`e103f49`) | 1448 passed, 25 skipped, 4 failed; the 4 were stale tests (doctor expected `LTSPICE_EXE` discovery; an integration test expected PASS with 21 unverified fixture rows) and are fixed in `381f65f`/`8d2d909` |
+| `tests/test_cli_doctor.py tests/test_cli_run_tests.py` after the fix | 17 passed |
+| `tests/pipeline/test_make_model.py` after the fix | 55 passed |
