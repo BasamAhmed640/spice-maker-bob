@@ -1,5 +1,10 @@
 # Spice Maker Bob
 
+Source version: **1.6.0**. The checked-in `Install.exe` is still the **1.5.0**
+build shown in `INSTALL.txt`; it will contain the new source only after the
+1.6.0 installer is rebuilt and committed. Check `SHA256SUMS.txt` against the
+installer in the ZIP you download.
+
 **Safety update:** SETUP requires you to choose an LTspice executable with **BROWSE** and save it. The app does not search installed programs or adopt an inherited `LTSPICE_EXE`. Bob Shell receives the complete prompt through stdin with its read, edit, execute, MCP, skill, todo, subagent and mode tools disabled. The application writes Bob's model text and runs LTspice itself; a Bob reply cannot mark a model verified.
 
 The root `AGENTS.md` and `.bob/rules/` files guide work when this repository is opened as an IBM Bob project. Embedded model authoring uses a generated scratch workspace with the same tool restrictions; it does not load repository rules or hooks. The application supplies the model requirements and safety limits in the prompt.
@@ -7,7 +12,19 @@ The root `AGENTS.md` and `.bob/rules/` files guide work when this repository is 
 **IBM Bob is the only AI in this edition, in both the UI and the application source.** Bob is a CLI provider, so it declares no HTTP endpoint: an HTTP destination is refused for it rather than guessed. Bob reads a datasheet, authors an LTspice model and repairs it using actual simulator
 feedback. A model card records measured behavior and every uncovered requirement.
 
-**Full electrical verification is the default.** Quick mode remains available in SETUP and reports electrical accuracy as unverified. [Modes and limitations](docs/QUICK_MODE.md).
+**Full electrical verification is the default.** Its checkbox is beside **GO** in
+the build window; uncheck it for a quick structural draft whose electrical
+accuracy remains unverified. SETUP has one **INTERNET ACCESS** checkbox for Bob
+and the part vendor's supporting-material site. With it off, the app refuses
+Bob runs and key checks before launching Bob Shell. [Modes and limitations](docs/QUICK_MODE.md).
+
+**1.6.0 adds template-first buck models.** For a supported buck-converter pinout,
+the app fills a known-convergent template from cited datasheet rows, labels any
+template defaults and judges the candidate with LTspice. Bob receives measured
+failures for bounded repair. If repair cannot improve the model, the simulator-
+measured template may still be delivered with its FAIL and UNKNOWN rows visible.
+Other device classes continue through Bob authoring. Template parameters are
+provenance, not verification; PASS still requires an observed simulator artifact.
 
 **This build is portable.** Extract the GitHub **Code > Download ZIP** archive and run
 **Install.exe** inside it. The animated installer puts the app in `app/` in that same
@@ -32,9 +49,15 @@ final duration. See [what the agents and simulator do](docs/AGENT_WORKFLOW.md).
 ## Install on Windows
 
 On the **main** branch, choose **Code → Download ZIP**, extract the archive and run
-**Install.exe** beside this README. The included installer retains the animated
+**Install.exe** beside this README. The currently checked-in 1.5.0 installer retains the animated
 pepper setup. INSTALL.txt contains instructions; SHA256SUMS.txt authenticates the installer.
 Python is bundled. LTspice and IBM Bob Shell are separate prerequisites. This build is unsigned.
+
+The installer carries CPython 3.14, hash-checked wheels and its generated
+`env/requirements.txt`. It creates this extracted folder's `.venv` from those pins
+without downloading packages during installation or using the computer's Python.
+`Boardmodeler.cmd` uses that environment for command-line work; `Start.cmd` opens
+the separately frozen GUI, because the `.venv` does not include Qt.
 
 Open IBM Bob Shell once to review and accept IBM's license. Then open SETUP, use
 **BROWSE** to choose the LTspice executable, run its smoke test and save a Bob API key.
@@ -61,8 +84,11 @@ substitutes an agent or displays the incompatible agent's name.
 ## Make and test a model
 
 Enter the exact part number, select its PDF and a save folder, then press **GO**.
-The selected datasheet and model text are sent to Bob. SETUP also holds the persistent
-model-folder and supporting-web-search preference. CANCEL requests cancellation;
+For supported buck converters, LTspice may judge a cited template without a Bob
+authoring turn. When Bob is needed, the app sends the relevant datasheet and model
+text through Bob Shell with all tool groups disabled. SETUP holds the persistent
+model folder and the one **INTERNET ACCESS** switch; **FULL VERIFICATION** is beside
+GO for each build. CANCEL requests cancellation;
 results provide Open model folder, Run tests again and Install into LTspice actions.
 Bob controls model selection and reasoning. This application does not invent a maximum
 thinking flag that Bob Shell has not documented.
@@ -113,7 +139,7 @@ install `requirements-dev.txt` into the same `.venv` and run pytest there.
 The fixture/scripted backends remain clearly labeled deterministic test tools. No other
 AI catalog or author transport ships in this repository.
 
-Rebuild with `installer/build.ps1 -Version 1.4.0`. The build checks the frozen GUI before
+Rebuild with `installer/build.ps1 -Version 1.6.0`. The build checks the frozen GUI before
 packaging and refreshes Install.exe, INSTALL.txt and SHA256SUMS.txt at the repository
 root. These generated files must be committed for Code → Download ZIP to update.
 See [installer details](installer/README.md) and [current status](docs/STATUS.md).

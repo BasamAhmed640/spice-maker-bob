@@ -11,6 +11,6 @@ Honesty invariants enforced throughout this package:
 
 from __future__ import annotations
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 __all__ = ["__version__"]
