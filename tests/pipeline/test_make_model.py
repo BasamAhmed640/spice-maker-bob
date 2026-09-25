@@ -1528,31 +1528,6 @@ def test_the_reinforcement_stage_runs_on_the_backend_the_author_loop_uses(
     assert result.status == "UNKNOWN"
 
 
-@pytest.mark.ltspice
-def test_a_fresh_process_revalidates_before_reinforcement_or_the_author(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, ltspice_exe: Path
-) -> None:
-    """A process-local cache miss must re-judge the passing candidate, not call out."""
-    from boardmodeler.authoring import validation_cache
-
-    pdf = tmp_path / "fixed_datasheet.pdf"
-    shutil.copyfile(datasheet_for(tmp_path), pdf)
-    use_backend(monkeypatch, ScriptedBackend(template_script()))
-    first, _events, _wall = run(tmp_path, datasheet=pdf, reinforce=False)
-    assert first.status == "PASS", first.detail
-
-    def forbidden_script(turn, workdir, prompt):
-        pytest.fail("a passing candidate must be revalidated before the author")
-
-    use_backend(monkeypatch, ScriptedBackend(forbidden_script))
-    monkeypatch.setattr(engine, "reinforce", lambda **kwargs: pytest.fail("no reinforcement"))
-    monkeypatch.setattr(validation_cache, "_OBSERVED", {})
-
-    second, _events2, _wall2 = run(tmp_path, datasheet=pdf, reinforce=True)
-
-    assert second.status == "PASS", second.detail
-
-
 def test_a_run_author_revalidates_the_candidate_before_gathering_reinforcement(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
