@@ -43,29 +43,28 @@ _LABEL_INSET = 8
 _ROW_PITCH = 48
 _BODY_PADDING = 32
 _DEFAULT_BODY_WIDTH = 192
+#: Room inside the body for the labels of top/bottom pins.
+_EDGE_LABEL_BAND = 32
 
-#: Names that belong on the left of the body (control/supply inputs).
-_LEFT_HINTS = (
-    "vin",
-    "vdd",
-    "vcc",
-    "pvin",
-    "en",
-    "in",
-    "clk",
-    "rt",
-    "ss",
-    "tr",
-    "comp",
-    "fb",
-    "vsense",
-    "ctrl",
-    "set",
-    "inp",
-    "inm",
-    "ref",
-    "a",
+#: Pin roles, read from the (sanitized) pin name first and the pin map's direction second.
+#: The side follows the schematic convention readers expect: positive supplies on top,
+#: grounds, negative supplies and exposed pads at the bottom, inputs and controls on the
+#: left, outputs and the feedback/compensation network on the right.
+_SUPPLY_RE = re.compile(
+    r"^(P|A|D|S)?(VIN|VCC|VDD|VBAT|VBUS|VSUP|VSYS|VPWR|VBB|VCP|VPOS|VS|VSP|VP|IN_?SUPPLY)"
+    r"(A|D|IO|Q)?\d*$"
 )
+_GROUND_RE = re.compile(
+    r"^(P|A|D|S|C)?(GND|VSS|VEE|VNEG|VSM)\d*$|^(E?PAD|POWERPAD|PWRPAD|THERMAL_?PAD|EXPOSED_?PAD|"
+    r"PAD_?GND|DAP|EP)\d*$"
+)
+_OUTPUT_RE = re.compile(
+    r"^(V?OUT|SW|PH|LX|BOOT|BST|CB|CBOOT|PG|PGOOD|PWRGD|POK|FLT|N?FAULT|ALERT|RDY|FB|VSENSE|"
+    r"VFB|ADJ|SENSE|COMP|VC|ITH|BYP|NR|REF(OUT)?)"
+    r"(_?\w*)?$"
+)
+_INPUT_RE = re.compile(r"^(P_)?\d*(IN|INP|INM|IN_?P|IN_?M|EN|SS|TR|RT|CLK|SYNC|MODE|ILIM|UVLO)")
+_CHANNEL_RE = re.compile(r"(\d+)")
 
 
 @dataclass(frozen=True)
@@ -79,78 +78,181 @@ class SymbolPin:
     y: int
 
 
-def _side_for(name: str, direction: str | None) -> str:
-    if direction in ("output",):
+def _side_for(name: str, direction: str | None, ports: Sequence[str] = ()) -> str:
+    upper = name.upper()
+    if direction == "nc" or upper.startswith("NC"):
         return "right"
-    if direction in ("ground", "power"):
-        return "right" if name.lower() in ("pg", "pwrgd", "gnd", "vss", "vout") else "left"
-    lowered = name.lower()
-    if direction == "input":
+    if upper == "VM":  # V- when there is a V+, otherwise a motor/module supply
+        return "bottom" if "VP" in {port.upper() for port in ports} else "top"
+    if _GROUND_RE.match(upper):
+        return "bottom"
+    if _SUPPLY_RE.match(upper):
+        return "top"
+    if _OUTPUT_RE.match(upper):
+        return "right"
+    if _INPUT_RE.match(upper):
         return "left"
-    return "left" if any(hint in lowered for hint in _LEFT_HINTS) else "right"
+    if direction == "ground":
+        return "bottom"
+    if direction == "power":
+        return "top"
+    if direction == "output":
+        return "right"
+    return "left"
 
 
-def _columns(
+def _channel(name: str, multi: bool) -> int:
+    if not multi:
+        return 0
+    match = _CHANNEL_RE.search(name)
+    return int(match.group(1)) if match else 0
+
+
+def _polarity_rank(name: str) -> int:
+    """Within a channel: + input before - input before anything else."""
+    upper = name.upper()
+    if re.search(r"(INP|IN_?P|\+)$|P$", upper) and "IN" in upper:
+        return 0
+    if re.search(r"(INM|IN_?M|-)$|M$", upper) and "IN" in upper:
+        return 1
+    return 2
+
+
+#: Right-side order: power outputs (the switch node beside its boot capacitor), then
+#: status flags, then the feedback/compensation pins, then no-connects.
+_FEEDBACK_RE = re.compile(r"^(FB|VFB|VSENSE|ADJ|SENSE|COMP|VC|ITH|BYP|NR|REF)")
+_STATUS_RE = re.compile(r"^(PG|PGOOD|PWRGD|POK|FLT|N?FAULT|ALERT|RDY)")
+
+
+def _right_rank(name: str) -> int:
+    upper = name.upper()
+    if upper.startswith("NC"):
+        return 3
+    if _FEEDBACK_RE.match(upper):
+        return 2
+    if _STATUS_RE.match(upper):
+        return 1
+    return 0
+
+
+def _sides(
     ports: Sequence[str], directions: Mapping[str, str] | None = None
-) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
+) -> dict[str, list[tuple[int, str]]]:
     directions = dict(directions or {})
-    left = [
-        (index, name)
-        for index, name in enumerate(ports)
-        if _side_for(name, directions.get(name)) == "left"
-    ]
-    right = [
-        (index, name)
-        for index, name in enumerate(ports)
-        if _side_for(name, directions.get(name)) == "right"
-    ]
+    sides: dict[str, list[tuple[int, str]]] = {"left": [], "right": [], "top": [], "bottom": []}
+    for index, name in enumerate(ports):
+        sides[_side_for(name, directions.get(name), ports)].append((index, name))
+    return sides
 
-    # Keep supply pins together after the signals. Layout never changes SpiceOrder.
-    def group(pin: tuple[int, str]) -> tuple[int, int]:
-        index, name = pin
-        supply = directions.get(name) in ("power", "ground") or name.upper() in {
-            "VCC",
-            "VDD",
-            "VSS",
-            "VEE",
-            "GND",
-            "AGND",
-            "DGND",
-            "V+",
-            "V-",
-        }
-        return int(supply), index
 
-    return sorted(left, key=group), sorted(right, key=group)
+def _side_rows(
+    left: list[tuple[int, str]], right: list[tuple[int, str]]
+) -> tuple[dict[int, int], dict[int, int], int]:
+    """Row numbers for the side pins, grouping numbered channels (IN1P, IN1M, OUT1 ...).
+
+    A channel with two inputs and one output gets the op-amp shape: + input, output one
+    row lower, - input below it. Channels are separated by one empty row.
+    """
+    channels = {
+        match.group(1)
+        for _, name in left + right
+        if (match := _CHANNEL_RE.search(name)) is not None
+    }
+    multi = len(channels) > 1
+    blocks: dict[int, tuple[list, list]] = {}
+    for column, target in ((left, 0), (right, 1)):
+        for index, name in column:
+            blocks.setdefault(_channel(name, multi), ([], []))[target].append((index, name))
+    # Channels only get their own blocks (and a blank row between them) when a channel
+    # has more than one pin a side needs grouping for; INPUT_n/OUTPUT_n just share rows.
+    grouped = multi and any(len(a) + len(b) > 2 for a, b in blocks.values())
+    left_rows: dict[int, int] = {}
+    right_rows: dict[int, int] = {}
+    row = 0
+    for position, key in enumerate(sorted(blocks)):
+        block_left, block_right = blocks[key]
+        block_left.sort(key=lambda pin: (_polarity_rank(pin[1]), pin[0]))
+        block_right.sort(key=lambda pin: (_right_rank(pin[1]), pin[0]))
+        if position and grouped:
+            row += 1  # a blank row between channels
+        if grouped and len(block_left) == 2 and len(block_right) == 1:
+            left_rows[block_left[0][0]] = row
+            right_rows[block_right[0][0]] = row + 1
+            left_rows[block_left[1][0]] = row + 2
+            row += 3
+            continue
+        for offset, (index, _name) in enumerate(block_left):
+            left_rows[index] = row + offset
+        for offset, (index, _name) in enumerate(block_right):
+            right_rows[index] = row + offset
+        row += max(len(block_left), len(block_right), 1)
+    return left_rows, right_rows, row
+
+
+def _edge_pitch(names: Sequence[str]) -> int:
+    """Horizontal pitch for top/bottom pins: the widest label plus a gap, on the 32 grid."""
+    widest = max((len(name) for name in names), default=0)
+    return max(64, ((widest * 16 + 24 + 31) // 32) * 32)
 
 
 def symbol_pins(
     ports: Sequence[str], directions: Mapping[str, str] | None = None
 ) -> list[SymbolPin]:
     """Place pins on a grid; their electrical order stays the declaration order."""
-    left, right = _columns(ports, directions)
-    rows = max(len(left), len(right), 1)
+    sides = _sides(ports, directions)
+    left_rows, right_rows, rows = _side_rows(sides["left"], sides["right"])
+    rows = max(rows, 1)
     top = -((rows - 1) * _ROW_PITCH // 2 // _GRID) * _GRID
     width = body_width(ports, directions)
+    body_top, body_bottom = _body_edges(ports, directions)
     pins: list[SymbolPin] = []
-    for column, side in ((left, "left"), (right, "right")):
-        for row, (index, name) in enumerate(column):
-            y = top + row * _ROW_PITCH
-            x = -(width // 2 + _PIN_STUB) if side == "left" else width // 2 + _PIN_STUB
-            pins.append(SymbolPin(name=name, side=side, order=index + 1, x=x, y=y))
+    for index, name in sides["left"] + sides["right"]:
+        side = "left" if index in left_rows else "right"
+        row = left_rows.get(index, right_rows.get(index, 0))
+        y = top + row * _ROW_PITCH
+        x = -(width // 2 + _PIN_STUB) if side == "left" else width // 2 + _PIN_STUB
+        pins.append(SymbolPin(name=name, side=side, order=index + 1, x=x, y=y))
+    for edge in ("top", "bottom"):
+        members = sorted(sides[edge], key=lambda pin: pin[0])
+        pitch = _edge_pitch([name for _, name in members])
+        for position, (index, name) in enumerate(members):
+            x = int((position - (len(members) - 1) / 2) * pitch)
+            y = body_top - _PIN_STUB if edge == "top" else body_bottom + _PIN_STUB
+            pins.append(SymbolPin(name=name, side=edge, order=index + 1, x=x, y=y))
     pins.sort(key=lambda pin: pin.order)
     return pins
+
+
+def _body_edges(
+    ports: Sequence[str], directions: Mapping[str, str] | None = None
+) -> tuple[int, int]:
+    """Body top/bottom: room for the side rows, plus a label band for top/bottom pins."""
+    sides = _sides(ports, directions)
+    _left, _right, rows = _side_rows(sides["left"], sides["right"])
+    rows = max(rows, 1)
+    first = -((rows - 1) * _ROW_PITCH // 2 // _GRID) * _GRID
+    last = first + (rows - 1) * _ROW_PITCH
+    top = first - _BODY_PADDING - (_EDGE_LABEL_BAND if sides["top"] else 0)
+    bottom = last + _BODY_PADDING + (_EDGE_LABEL_BAND if sides["bottom"] else 0)
+    return top, bottom
 
 
 def body_width(ports: Sequence[str], directions: Mapping[str, str] | None = None) -> int:
     """Reserve room for both opposing labels, with a central gap and grid edges.
 
     Font size 2 pin labels get a conservative 16 units per character. The final
-    PIN number is an offset from the connection point, not a font size.
+    PIN number is an offset from the connection point, not a font size. Top and
+    bottom pins need their own labels side by side, one pitch apart.
     """
-    columns = _columns(ports, directions)
-    text_width = sum(max((len(name) for _, name in column), default=0) for column in columns)
+    sides = _sides(ports, directions)
+    text_width = sum(
+        max((len(name) for _, name in sides[column]), default=0) for column in ("left", "right")
+    )
     needed = max(_DEFAULT_BODY_WIDTH, text_width * 16 + 64)
+    for edge in ("top", "bottom"):
+        names = [name for _, name in sides[edge]]
+        if names:
+            needed = max(needed, _edge_pitch(names) * len(names) + 32)
     return ((needed + 2 * _GRID - 1) // (2 * _GRID)) * (2 * _GRID)
 
 
@@ -170,14 +272,15 @@ def symbol_text(
     """
     width = body_width(ports, directions)
     pins = symbol_pins(ports, directions)
-    top = min((pin.y for pin in pins), default=0) - _BODY_PADDING
-    bottom = max((pin.y for pin in pins), default=0) + _BODY_PADDING
+    top, bottom = _body_edges(ports, directions)
+    has_top = any(pin.side == "top" for pin in pins)
+    has_bottom = any(pin.side == "bottom" for pin in pins)
     lines = [
         "Version 4",
         "SymbolType CELL",
         f"RECTANGLE Normal {-width // 2} {top} {width // 2} {bottom}",
-        f"WINDOW 0 0 {top - 32} Center 2",
-        f"WINDOW 3 0 {bottom + 32} Center 2",
+        f"WINDOW 0 0 {top - (64 if has_top else 32)} Center 2",
+        f"WINDOW 3 0 {bottom + (64 if has_bottom else 32)} Center 2",
         "SYMATTR Prefix X",
         f"SYMATTR Value {model_name or name}",
         f"SYMATTR SpiceModel {model_file}",
@@ -186,8 +289,12 @@ def symbol_text(
     if description:
         lines.append(f"SYMATTR Description {description}")
     for pin in pins:
-        edge = -width // 2 if pin.side == "left" else width // 2
-        lines.append(f"LINE Normal {pin.x} {pin.y} {edge} {pin.y}")
+        if pin.side in ("left", "right"):
+            edge = -width // 2 if pin.side == "left" else width // 2
+            lines.append(f"LINE Normal {pin.x} {pin.y} {edge} {pin.y}")
+        else:
+            edge = top if pin.side == "top" else bottom
+            lines.append(f"LINE Normal {pin.x} {pin.y} {pin.x} {edge}")
         orientation = pin.side.upper()
         lines.append(f"PIN {pin.x} {pin.y} {orientation} {_PIN_STUB + _LABEL_INSET}")
         lines.append(f"PINATTR PinName {pin.name}")

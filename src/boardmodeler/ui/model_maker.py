@@ -399,6 +399,7 @@ class ModelMakerWindow(QMainWindow):
         layout.setSpacing(7)
 
         layout.addLayout(self._build_top_row())
+        layout.addWidget(self.readiness)
         layout.addLayout(self._build_inputs())
         layout.addLayout(self._build_actions())
         layout.addWidget(QLabel("PROGRESS"))
@@ -420,6 +421,13 @@ class ModelMakerWindow(QMainWindow):
         check.clicked.connect(self._run_doctor)
         row.addWidget(setup)
         row.addWidget(check)
+        # Readiness lights + VERIFY KEY & TOOLS: the key, Bob Shell with its tool groups
+        # disabled, LTspice, the PDF reader, OCR and the network switch, visible before GO.
+        # Its own row (added in __init__), so the lights never widen the window's floor.
+        from boardmodeler.ui.readiness_strip import ReadinessStrip
+
+        self.readiness = ReadinessStrip()
+        QTimer.singleShot(0, self.readiness, self.readiness.refresh_local)
         row.addStretch(1)
         self.setup_hint = QLabel("")
         self.setup_hint.setStyleSheet("color: #ff5555; font-family: Consolas;")
@@ -768,6 +776,7 @@ class ModelMakerWindow(QMainWindow):
         dialog = SetupDialog(self)
         dialog.exec()
         self.again_button.setEnabled(self._result is not None)
+        self.readiness.refresh_local()
 
     def _run_doctor(self) -> None:
         self._run_cli(["doctor", "--json"])
@@ -859,6 +868,7 @@ class ModelMakerWindow(QMainWindow):
             self.status_label.setText("cancelling…")
 
     def closeEvent(self, event: object) -> None:  # Qt signature
+        self.readiness.cancel()
         if self._worker is not None:
             self._worker.cancel()
             self._worker.wait(5000)

@@ -86,6 +86,21 @@ def read_pdf(path: str | Path, *, max_pages: int | None = None) -> PdfDocument:
     if max_pages is not None and max_pages < 1:
         raise ValueError(f"max_pages must be >= 1 or None, got {max_pages}")
     source = Path(path)
+    try:
+        return _read_with_pypdf(source, max_pages)
+    except Exception as exc:
+        # pypdf's parser has failed intermittently on readable datasheets with errors
+        # that say nothing about the file (observed: ``NameError: _LENGTH_LIMIT`` inside
+        # ``NumberObject.read_from_stream`` in 1 of 4 runs of the same PDF). pdfium is an
+        # independent reader, so a build is not stopped by one library's fault; when
+        # pdfium cannot read the file either, pypdf's own error is what the caller sees.
+        try:
+            return _read_with_pdfium(source, max_pages)
+        except Exception:
+            raise exc from None
+
+
+def _read_with_pypdf(source: Path, max_pages: int | None) -> PdfDocument:
     reader = PdfReader(str(source))
     page_count = len(reader.pages)
     metadata, title = _metadata(reader)
@@ -100,6 +115,68 @@ def read_pdf(path: str | Path, *, max_pages: int | None = None) -> PdfDocument:
         page_labels=labels,
         text_extraction=text_extraction_of(pages),
         title=title,
+        metadata=metadata,
+    )
+
+
+def _read_with_pdfium(source: Path, max_pages: int | None) -> PdfDocument:
+    """The same inventory read with pdfium: text, raster images and ``/Info`` metadata.
+
+    Page labels are left undeclared (``{}``) — the rule above is that a label is only
+    reported when the document's own tree was read, and this path does not read it.
+    """
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as pdfium_raw
+
+    document = pdfium.PdfDocument(str(source))
+    try:
+        page_count = len(document)
+        limit = page_count if max_pages is None else min(max_pages, page_count)
+        pages: list[PdfPage] = []
+        for index in range(limit):
+            page = document[index]
+            try:
+                textpage = page.get_textpage()
+                try:
+                    text = (textpage.get_text_range() or "").replace("\r\n", "\n")
+                finally:
+                    textpage.close()
+                images = sum(
+                    1
+                    for _ in page.get_objects(
+                        filter=(pdfium_raw.FPDF_PAGEOBJ_IMAGE,), max_depth=_MAX_XOBJECT_DEPTH
+                    )
+                )
+            finally:
+                page.close()
+            pages.append(
+                PdfPage(
+                    pdf_page=index,
+                    printed_label=None,
+                    text=text,
+                    char_count=len(text),
+                    has_embedded_text=bool(text.strip()),
+                    images=images,
+                )
+            )
+        try:
+            metadata = {
+                str(key): str(value).strip()
+                for key, value in document.get_metadata_dict(skip_empty=True).items()
+                if str(value).strip()
+            }
+        except Exception:
+            metadata = {}
+    finally:
+        document.close()
+    return PdfDocument(
+        path=source,
+        file_hash=sha256_file(source),
+        page_count=page_count,
+        pages=pages,
+        page_labels={},
+        text_extraction=text_extraction_of(pages),
+        title=metadata.get("Title") or None,
         metadata=metadata,
     )
 

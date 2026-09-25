@@ -31,15 +31,26 @@ def test_pins_leads_and_labels_fit_the_box(ports: tuple[str, ...]) -> None:
     left, top, right, bottom = map(int, rectangle.groups())
     assert all(value % 16 == 0 for value in (left, top, right, bottom))
     rows: dict[int, list[tuple[int, int]]] = {}
+    edges: dict[str, list[tuple[int, int]]] = {"TOP": [], "BOTTOM": []}
+    side_ys: list[int] = []
     seen = set()
     for x, y, side, offset, name in re.findall(
-        r"PIN (-?\d+) (-?\d+) (LEFT|RIGHT) (\d+)\nPINATTR PinName (\S+)", text
+        r"PIN (-?\d+) (-?\d+) (LEFT|RIGHT|TOP|BOTTOM) (\d+)\nPINATTR PinName (\S+)", text
     ):
         x, y, offset = int(x), int(y), int(offset)
         assert x % 16 == y % 16 == 0
-        assert top + 24 <= y <= bottom - 24
         assert (x, y) not in seen
         seen.add((x, y))
+        if side in ("TOP", "BOTTOM"):
+            edge = top if side == "TOP" else bottom
+            assert f"LINE Normal {x} {y} {x} {edge}" in text
+            assert abs(y - edge) >= 16 and (y < top if side == "TOP" else y > bottom)
+            start, end = x - 8 * len(name), x + 8 * len(name)
+            assert left + 8 <= start < end <= right - 8, (name, start, end, left, right)
+            edges[side].append((start, end))
+            continue
+        assert top + 24 <= y <= bottom - 24
+        side_ys.append(y)
         edge = left if side == "LEFT" else right
         assert f"LINE Normal {x} {y} {edge} {y}" in text
         assert abs(x - edge) >= 16
@@ -48,14 +59,51 @@ def test_pins_leads_and_labels_fit_the_box(ports: tuple[str, ...]) -> None:
         assert left + 8 <= start < end <= right - 8
         rows.setdefault(y, []).append((start, end))
     assert len(seen) == len(ports)
-    for spans in rows.values():
+    for spans in [*rows.values(), *edges.values()]:
         spans.sort()
         assert all(a[1] + 16 <= b[0] for a, b in pairwise(spans))
     positions = sorted(rows)
     assert all(b - a >= 32 for a, b in pairwise(positions))
+    # The label band of top/bottom pins (8..40 units inside the edge) stays clear of the
+    # side rows, and the name windows sit beyond the pin stubs.
+    if edges["TOP"]:
+        assert all(y >= top + 56 for y in side_ys)
+    if edges["BOTTOM"]:
+        assert all(y <= bottom - 56 for y in side_ys)
     windows = dict(re.findall(r"WINDOW ([03]) 0 (-?\d+) Center 2", text))
-    assert int(windows["0"]) <= top - 24
-    assert int(windows["3"]) >= bottom + 24
+    assert int(windows["0"]) <= top - 24 - (32 if edges["TOP"] else 0)
+    assert int(windows["3"]) >= bottom + 24 + (32 if edges["BOTTOM"] else 0)
+
+
+def _placement(ports) -> dict[str, tuple[str, int, int]]:
+    text = symbol_text("PART", ports, model_file="PART.lib")
+    return {
+        name: (side, int(x), int(y))
+        for x, y, side, name in re.findall(
+            r"PIN (-?\d+) (-?\d+) (LEFT|RIGHT|TOP|BOTTOM) \d+\nPINATTR PinName (\S+)", text
+        )
+    }
+
+
+def test_an_op_amp_reads_like_one() -> None:
+    """Supplies top/bottom; each amplifier is IN+, OUT, IN- with OUT between its inputs."""
+    placed = _placement(LM358_PORTS)
+    assert placed["VCC"][0] == "TOP" and placed["VEE"][0] == "BOTTOM"
+    for channel in ("1", "2"):
+        plus, minus, out = placed[f"IN{channel}P"], placed[f"IN{channel}M"], placed[f"OUT{channel}"]
+        assert plus[0] == minus[0] == "LEFT" and out[0] == "RIGHT"
+        assert plus[2] < out[2] < minus[2], (plus, out, minus)
+    assert placed["IN1M"][2] < placed["IN2P"][2], "channel 1 above channel 2"
+
+
+def test_a_buck_regulator_reads_like_one() -> None:
+    placed = _placement(("BOOT", "VIN", "EN", "SS", "VSENSE", "COMP", "GND", "PH", "POWERPAD"))
+    assert placed["VIN"][0] == "TOP"
+    assert placed["GND"][0] == placed["POWERPAD"][0] == "BOTTOM"
+    assert placed["EN"][0] == placed["SS"][0] == "LEFT"
+    assert {placed[name][0] for name in ("BOOT", "PH", "VSENSE", "COMP")} == {"RIGHT"}
+    # The switch node sits beside its boot capacitor, above the feedback pins.
+    assert placed["BOOT"][2] < placed["PH"][2] < placed["VSENSE"][2] < placed["COMP"][2]
 
 
 def test_permuted_orders_are_not_electrically_equivalent() -> None:

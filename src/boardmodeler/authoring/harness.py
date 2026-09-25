@@ -20,9 +20,11 @@ move its model but not the target.
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -51,6 +53,9 @@ _TYPICAL_TOLERANCE = 0.10
 #: Outcome reason for a case where some rows declare no numeric limit: the measurement
 #: is valid and still judges the rows that do.
 _NO_NUMERIC_LIMIT_REASON = "characteristic_without_numeric_limit"
+
+#: Environment override for :func:`harness_workers`.
+HARNESS_WORKERS_ENV = "BOARDMODELER_HARNESS_WORKERS"
 
 
 @dataclass(frozen=True)
@@ -352,6 +357,30 @@ def _run_reason(
     return diag.blocked_reason()
 
 
+def harness_workers() -> int:
+    """How many LTspice runs one harness pass may keep in flight.
+
+    ``BOARDMODELER_HARNESS_WORKERS`` overrides it (``1`` restores strictly serial runs);
+    otherwise up to four, never more than the machine has cores.
+    """
+    raw = os.environ.get(HARNESS_WORKERS_ENV, "").strip()
+    if raw.isdigit() and int(raw) >= 1:
+        return min(int(raw), 16)
+    return max(1, min(4, os.cpu_count() or 1))
+
+
+@dataclass
+class _Job:
+    """One rendered fixture, ready for the simulator."""
+
+    probe_id: str
+    run_dir: Path
+    chars: tuple
+    probe: object
+    params_in: dict
+    deck: Path
+
+
 def run_harness(
     *,
     model_lib: Path,
@@ -368,6 +397,12 @@ def run_harness(
     cancelled harness stops before launching the next probe; probes that were
     never run are reported UNKNOWN with reason ``cancelled`` so that a partial
     report is never mistaken for a passing one.
+
+    The first fixture runs alone as a gate: a candidate that times out or does not
+    converge there is sent back for repair and every other fixture is deferred
+    (UNKNOWN), exactly as before. Once the gate simulates, the remaining fixtures run
+    concurrently (:func:`harness_workers`), and a timeout or convergence failure in
+    one of them marks only its own rows UNKNOWN.
     """
     model_lib = Path(model_lib)
     workdir = Path(workdir)
@@ -384,132 +419,161 @@ def run_harness(
     except ProbeError as exc:
         library_error = exc.full_reason()
 
-    outcomes: list[ProbeOutcome] = []
-    for case_id, probe_id, chars in spec.cases():
+    # One slot per case, filled in spec order whatever order the runs finish in.
+    cases = list(spec.cases())
+    slots: list[ProbeOutcome | _Job | None] = [None] * len(cases)
+    for index, (case_id, probe_id, chars) in enumerate(cases):
         run_dir = probes_root / case_id
         run_dir.mkdir(parents=True, exist_ok=True)
         if library_error is not None:
-            outcomes.append(_unknown_outcome(probe_id, run_dir, chars, library_error))
+            slots[index] = _unknown_outcome(probe_id, run_dir, chars, library_error)
             continue
+        slots[index] = _prepare(probe_id, run_dir, chars, model_lib, subckt, spec)
+
+    jobs = [index for index, slot in enumerate(slots) if isinstance(slot, _Job)]
+
+    def execute(index: int) -> tuple[ProbeOutcome, str | None]:
+        job = slots[index]
+        assert isinstance(job, _Job)
         if cancel is not None and cancel.is_set():
-            outcomes.append(_unknown_outcome(probe_id, run_dir, chars, "cancelled"))
-            continue
+            return _unknown_outcome(job.probe_id, job.run_dir, job.chars, "cancelled"), None
+        return _run_job(job, ltspice, timeout_s)
 
-        probe_params = [char.probe_params for char in chars]
-        try:
-            probe = PROBES[probe_id]
-            if probe_id == "circuit_measurement":
-                from boardmodeler.authoring.circuit_probe import make_probe
+    if jobs:
+        gate, rest = jobs[0], jobs[1:]
+        outcome, reason = execute(gate)
+        slots[gate] = outcome
+        if reason is not None and reason.startswith(
+            ("run_timeout:", "sim_convergence_failure:", "sim_output_unreadable:")
+        ):
+            # Repair an invalid candidate before spending another timeout on every
+            # remaining fixture. All deferred rows remain UNKNOWN and are run
+            # normally after a changed candidate is supplied.
+            deferred = "deferred_after_invalid_simulation: " + reason
+            for index in rest:
+                job = slots[index]
+                assert isinstance(job, _Job)
+                slots[index] = _unknown_outcome(job.probe_id, job.run_dir, job.chars, deferred)
+        elif rest:
+            workers = min(harness_workers(), len(rest))
+            if workers <= 1:
+                for index in rest:
+                    slots[index] = execute(index)[0]
+            else:
+                with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="harness") as pool:
+                    for index, (outcome, _reason) in zip(
+                        rest, pool.map(execute, rest), strict=True
+                    ):
+                        slots[index] = outcome
 
-                probe = make_probe(chars[0].probe_recipe)
-        except KeyError:
-            outcomes.append(_unknown_outcome(probe_id, run_dir, chars, f"unknown_probe:{probe_id}"))
-            continue
-        except ValueError as exc:
-            outcomes.append(_unknown_outcome(probe_id, run_dir, chars, f"invalid_recipe:{exc}"))
-            continue
-
-        try:
-            test_model, test_subckt = model_lib, subckt
-            if chars[0].probe_ports:
-                from boardmodeler.authoring.pin_roles import write_probe_adapter
-
-                test_model, test_subckt = write_probe_adapter(
-                    model_lib,
-                    subckt,
-                    chars[0].probe_ports,
-                    spec.pin_map,
-                    run_dir / "fixture-adapter.lib",
-                )
-            deck_text = probe.render(
-                model_lib=test_model, subckt=test_subckt, params=probe_params[0]
-            )
-        except (ProbeError, ValueError) as exc:
-            reason = exc.full_reason() if isinstance(exc, ProbeError) else str(exc)
-            outcomes.append(_unknown_outcome(probe_id, run_dir, chars, reason))
-            continue
-
-        deck = run_dir / "deck.cir"
-        deck.write_text(deck_text, encoding="utf-8", newline="\n")
-        result = run_batch(ltspice, deck, run_dir, timeout_s=timeout_s)
-        log = parse_log(result.log_path) if result.log_path is not None else None
-        params = probe.merged_params(probe_params[0])
-        reason = (
-            _run_reason(
-                result,
-                log,
-                tstop_s=params["tstop_s"],
-                tmax_s=params["tmax_s"],
-                analysis=probe.analysis,
-            )
-            if log is not None
-            else f"run_incomplete: {result.observed()}"
-        )
-        if reason is not None:
-            outcomes.append(_unknown_outcome(probe_id, run_dir, chars, reason))
-            if reason.startswith(
-                ("run_timeout:", "sim_convergence_failure:", "sim_output_unreadable:")
-            ):
-                # Repair an invalid candidate before spending another timeout on
-                # every remaining fixture. All deferred rows remain UNKNOWN and
-                # are run normally after a changed candidate is supplied.
-                library_error = "deferred_after_invalid_simulation: " + reason
-            continue
-
-        try:
-            measured = probe.measure(result.raw_path, probe_params[0])
-            key, value = judge_value(probe_id, measured)
-        except ProbeError as exc:
-            outcomes.append(_unknown_outcome(probe_id, run_dir, chars, exc.full_reason()))
-            continue
-
-        verdicts: list[str] = []
-        status = Status.PASS.value
-        cause: str | None = None
-        for char in chars:
-            char_status, detail, char_cause = _judge(char, key, value)
-            verdicts.append(detail)
-            if char_status == Status.FAIL.value:
-                status = Status.FAIL.value
-                cause = cause or char_cause
-            elif char_status == Status.UNKNOWN.value and status != Status.FAIL.value:
-                status = Status.UNKNOWN.value
-        citations = tuple(_citation(char) for char in chars)
-        outcomes.append(
-            ProbeOutcome(
-                probe_id=probe_id,
-                status=status,
-                measured={name: float(value) for name, value in measured.items()},
-                detail="; ".join(verdicts),
-                unknown_reason=(
-                    _NO_NUMERIC_LIMIT_REASON if status == Status.UNKNOWN.value else None
-                ),
-                run_dir=str(run_dir),
-                char_ids=tuple(char.char_id for char in chars),
-                judged=f"{key} = {value:.6g} {chars[0].unit}".strip(),
-                citations=citations,
-                cause=cause,
-                operating_point=(
-                    {
-                        **chars[0].probe_recipe.get("operating_point", {}),
-                        "temperature_C": chars[0].probe_recipe.get("temperature", 25),
-                        "tstop_s": chars[0].probe_recipe.get("stop"),
-                        "tmax_s": chars[0].probe_recipe.get("step"),
-                    }
-                    if chars[0].probe_recipe
-                    else dict(params)
-                ),
-                artifacts={
-                    str(path.resolve()): sha256_file(path)
-                    for path in (result.raw_path, result.log_path)
-                    if path is not None
-                },
-            )
-        )
-
+    outcomes = [slot for slot in slots if isinstance(slot, ProbeOutcome)]
     return HarnessReport(
         part=spec.part,
         model_sha256=model_sha,
         spec_digest=spec.digest(),
         outcomes=tuple(outcomes),
     )
+
+
+def _prepare(probe_id, run_dir, chars, model_lib, subckt, spec) -> ProbeOutcome | _Job:
+    """Render one fixture's deck, or the UNKNOWN outcome that says why it cannot run."""
+    probe_params = [char.probe_params for char in chars]
+    try:
+        probe = PROBES[probe_id]
+        if probe_id == "circuit_measurement":
+            from boardmodeler.authoring.circuit_probe import make_probe
+
+            probe = make_probe(chars[0].probe_recipe)
+    except KeyError:
+        return _unknown_outcome(probe_id, run_dir, chars, f"unknown_probe:{probe_id}")
+    except ValueError as exc:
+        return _unknown_outcome(probe_id, run_dir, chars, f"invalid_recipe:{exc}")
+
+    try:
+        test_model, test_subckt = model_lib, subckt
+        if chars[0].probe_ports:
+            from boardmodeler.authoring.pin_roles import write_probe_adapter
+
+            test_model, test_subckt = write_probe_adapter(
+                model_lib,
+                subckt,
+                chars[0].probe_ports,
+                spec.pin_map,
+                run_dir / "fixture-adapter.lib",
+            )
+        deck_text = probe.render(model_lib=test_model, subckt=test_subckt, params=probe_params[0])
+    except (ProbeError, ValueError) as exc:
+        reason = exc.full_reason() if isinstance(exc, ProbeError) else str(exc)
+        return _unknown_outcome(probe_id, run_dir, chars, reason)
+
+    deck = run_dir / "deck.cir"
+    deck.write_text(deck_text, encoding="utf-8", newline="\n")
+    return _Job(probe_id, run_dir, tuple(chars), probe, probe_params[0], deck)
+
+
+def _run_job(job: _Job, ltspice: Path, timeout_s: float) -> tuple[ProbeOutcome, str | None]:
+    """Simulate one rendered fixture and judge it; ``reason`` is set when it did not run."""
+    probe_id, run_dir, chars, probe = job.probe_id, job.run_dir, job.chars, job.probe
+    result = run_batch(ltspice, job.deck, run_dir, timeout_s=timeout_s)
+    log = parse_log(result.log_path) if result.log_path is not None else None
+    params = probe.merged_params(job.params_in)
+    reason = (
+        _run_reason(
+            result,
+            log,
+            tstop_s=params["tstop_s"],
+            tmax_s=params["tmax_s"],
+            analysis=probe.analysis,
+        )
+        if log is not None
+        else f"run_incomplete: {result.observed()}"
+    )
+    if reason is not None:
+        return _unknown_outcome(probe_id, run_dir, chars, reason), reason
+
+    try:
+        measured = probe.measure(result.raw_path, job.params_in)
+        key, value = judge_value(probe_id, measured)
+    except ProbeError as exc:
+        return _unknown_outcome(probe_id, run_dir, chars, exc.full_reason()), None
+
+    verdicts: list[str] = []
+    status = Status.PASS.value
+    cause: str | None = None
+    for char in chars:
+        char_status, detail, char_cause = _judge(char, key, value)
+        verdicts.append(detail)
+        if char_status == Status.FAIL.value:
+            status = Status.FAIL.value
+            cause = cause or char_cause
+        elif char_status == Status.UNKNOWN.value and status != Status.FAIL.value:
+            status = Status.UNKNOWN.value
+    citations = tuple(_citation(char) for char in chars)
+    outcome = ProbeOutcome(
+        probe_id=probe_id,
+        status=status,
+        measured={name: float(value) for name, value in measured.items()},
+        detail="; ".join(verdicts),
+        unknown_reason=(_NO_NUMERIC_LIMIT_REASON if status == Status.UNKNOWN.value else None),
+        run_dir=str(run_dir),
+        char_ids=tuple(char.char_id for char in chars),
+        judged=f"{key} = {value:.6g} {chars[0].unit}".strip(),
+        citations=citations,
+        cause=cause,
+        operating_point=(
+            {
+                **chars[0].probe_recipe.get("operating_point", {}),
+                "temperature_C": chars[0].probe_recipe.get("temperature", 25),
+                "tstop_s": chars[0].probe_recipe.get("stop"),
+                "tmax_s": chars[0].probe_recipe.get("step"),
+            }
+            if chars[0].probe_recipe
+            else dict(params)
+        ),
+        artifacts={
+            str(path.resolve()): sha256_file(path)
+            for path in (result.raw_path, result.log_path)
+            if path is not None
+        },
+    )
+    return outcome, None
