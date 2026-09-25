@@ -447,3 +447,26 @@ Evidence: Spice Maker's `docs/evidence/2026-09-24-usability/REPORT.md`.
 | Full suite incl. GUI (`e103f49`) | 1448 passed, 25 skipped, 4 failed; the 4 were stale tests (doctor expected `LTSPICE_EXE` discovery; an integration test expected PASS with 21 unverified fixture rows) and are fixed in `381f65f`/`8d2d909` |
 | `tests/test_cli_doctor.py tests/test_cli_run_tests.py` after the fix | 17 passed |
 | `tests/pipeline/test_make_model.py` after the fix | 55 passed |
+
+## 2026-09-25 — template-first buck checkpoint (Bob edition; release pending)
+
+Decisions D-041–D-043 cover the shared deterministic seed and physical fixture
+checks. The general edition's detailed TPS54332DDA and TPS54331 measurements
+are recorded in its `docs/evidence/2026-09-25-buck-template/REPORT.md` and
+`docs/evidence/2026-09-25-tps54331-second-device/REPORT.md`. Those measurements
+are evidence for the shared template and harness, not a Bob-agent authoring run.
+
+| Check | Observed result |
+|---|---|
+| Offline Bob product build, `--backend bob --no-reinforce --iterations 1 --json` | Exit 0 in 146.1 s; published `.lib` and model card under `C:\Users\basam\src\.smsnap\r2\models\B1-template-product`; status UNKNOWN, 12 PASS / 4 FAIL / 3 UNKNOWN |
+| Shared TPS54332DDA seed and general-edition LTspice measurement | 12 PASS / 4 FAIL / 3 UNKNOWN on 19 frozen rows; known bad fixture designs were not rewritten |
+| Shared TPS54331 seed and general-edition LTspice measurement | 3 PASS / 0 FAIL / 0 UNKNOWN on three cited rows; current limit not measured |
+| Focused Bob security/switch tests | 5 passed |
+| Release/source credential scan | 0 findings in 6,013 files |
+
+The Bob product build used `BOARDMODELER_NO_NETWORK=1`, the official local
+TPS54332 PDF, frozen local requirements and bindings, and an explicitly selected
+LTspice executable. Bob repair refused before making a request; no Bob key or
+live Bob inference was used. The product's model verdict remains UNKNOWN.
+Current GUI, full-suite, installer and fresh-download checks remain pending,
+as does the GitHub push.

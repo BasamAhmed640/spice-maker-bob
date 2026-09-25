@@ -258,3 +258,39 @@ matched the hint "a" inside any name, which put POWERPAD among the inputs, VIN a
 bottom-left and VEE among the outputs. Geometry only: `SpiceOrder` still follows the
 `.subckt` declaration, checked by `validate_symbol` and by a real LTspice netlist test.
 `tools/render_symbol.py` draws an `.asy` the way LTspice places pin names, for review.
+
+## D-041 — Seed recognized buck converters before author repair (2026-09-25)
+
+A cited, buck-specific requirements set and the BOOT/VIN/EN/SS/VSENSE/COMP/GND/PH
+pin family can select a deterministic peak-current buck template. The seed records
+which values come from the datasheet and which remain template defaults, then goes
+through the same LTspice product harness as any authored model. Seeding needs no
+provider request. Any later author repair is bounded by measured feedback; an
+unverified or partly failing seed remains UNKNOWN rather than being promoted to
+PASS. The Bob edition retains its tool-free Bob Shell boundary and has no fallback
+to a general-edition provider.
+
+## D-042 — Sanity-check planned circuits before freezing (2026-09-25)
+
+The planner checks a proposed buck fixture's external catch-diode direction,
+output capacitor, compensation path and soft-start timing against the cited
+device values before the fixture is frozen. A COMP shunt that cannot reach the
+control threshold with the cited error-amplifier current, or a steady-state
+window that ends before soft start, is refused with a concrete reason. This
+does not change the limits or retroactively rewrite already frozen fixtures.
+Current magnitudes are compared by absolute value when the cited characteristic
+does not specify polarity; the signed simulator measurement is retained, and
+explicitly cited direction or negative bounds still use signed comparison.
+Switching frequency is measured from consecutive edges, including legacy plans
+that use the same signal for trigger and measurement.
+
+## D-043 — Keep template evidence scoped to measured rows (2026-09-25)
+
+The TPS54332DDA seed measured 12 PASS, 4 FAIL and 3 UNKNOWN against 19 frozen
+rows; the offline product builds in both editions ended UNKNOWN with the same
+counts. A separate official TPS54331 datasheet produced a cited three-row
+SpecSet that measured 3 PASS, 0 FAIL and 0 UNKNOWN in LTspice. The TPS54331
+datasheet's 3.5 A current-limit figure is a minimum and 5.8 A is typical, so
+the template's current-limit default was not presented as a cited maximum or
+included in those three measured rows. These results demonstrate the bounded
+seed path, not a verified full-device model or a completed release gate.
