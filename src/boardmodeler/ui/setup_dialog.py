@@ -273,7 +273,14 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
         self.key_hint.setWordWrap(True)
         self.key_hint.setStyleSheet(_HINT)
         self.key_hint.setMaximumWidth(620)
-        grid.addWidget(self.key_hint, row, 1, 1, 3)
+        # A word-wrapped QLabel spanning grid columns can be given less height than
+        # heightForWidth() requests on Windows. An inner layout lets Qt size this row
+        # from the label's actual wrapped height at the current width.
+        hint_row = QHBoxLayout()
+        hint_row.setContentsMargins(0, 0, 0, 0)
+        hint_row.addWidget(self.key_hint)
+        hint_row.addStretch(1)
+        grid.addLayout(hint_row, row, 1, 1, 3)
         row += 1
         #: The model id row: only providers that take one from this application show it.
         self.model_label = QLabel("MODEL")

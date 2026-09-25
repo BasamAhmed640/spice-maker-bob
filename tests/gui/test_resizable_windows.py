@@ -128,6 +128,38 @@ def test_the_settings_stay_scrollable_when_the_page_is_small(qtbot, isolated_con
     qtbot.waitUntil(lambda: page.scroll_area.horizontalScrollBar().isVisible(), timeout=2_000)
 
 
+def test_the_setup_key_hint_gets_its_full_wrapped_height(qtbot, isolated_config: Path) -> None:
+    """The long key hint used to paint over the status and model rows on Windows.
+
+    Qt may under-allocate a word-wrapped label that spans grid columns. Check the
+    rendered widget's actual width and height, including after both resize directions.
+    """
+    from boardmodeler.ui.setup_dialog import SetupDialog
+
+    page = SetupDialog()
+    qtbot.addWidget(page)
+    page.show()
+    qtbot.waitExposed(page)
+
+    for size in (None, QSize(560, 340), QSize(1240, 820)):
+        if size is not None:
+            page.resize(size)
+            qtbot.wait(10)
+        status = page.key_status
+        hint = page.key_hint
+        next_row = page.model_edit if page.model_edit.isVisible() else page.model_dir_edit
+        status_bottom = status.mapTo(page, status.rect().bottomLeft()).y()
+        hint_top = hint.mapTo(page, hint.rect().topLeft()).y()
+        hint_bottom = hint.mapTo(page, hint.rect().bottomLeft()).y()
+        next_row_top = next_row.mapTo(page, next_row.rect().topLeft()).y()
+
+        assert hint.height() >= hint.heightForWidth(hint.width()), (
+            f"hint is clipped at window size {page.size()}: "
+            f"{hint.width()}x{hint.height()} needs {hint.heightForWidth(hint.width())} high"
+        )
+        assert status_bottom < hint_top < hint_bottom < next_row_top
+
+
 def test_the_scroll_area_rule_does_not_repaint_the_settings_buttons(
     qtbot, isolated_config: Path
 ) -> None:
@@ -150,7 +182,13 @@ def test_the_scroll_area_rule_does_not_repaint_the_settings_buttons(
     assert save.isEnabled()
     top_left = save.mapTo(page, save.rect().topLeft())
     # Inside the button's own padding, clear of the black glyphs of its label.
-    background = image.pixelColor(top_left.x() + 4, top_left.y() + save.height() // 2)
+    # QWidget coordinates are logical; grab().toImage() pixels are physical on a
+    # scaled Windows display. Sampling without the ratio reads another control.
+    ratio = image.devicePixelRatio()
+    background = image.pixelColor(
+        round((top_left.x() + 4) * ratio),
+        round((top_left.y() + save.height() // 2) * ratio),
+    )
     sampled = (background.red(), background.green(), background.blue())
     assert sampled != (0, 0, 0), f"SAVE renders black ({sampled}); it would be invisible"
     assert sampled in {(170, 170, 170), (255, 255, 255)}, sampled
