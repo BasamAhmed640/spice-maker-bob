@@ -468,5 +468,19 @@ The Bob product build used `BOARDMODELER_NO_NETWORK=1`, the official local
 TPS54332 PDF, frozen local requirements and bindings, and an explicitly selected
 LTspice executable. Bob repair refused before making a request; no Bob key or
 live Bob inference was used. The product's model verdict remains UNKNOWN.
-Current GUI, full-suite, installer and fresh-download checks remain pending,
-as does the GitHub push.
+
+Subsequent release checks on this machine:
+
+| Check | Observed result |
+|---|---|
+| Full suite | 1,486 passed / 25 skipped / 0 failed in 364.12 s |
+| Direct GUI control sweep | 5 surfaces, 57 controls, 38 clicked, 0 errors |
+| General-edition LM358 re-verification of the shared harness | 19 PASS / 0 FAIL / 0 UNKNOWN in 13.623 s; no Bob provider run |
+| Shared core comparison with general edition | 41 files byte-identical |
+| `ruff check .` | Clean; `ruff format --check .` still has older unrelated formatting drift |
+| Local v1.6.0 `Install.exe` | PASS: GUI startup, install, update, two isolated copies, no outside-folder additions; 89,462,784 bytes; SHA256 `a15f6656810f161f498b9099067692be32c797f0af8306efc07df5977b92a0c9` |
+| Final release/source credential scan | 0 findings in 7,255 files |
+
+A live GUI model-build verdict, verification from a fresh GitHub Download ZIP,
+and the GitHub push remain pending. The local installer result does not cover
+the fresh-download path.
