@@ -66,9 +66,10 @@ def refusal_detail(stage: str) -> str:
     carry a datasheet path, a key or a URL into a log.
     """
     return (
-        f"internet_access_off: {SETUP_SWITCH} is off, or {NETWORK_ENV_VAR} is set in this "
-        f"environment, so {stage} was refused before any request was made; turn INTERNET "
-        f"ACCESS on in SETUP and unset {NETWORK_ENV_VAR} to allow it"
+        f"internet_access_off: {SETUP_SWITCH} is off, {NETWORK_ENV_VAR} is set, or "
+        f"settings could not be read, so {stage} was refused before any request was made; "
+        f"turn INTERNET ACCESS on in SETUP, unset {NETWORK_ENV_VAR}, and repair any "
+        "invalid settings to allow it"
     )
 
 
