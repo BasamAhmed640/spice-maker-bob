@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from boardmodeler.config import AppConfig, load_config, save_config
-from boardmodeler.security.network import NetworkRefused, internet_allowed
+from boardmodeler.security.network import NetworkRefused, internet_allowed, require_network
 
 
 def test_old_web_choice_migrates_to_the_one_switch(tmp_path: Path) -> None:
@@ -29,6 +29,18 @@ def test_environment_can_force_the_switch_off(monkeypatch) -> None:
     assert internet_allowed()
     monkeypatch.setenv("BOARDMODELER_NO_NETWORK", "1")
     assert not internet_allowed()
+
+
+def test_unreadable_config_fails_closed(monkeypatch) -> None:
+    monkeypatch.delenv("BOARDMODELER_NO_NETWORK", raising=False)
+
+    def unreadable() -> AppConfig:
+        raise ValueError("invalid settings")
+
+    monkeypatch.setattr("boardmodeler.config.load_config", unreadable)
+    assert not internet_allowed()
+    with pytest.raises(NetworkRefused, match="internet_access_off"):
+        require_network("authoring")
 
 
 def test_bob_process_is_refused_before_spawn_when_off(tmp_path: Path, monkeypatch) -> None:

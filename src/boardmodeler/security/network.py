@@ -91,23 +91,19 @@ def internet_allowed() -> bool:
     """``True`` only when the user's switch is on *and* the environment has not pinned it off.
 
     The environment is consulted first, so a pinned-off session answers ``False`` even
-    when the config file cannot be read at all. A config that cannot be read falls back
-    to the documented default (on): the switch is a user's preference, and a broken file
-    is reported by whatever needed the config rather than turned into a silent egress
-    ban here.
+    when the config file cannot be read at all. A broken config fails closed so a
+    saved off preference cannot silently turn into permission to send a request.
     """
     if _env_pins_off():
         return False
     try:
         from boardmodeler.config import load_config
     except ImportError:  # pragma: no cover - the package is always importable together
-        return True
+        return False
     try:
         return bool(load_config().internet_access)
     except Exception:
-        # A malformed config is an error the caller will report; it is not a licence to
-        # answer "off" for a switch that defaults to on.
-        return True
+        return False
 
 
 def require_network(stage: str) -> None:
