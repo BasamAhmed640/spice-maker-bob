@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import shutil
 from collections.abc import Iterable
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from boardmodeler.authoring.harness import judge_characteristic
 from boardmodeler.domain.enums import Status
+from boardmodeler.models.library import ModelStoreError, subckt_ports
 from boardmodeler.models.symbolism import symbol_text, validate_symbol
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -439,16 +441,23 @@ def write_deliverables(
 
     example = out_dir / "example.cir"
     library = out_dir / model_file
-    # The op-amp example is rendered from the model's own port list, so it needs the
-    # file: a BLOCKED or model-less build falls back to the generic deck instead of
-    # crashing after its outcome was already decided.
+    # The physical examples use the model's declared port order, not a package's
+    # assumed pin order. A BLOCKED or model-less build still writes its card.
     if library.is_file() and any((row.probe or "").startswith("opamp_") for row in spec.covered()):
         from boardmodeler.authoring.probes import PROBES
 
         text = PROBES["opamp_slew_rise"].render(model_lib=library, subckt=subckt, params={})
         text = text.replace(library.resolve().as_posix(), model_file)
     else:
-        text = _example_deck(subckt=subckt, model_file=model_file)
+        ports: tuple[str, ...] = ()
+        if library.is_file():
+            with suppress(OSError, UnicodeError, ModelStoreError):
+                ports = subckt_ports(library.read_text(encoding="utf-8"), subckt)
+        text = (
+            _physical_buck_example_deck(subckt=subckt, model_file=model_file, ports=ports)
+            if _is_physical_buck(ports)
+            else _example_deck(subckt=subckt, model_file=model_file)
+        )
     example.write_text(text, encoding="utf-8", newline="\n")
     written.append(example)
 
@@ -484,6 +493,58 @@ def _example_deck(*, subckt: str, model_file: str) -> str:
             ".tran 10u 5m",
             ".options maxstep=1u",
             ".probe V(vout) I(L1) V(sw)",
+            ".end",
+            "",
+        ]
+    )
+
+
+_BUCK_PORTS = frozenset({"BOOT", "VIN", "EN", "SS", "VSENSE", "COMP", "GND", "PH"})
+_BUCK_NODES = {
+    "BOOT": "boot",
+    "VIN": "vin",
+    "EN": "en",
+    "SS": "ss",
+    "VSENSE": "vsense",
+    "COMP": "comp",
+    "GND": "0",
+    "PH": "ph",
+    "POWERPAD": "0",
+}
+
+
+def _is_physical_buck(ports: tuple[str, ...]) -> bool:
+    named = {port.upper() for port in ports}
+    return len(named) == len(ports) and _BUCK_PORTS <= named <= _BUCK_PORTS | {"POWERPAD"}
+
+
+def _physical_buck_example_deck(*, subckt: str, model_file: str, ports: tuple[str, ...]) -> str:
+    """One illustrative closed-loop power stage, wired in the model's own order."""
+    nodes = " ".join(_BUCK_NODES[port.upper()] for port in ports)
+    return "\n".join(
+        [
+            f"* {subckt}: physical buck example with a 12 V input and a 3.3 V target",
+            "* Example component values are illustrative; see MODEL_CARD.md for tested limits.",
+            f'.include "{model_file}"',
+            "VIN vin 0 12",
+            "CIN vin 0 10u",
+            "VEN en 0 12",
+            "CSS ss 0 10n",
+            "CBOOT boot ph 100n",
+            "RFB1 out vsense 15k",
+            "RFB2 vsense 0 4.75k",
+            "RCOMP comp comp_mid 75k",
+            "CCOMP comp_mid 0 180p",
+            "CHF comp 0 10p",
+            "Dcatch 0 ph DCATCH",
+            ".model DCATCH D(Is=1e-8 N=1.1 Rs=0.04 Cjo=300p Bv=40 Ibv=1m)",
+            "LOUT ph out 4.7u Rser=10m",
+            "COUT out 0 94u Rser=3m",
+            "RLOAD out 0 10",
+            f"XU1 {nodes} {subckt}",
+            ".tran 0 12m 0 200n",
+            ".meas tran vout_avg AVG V(out) FROM=10m TO=12m",
+            ".save V(out) V(ph) I(LOUT)",
             ".end",
             "",
         ]
