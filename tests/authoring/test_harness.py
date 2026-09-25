@@ -573,3 +573,94 @@ def test_model_ports_is_reused_for_the_harness(tmp_path: Path) -> None:
     with pytest.raises(ProbeError) as excinfo:
         model_ports(lib, "BM_ABSENT")
     assert excinfo.value.reason == "subckt_missing:BM_ABSENT"
+
+
+def test_one_fixture_timeout_no_longer_voids_the_rest_and_runs_overlap(
+    monkeypatch: pytest.MonkeyPatch, spec: SpecSet, tmp_path: Path
+) -> None:
+    """After the gate simulates, a later timeout marks only its own rows UNKNOWN.
+
+    Before, the first timeout deferred every remaining fixture (8 TPS54332 rows were lost
+    to one 120 s timeout); the remaining fixtures now also run concurrently.
+    """
+    import threading
+    import time
+
+    lib = write_regulator_library(tmp_path / "buck.lib", [SUBCKT])
+    log = tmp_path / "deck.log"
+    log.write_text("Circuit: deck.cir\n", encoding="utf-8")
+    lock = threading.Lock()
+    state = {"calls": 0, "active": 0, "peak": 0}
+
+    def fake_run_batch(exe, deck, run_dir, *, timeout_s, **kwargs):
+        with lock:
+            state["calls"] += 1
+            call = state["calls"]
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+        time.sleep(0.05)
+        with lock:
+            state["active"] -= 1
+        timed_out = call == 2  # the first fixture after the gate
+        return BatchResult(
+            deck=Path(deck),
+            run_dir=Path(run_dir),
+            exit_code=1,
+            stdout="",
+            stderr="",
+            wall_s=0.05,
+            timed_out=timed_out,
+            raw_path=None,
+            log_path=log if timed_out else None,
+        )
+
+    monkeypatch.setattr(harness_mod, "run_batch", fake_run_batch)
+    monkeypatch.setenv(harness_mod.HARNESS_WORKERS_ENV, "4")
+    report = run_harness(
+        model_lib=lib,
+        subckt=SUBCKT,
+        spec=spec,
+        workdir=tmp_path / "work",
+        ltspice=tmp_path / "LTspice.exe",
+    )
+    reasons = [outcome.unknown_reason or "" for outcome in report.outcomes]
+    assert len(report.outcomes) >= 3
+    assert state["calls"] == len(report.outcomes), "every fixture was simulated"
+    assert sum(reason.startswith("run_timeout") for reason in reasons) == 1, reasons
+    assert not any("deferred_after_invalid_simulation" in reason for reason in reasons), reasons
+    assert state["peak"] > 1, "fixtures after the gate should overlap"
+
+
+def test_a_gate_that_does_not_converge_still_defers_the_rest(
+    monkeypatch: pytest.MonkeyPatch, spec: SpecSet, tmp_path: Path
+) -> None:
+    lib = write_regulator_library(tmp_path / "buck.lib", [SUBCKT])
+    log = tmp_path / "deck.log"
+    log.write_text("Singular matrix: Check node n001\n", encoding="utf-8")
+    calls: list[int] = []
+
+    def fake_run_batch(exe, deck, run_dir, *, timeout_s, **kwargs):
+        calls.append(1)
+        return BatchResult(
+            deck=Path(deck),
+            run_dir=Path(run_dir),
+            exit_code=1,
+            stdout="",
+            stderr="",
+            wall_s=0.01,
+            timed_out=False,
+            raw_path=None,
+            log_path=log,
+        )
+
+    monkeypatch.setattr(harness_mod, "run_batch", fake_run_batch)
+    report = run_harness(
+        model_lib=lib,
+        subckt=SUBCKT,
+        spec=spec,
+        workdir=tmp_path / "work",
+        ltspice=tmp_path / "LTspice.exe",
+    )
+    assert len(calls) == 1, "only the gate runs against a candidate that cannot converge"
+    reasons = [outcome.unknown_reason or "" for outcome in report.outcomes[1:]]
+    assert reasons and all(r.startswith("deferred_after_invalid_simulation") for r in reasons)

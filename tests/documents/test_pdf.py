@@ -395,3 +395,37 @@ def test_rotated_page_is_measured_and_rendered_as_displayed(tmp_path: Path) -> N
     assert page_size_points(document, 0) == (792.0, 612.0)
     width, height, _ = _png_header_and_first_pixel(render_page_png(document, 0, scale=1.0))
     assert (width, height) == (792, 612)
+
+
+def test_a_pypdf_internal_fault_falls_back_to_pdfium(tmp_path, monkeypatch):
+    """pypdf raised ``NameError: _LENGTH_LIMIT`` on a readable datasheet (1 of 4 runs).
+
+    Before the fallback that one fault stopped the whole build at "read"; now the same
+    pages, text and image counts come from pdfium and the build continues.
+    """
+    import boardmodeler.documents.pdf as pdf_module
+
+    image = tmp_path / "red.png"
+    image.write_bytes(_RED_PNG)
+    source = tmp_path / "mixed.pdf"
+    _write_image_only_pdf(source, image)
+    expected = read_pdf(source)
+
+    def broken_reader(*_args, **_kwargs):
+        raise NameError("name '_LENGTH_LIMIT' is not defined")
+
+    monkeypatch.setattr(pdf_module, "PdfReader", broken_reader)
+    doc = read_pdf(source)
+    assert doc.page_count == expected.page_count == 2
+    assert "The only text in this file" in page_text(doc, 1)
+    assert [page.images for page in doc.pages] == [page.images for page in expected.pages]
+    assert doc.text_extraction == expected.text_extraction == "hybrid"
+    assert doc.page_labels == {}  # a label is reported only when the document's tree was read
+
+
+def test_an_unreadable_file_still_raises_pypdfs_error(tmp_path):
+    bad = tmp_path / "bad.pdf"
+    bad.write_bytes(b"not a pdf at all")
+    with pytest.raises(Exception) as caught:
+        read_pdf(bad)
+    assert "pypdf" in type(caught.value).__module__
