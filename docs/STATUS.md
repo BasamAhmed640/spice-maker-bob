@@ -478,9 +478,12 @@ Subsequent release checks on this machine:
 | General-edition LM358 re-verification of the shared harness | 19 PASS / 0 FAIL / 0 UNKNOWN in 13.623 s; no Bob provider run |
 | Shared core comparison with general edition | 41 files byte-identical |
 | `ruff check .` | Clean; `ruff format --check .` still has older unrelated formatting drift |
-| Local v1.6.0 `Install.exe` | PASS: GUI startup, install, update, two isolated copies, no outside-folder additions; 89,462,784 bytes; SHA256 `a15f6656810f161f498b9099067692be32c797f0af8306efc07df5977b92a0c9` |
-| Final release/source credential scan | 0 findings in 7,255 files |
+| Final local v1.6.0 `Install.exe` | PASS: GUI startup, install, update, two isolated copies, no outside-folder additions; 89,463,296 bytes; SHA256 `0b44f3b9976b66821f7654bdc066791dd69ee12ce5e4ce90a205b05b4509921b` |
+| Final release/source credential scan | 0 findings in 8,483 files |
 
-A live GUI model-build verdict, verification from a fresh GitHub Download ZIP,
-and the GitHub push remain pending. The local installer result does not cover
-the fresh-download path.
+The general edition's [full TPS54332DDA GUI build](https://github.com/BasamAhmed640/spice-maker/blob/main/docs/evidence/2026-09-25-gui-build/REPORT.md)
+delivered a convergent but UNKNOWN model in 1,230.314 s (20m30s); it was
+not a Bob inference run. No Bob API key is available here for a live Bob turn.
+Final local installer checks above include the terminal-stage UI fix and
+fail-closed Internet setting. Verification from a fresh GitHub Download ZIP
+and the GitHub push remain pending.
