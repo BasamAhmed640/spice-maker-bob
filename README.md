@@ -57,6 +57,12 @@ without downloading packages during installation or using the computer's Python.
 `Boardmodeler.cmd` uses that environment for command-line work; `Start.cmd` opens
 the separately frozen GUI, because the `.venv` does not include Qt.
 
+A fresh ZIP downloaded from GitHub main was installed and checked on Windows:
+the frozen GUI opened, the installer created its local Python 3.14.2 `.venv`,
+the selected LTspice path worked, and a saved model passed 8/8 simulator retests.
+The fixture-based build still had 21 UNKNOWN requirements, so these checks do
+not establish full device accuracy. [Release evidence](docs/evidence/2026-09-25-release/REPORT.md).
+
 Open IBM Bob Shell once to review and accept IBM's license. Then open SETUP, use
 **BROWSE** to choose the LTspice executable, run its smoke test and save a Bob API key.
 Bob Shell uses an Inference-scoped key through the process environment; the key is kept in
@@ -90,6 +96,10 @@ GO for each build. CANCEL requests cancellation;
 results provide Open model folder, Run tests again and Install into LTspice actions.
 Bob controls model selection and reasoning. This application does not invent a maximum
 thinking flag that Bob Shell has not documented.
+
+For command-line reverification, `model test --out <saved model folder>` reloads
+the saved model and reruns its checks. Version 1.6.0 has no `model open` CLI
+command; the result window has **Open model folder** and **Run tests again**.
 
 The extraction prompt includes the exact requested part. The same family PDF's cached
 rows cannot be silently reused for a different part suffix. A repeated PDF can grant or

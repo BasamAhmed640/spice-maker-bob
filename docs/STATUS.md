@@ -448,7 +448,7 @@ Evidence: Spice Maker's `docs/evidence/2026-09-24-usability/REPORT.md`.
 | `tests/test_cli_doctor.py tests/test_cli_run_tests.py` after the fix | 17 passed |
 | `tests/pipeline/test_make_model.py` after the fix | 55 passed |
 
-## 2026-09-25 — template-first buck checkpoint (Bob edition; release pending)
+## 2026-09-25 — template-first buck release (Bob edition, 1.6.0)
 
 Decisions D-041–D-043 cover the shared deterministic seed and physical fixture
 checks. The general edition's detailed TPS54332DDA and TPS54331 measurements
@@ -485,5 +485,11 @@ The general edition's [full TPS54332DDA GUI build](https://github.com/BasamAhmed
 delivered a convergent but UNKNOWN model in 1,230.314 s (20m30s); it was
 not a Bob inference run. No Bob API key is available here for a live Bob turn.
 Final local installer checks above include the terminal-stage UI fix and
-fail-closed Internet setting. Verification from a fresh GitHub Download ZIP
-and the GitHub push remain pending.
+fail-closed Internet setting. Main commit `68ee75d8b4bcabe72053fb409cfd4a1899584bf4` was
+pushed to GitHub; a fresh Download ZIP from that commit passed archive,
+extraction, installation, CPython 3.14.2 environment setup, explicit LTspice
+path selection, model build, and saved-model retest. The frozen GUI opened.
+The fixture build judged 9 PASS / 0 FAIL / 21 UNKNOWN / 8 NOT_APPLICABLE;
+the saved model retest passed all 8 LTspice checks. Bob's CLI does not have a
+`model open` command in 1.6.0, but `model test --out` reloads a saved model
+and reruns its verification. See [fresh-download evidence](evidence/2026-09-25-release/REPORT.md).
