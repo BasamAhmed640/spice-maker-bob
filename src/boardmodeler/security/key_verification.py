@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from boardmodeler.agent_providers import AgentProvider, by_id
+from boardmodeler.security.network import internet_allowed
 
 CHECK_TIMEOUT_S = 15.0
 CHECK_PROMPT = "Connection check. Reply only with OK. Do not use tools or read files."
@@ -34,6 +35,8 @@ def verify_key(
         return KeyVerification("unverified", "Select a supported provider and enter a key.")
     if cancel is not None and cancel.is_set():
         return KeyVerification("unverified", "Check cancelled.")
+    if not internet_allowed():
+        return KeyVerification("unverified", "INTERNET ACCESS is off in SETUP; nothing was sent.")
     try:
         if provider.uses_cli:
             return _verify_bob(key, timeout_s, cancel)

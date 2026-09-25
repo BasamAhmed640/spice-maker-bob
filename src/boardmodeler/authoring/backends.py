@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from boardmodeler.security.credentials import env_var_name, get_credential, redact
+from boardmodeler.security.network import internet_allowed, refusal_detail, require_network
 from boardmodeler.security.subprocess_guard import GuardedProcess, check_argv
 
 __all__ = [
@@ -81,8 +82,16 @@ _TOKEN_STAT_KEYS = (
 _POLL_S = 0.2
 BOB_DISABLED_TOOL_GROUPS = "read,edit,execute,mcp,skill,todo,subagent,mode"
 _BOB_CHILD_ENV_KEYS = (
-    "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "SYSTEMDRIVE",
-    "LANG", "LC_ALL", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
+    "PATH",
+    "PATHEXT",
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "SYSTEMDRIVE",
+    "LANG",
+    "LC_ALL",
+    "SSL_CERT_FILE",
+    "REQUESTS_CA_BUNDLE",
 )
 
 
@@ -232,6 +241,7 @@ def run_bob_shell(
     accepted via ``extra_allowed``); the whole process tree is killed on timeout
     or when ``cancel`` is set. The child never shares the caller's stdin.
     """
+    require_network("IBM Bob Shell")
     executable = check_argv(argv, extra_allowed=BOB_ALLOWED_BASENAMES)
     working_dir = Path(cwd).expanduser().resolve()
     if not working_dir.is_dir():
@@ -318,6 +328,8 @@ class BobShellBackend:
 
     def availability(self) -> tuple[bool, str]:
         """Is ``bob`` on PATH *and* is any credential configured? Never guesses."""
+        if not internet_allowed():
+            return False, refusal_detail("IBM Bob Shell")
         executable = shutil.which(BOB_EXECUTABLE)
         if executable is None:
             return False, BOB_NOT_INSTALLED
@@ -347,10 +359,14 @@ class BobShellBackend:
         ]
         if self.team_id:
             argv.extend(["--team-id", self.team_id])
-        argv.extend([
-            "--disable-mcp", "--disable-subagents",
-            "--disable-tool-groups", BOB_DISABLED_TOOL_GROUPS,
-        ])
+        argv.extend(
+            [
+                "--disable-mcp",
+                "--disable-subagents",
+                "--disable-tool-groups",
+                BOB_DISABLED_TOOL_GROUPS,
+            ]
+        )
         return argv
 
     def author(
@@ -363,6 +379,8 @@ class BobShellBackend:
         """One Bob Shell run. Failures are returned, never raised with a secret."""
         if cancel is not None and cancel.is_set():
             return self._failed("cancelled: bob run was not started, the build was cancelled")
+        if not internet_allowed():
+            return self._failed(refusal_detail("IBM Bob Shell"))
         if shutil.which(BOB_EXECUTABLE) is None:
             return self._failed(BOB_NOT_INSTALLED)
         key, _ = self._credential()
@@ -506,10 +524,22 @@ def _extract_library(message: object, subckt: str) -> str:
     fence = re.fullmatch(r"\s*```(?:spice|spice3|cir|lib)?\s*\n(.*?)\n```\s*", message, re.I | re.S)
     library = fence.group(1) if fence else message.strip()
     lines = library.splitlines()
-    meaningful = [line.strip() for line in lines if line.strip() and not line.lstrip().startswith(("*", ";"))]
+    meaningful = [
+        line.strip() for line in lines if line.strip() and not line.lstrip().startswith(("*", ";"))
+    ]
     allowed_directives = {
-        ".subckt", ".ends", ".model", ".param", ".func", ".if", ".elseif",
-        ".else", ".endif", ".nodeset", ".ic", ".options",
+        ".subckt",
+        ".ends",
+        ".model",
+        ".param",
+        ".func",
+        ".if",
+        ".elseif",
+        ".else",
+        ".endif",
+        ".nodeset",
+        ".ic",
+        ".options",
     }
     opened: list[str] = []
     found_main = 0

@@ -8,22 +8,26 @@ pytest.importorskip("PySide6")
 pytestmark = pytest.mark.gui
 
 
-def test_full_verification_is_default_and_saved(qtbot, tmp_path, monkeypatch):
+def test_full_verification_is_a_window_choice_and_remembered(qtbot, tmp_path, monkeypatch):
     from boardmodeler.config import AppConfig
-    from boardmodeler.ui import setup_dialog as setup
+    from boardmodeler.ui import model_maker as ui
 
     config = AppConfig()
-    saved = []
-    monkeypatch.setattr(setup, "load_config", lambda: config)
-    monkeypatch.setattr(setup, "portable", lambda: False)
+    saved: list[AppConfig] = []
+    monkeypatch.setattr("boardmodeler.config.load_config", lambda *a, **k: config)
     monkeypatch.setattr(
-        setup, "save_config", lambda value: saved.append(value) or tmp_path / "config.json"
+        "boardmodeler.config.save_config", lambda value, path=None: saved.append(value)
     )
-    dialog = setup.SetupDialog()
-    qtbot.addWidget(dialog)
-    assert dialog.full_verification_check.isChecked()
-    dialog._save()
-    assert saved[0].full_verification is True
+    window = ui.ModelMakerWindow()
+    qtbot.addWidget(window)
+    assert window.full_check.text() == "FULL VERIFICATION"
+    assert window.full_check.isChecked()
+
+    window.full_check.setChecked(False)
+    assert saved and saved[-1].full_verification is False
+
+    window.full_check.setChecked(True)
+    assert saved[-1].full_verification is True
 
 
 def test_quick_result_is_unverified_and_full_action_uses_worker(qtbot, tmp_path, monkeypatch):
@@ -54,3 +58,34 @@ def test_quick_result_is_unverified_and_full_action_uses_worker(qtbot, tmp_path,
         "UNKNOWN", "quick", "TEST", tmp_path, None, None, None, (), {}, (), request
     )
     assert MakeModelResult.from_json(persisted.to_json()).request.verification == "sanity"
+
+
+def test_go_uses_the_windows_verification_choice(qtbot, tmp_path, monkeypatch):
+    from boardmodeler.config import AppConfig
+    from boardmodeler.pipeline.make_model import MakeModelRequest
+    from boardmodeler.ui import model_maker as ui
+
+    datasheet = tmp_path / "part.pdf"
+    datasheet.write_bytes(b"%PDF-1.4\n")
+    config = AppConfig(full_verification=False)
+    monkeypatch.setattr("boardmodeler.config.load_config", lambda *a, **k: config)
+    monkeypatch.setattr("boardmodeler.config.save_config", lambda *a, **k: None)
+    monkeypatch.setattr(ui, "_agent_availability", lambda: (True, "ok"))
+    monkeypatch.setattr(ui, "_configured_provider", lambda: None)
+    monkeypatch.setattr(ui, "_configured_provider_id", lambda: "")
+    started: list[MakeModelRequest] = []
+
+    window = ui.ModelMakerWindow()
+    qtbot.addWidget(window)
+    monkeypatch.setattr(window, "_start", started.append)
+    window.part_edit.setText("TPS54320")
+    window.datasheet_edit.setText(str(datasheet))
+    window.out_edit.setText(str(tmp_path))
+
+    window.full_check.setChecked(False)
+    window.go_button.click()
+    assert started[-1].verification == "sanity"
+
+    window.full_check.setChecked(True)
+    window.go_button.click()
+    assert started[-1].verification == "full"

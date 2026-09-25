@@ -17,7 +17,7 @@ import json
 import os
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from boardmodeler.domain import SCHEMA_VERSION
 from boardmodeler.domain.enums import ProviderKind
@@ -113,12 +113,26 @@ class AppConfig(BaseModel):
     #: ``authoring.api_backend``'s default. Reasoning-class models spend part of this
     #: budget before they write any file text, which is why it is generous and settable.
     agent_max_tokens: int | None = Field(default=None, ge=1)
-    #: Search the web for supporting material while a model is being made (setup page).
-    web_reinforcement: bool = True
+    #: The one SETUP switch for Bob and supporting-material requests. An explicit
+    #: BOARDMODELER_NO_NETWORK environment setting can force it off.
+    internet_access: bool = True
     default_project_dir: str | None = None
     log_level: str = "INFO"
     setup_complete: bool = False
+    #: Remembered default for the build window's per-build FULL VERIFICATION choice.
     full_verification: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_web_reinforcement(cls, data: object) -> object:
+        """Keep an existing user's web choice while retiring the old setting name."""
+        if not isinstance(data, dict) or "web_reinforcement" not in data:
+            return data
+        migrated = dict(data)
+        legacy = migrated.pop("web_reinforcement")
+        if "internet_access" not in migrated:
+            migrated["internet_access"] = bool(legacy)
+        return migrated
 
 
 def config_dir() -> Path:

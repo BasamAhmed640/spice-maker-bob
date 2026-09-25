@@ -2,8 +2,8 @@
 
 Everything a model build does not need to be asked again each time lives here and only
 here: where LTspice is, which agent provider answers the API key, the key itself, the
-folder finished models land in, the LTspice user library and whether the web is searched
-for supporting material. The main window carries none of it.
+folder finished models land in, the LTspice user library and one INTERNET ACCESS switch.
+The main window carries none of it. FULL VERIFICATION is chosen per build beside GO.
 
 The agent rows are built from :mod:`boardmodeler.agent_providers`: a build whose catalog
 holds one provider shows no provider row at all and keeps that provider's own key label,
@@ -117,7 +117,7 @@ def describe_settings(config: AppConfig) -> dict[str, object]:
         "config_path": str(config_path()),
         "ltspice_path": config.ltspice.path,
         "model_dir": config.default_model_dir,
-        "web_reinforcement": config.web_reinforcement,
+        "internet_access": config.internet_access,
         "ltspice_user_lib": str(ltspice_user_lib()),
         # The id the config names, never a substitute; the flag says whether this
         # build accepts it, so a caller sees the refusal instead of another provider.
@@ -309,20 +309,20 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
         grid.addWidget(library, row, 1, 1, 3)
         row += 1
 
-        self.reinforce_check = QCheckBox(
-            "search the web for supporting material while making a model"
+        self.internet_check = QCheckBox("INTERNET ACCESS")
+        self.internet_check.setChecked(self._config.internet_access)
+        self.internet_check.setToolTip(
+            "Off: no request leaves this PC. On: GO may reach IBM Bob with your key, "
+            "and the supporting-material stage may read the part vendor's site. "
+            "FULL VERIFICATION is chosen beside GO."
         )
-        self.reinforce_check.setChecked(self._config.web_reinforcement)
-        grid.addWidget(self.reinforce_check, row, 1, 1, 3)
-
-        row += 1
-        self.full_verification_check = QCheckBox("Full simulation verification (slower)")
-        self.full_verification_check.setChecked(self._config.full_verification)
-        self.full_verification_check.setToolTip(
-            "Off: create a model and check its structure locally. Electrical accuracy remains "
-            "unverified. On: also plan test circuits and run LTspice verification."
+        grid.addWidget(self.internet_check, row, 1)
+        self.internet_hint = QLabel(
+            "one switch for both: IBM Bob and the part vendor's site for supporting material"
         )
-        grid.addWidget(self.full_verification_check, row, 1, 1, 3)
+        self.internet_hint.setWordWrap(True)
+        self.internet_hint.setStyleSheet(_HINT)
+        grid.addWidget(self.internet_hint, row, 2, 1, 2)
 
         # --- actions ---------------------------------------------------------
         row = QHBoxLayout()
@@ -398,9 +398,7 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
             return "chosen by hand with BROWSE — press SAVE to keep it."
         if self._ltspice_source == "config":
             return "set from your saved configuration; SAVE replaces it."
-        return (
-            "LTspice is not set yet — use BROWSE to pick LTspice.exe, then SAVE."
-        )
+        return "LTspice is not set yet — use BROWSE to pick LTspice.exe, then SAVE."
 
     def _show_provider(self, provider: AgentProvider) -> None:
         """Point the key and model rows at ``provider`` without touching the config."""
@@ -519,6 +517,17 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
 
     def _start_key_check(self, value: str) -> None:
         self._cancel_key_check()
+        from boardmodeler.security.network import internet_allowed
+
+        if not self.internet_check.isChecked() or not internet_allowed():
+            self.key_status.setText(
+                "Key saved — NOT CHECKED: INTERNET ACCESS is off in SETUP "
+                "(or BOARDMODELER_NO_NETWORK is set); nothing was sent."
+            )
+            self.key_status.setWordWrap(True)
+            self.key_status.setMaximumWidth(620)
+            self._fit_to_content()
+            return
         provider, model = self._provider, self.model_edit.text().strip() or None
         cancel = threading.Event()
         results = []
@@ -590,8 +599,7 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
     def _save(self) -> None:
         self._config.ltspice.path = self.ltspice_edit.text().strip() or None
         self._config.default_model_dir = self.model_dir_edit.text().strip() or None
-        self._config.web_reinforcement = self.reinforce_check.isChecked()
-        self._config.full_verification = self.full_verification_check.isChecked()
+        self._config.internet_access = self.internet_check.isChecked()
         if self._provider_choice is not None:
             self._config.agent_provider = self._provider_choice
             if self._provider.model_editable:

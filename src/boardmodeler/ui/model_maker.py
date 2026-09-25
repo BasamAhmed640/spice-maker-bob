@@ -3,7 +3,7 @@
 This window is the product and it holds only what a build needs: which part, which
 datasheet, where the model goes, a GO button, and the progress of the run. Settings that
 persist between sessions — the LTspice path, the agent's API key, the default model
-folder, the LTspice library location, the web-reinforcement switch — live in
+folder, the LTspice library location, the INTERNET ACCESS switch — live in
 :mod:`boardmodeler.ui.setup_dialog`, reached from the SETUP button.
 
 The engine runs in a worker thread and reports the same stages the CLI prints, so the two
@@ -26,6 +26,7 @@ from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QDialog,
     QFileDialog,
     QGridLayout,
@@ -142,6 +143,16 @@ def _agent_availability() -> tuple[bool, str]:
 
 def _colour(value: str) -> QColor:
     return QColor(value)
+
+
+def _configured_full_verification() -> bool:
+    """The remembered default for the per-build checkbox beside GO."""
+    try:
+        from boardmodeler.config import load_config
+
+        return bool(load_config().full_verification)
+    except Exception:  # pragma: no cover - a broken config must not block the window
+        return True
 
 
 class HourglassWidget(QWidget):
@@ -414,7 +425,7 @@ class ModelMakerWindow(QMainWindow):
     def _build_top_row(self) -> QHBoxLayout:
         row = QHBoxLayout()
         setup = QPushButton("SETUP")
-        setup.setToolTip("LTspice path, agent key, model folder, web reinforcement")
+        setup.setToolTip("LTspice path, agent key, model folder, INTERNET ACCESS")
         setup.clicked.connect(self._open_setup)
         check = QPushButton("CHECK ENVIRONMENT")
         check.setToolTip("Where LTspice, the reader backend and the agent key stand")
@@ -472,6 +483,15 @@ class ModelMakerWindow(QMainWindow):
         self.cancel_button.setEnabled(False)
         row.addWidget(self.go_button, 3)
         row.addWidget(self.cancel_button, 1)
+        self.full_check = QCheckBox("FULL VERIFICATION")
+        self.full_check.setToolTip(
+            "On: plan test circuits and run LTspice verification for this build (slower). "
+            "Off: check only the model's structure; electrical accuracy remains unverified. "
+            "Remembered for the next build."
+        )
+        self.full_check.setChecked(_configured_full_verification())
+        self.full_check.toggled.connect(self._full_verification_toggled)
+        row.addWidget(self.full_check)
         # The hourglass sits immediately beside the clock it belongs to, and both are driven
         # by the same two places: _set_busy starts them on GO and stops them on every exit.
         self.hourglass = HourglassWidget()
@@ -656,7 +676,6 @@ class ModelMakerWindow(QMainWindow):
         out_dir.mkdir(parents=True, exist_ok=True)
 
         subckt = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in part).upper()
-        from boardmodeler.config import load_config
 
         request = MakeModelRequest(
             part=part,
@@ -664,7 +683,7 @@ class ModelMakerWindow(QMainWindow):
             datasheet=datasheet,
             out_dir=out_dir,
             backend_name="api",
-            verification="full" if load_config().full_verification else "sanity",
+            verification="full" if self.full_check.isChecked() else "sanity",
             allow_remote=True,
             # The configured id as written, so ``build_api_backend`` refuses a provider
             # this build lacks instead of another provider answering with the wrong key.
@@ -672,6 +691,19 @@ class ModelMakerWindow(QMainWindow):
         )
         self._out_dir = out_dir
         self._start(request)
+
+    def _full_verification_toggled(self, checked: bool) -> None:
+        """Remember the choice without letting a settings error escape a Qt slot."""
+        try:
+            from boardmodeler.config import load_config, save_config
+
+            config = load_config()
+            config.full_verification = bool(checked)
+            save_config(config)
+        except Exception as exc:
+            self.status_label.setToolTip(
+                f"FULL VERIFICATION could not be saved as the default: {type(exc).__name__}: {exc}"
+            )
 
     def _start(self, request: object) -> None:
         self._set_busy(True)

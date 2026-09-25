@@ -50,14 +50,15 @@ def test_the_page_is_sized_to_its_content(dialog) -> None:
 def test_saving_persists_only_the_declared_settings(dialog, isolated_config: Path) -> None:
     dialog.model_dir_edit.setText(str(isolated_config.parent / "models"))
     dialog.ltspice_edit.setText(r"C:\tools\LTspice.exe")
-    dialog.reinforce_check.setChecked(False)
+    dialog.internet_check.setChecked(False)
 
     dialog._save()
 
     saved = json.loads(isolated_config.read_text(encoding="utf-8"))
     assert saved["default_model_dir"] == str(isolated_config.parent / "models")
     assert saved["ltspice"]["path"] == r"C:\tools\LTspice.exe"
-    assert saved["web_reinforcement"] is False
+    assert saved["internet_access"] is False
+    assert "web_reinforcement" not in saved
 
 
 def test_the_api_key_goes_to_the_credential_store_and_never_to_the_config(
@@ -83,13 +84,48 @@ def test_the_api_key_goes_to_the_credential_store_and_never_to_the_config(
 
 
 def test_settings_round_trip_through_the_config(dialog, isolated_config: Path) -> None:
-    dialog.reinforce_check.setChecked(False)
+    dialog.internet_check.setChecked(False)
     dialog._save()
 
     from boardmodeler.config import load_config
 
     reloaded = load_config(isolated_config)
-    assert reloaded.web_reinforcement is False
+    assert reloaded.internet_access is False
+
+
+def test_the_page_has_one_internet_switch_and_no_verification_choice(dialog) -> None:
+    from PySide6.QtWidgets import QCheckBox
+
+    boxes = dialog.findChildren(QCheckBox)
+    assert [box.text() for box in boxes] == ["INTERNET ACCESS"]
+    assert boxes[0] is dialog.internet_check
+    assert dialog.internet_check.isChecked()
+    assert "IBM Bob" in dialog.internet_hint.text()
+    assert "part vendor's site" in dialog.internet_hint.text()
+    assert not hasattr(dialog, "reinforce_check")
+    assert not hasattr(dialog, "full_verification_check")
+
+    from boardmodeler.ui.setup_dialog import describe_settings
+
+    described = describe_settings(dialog._config)
+    assert described["internet_access"] is True
+    assert "web_reinforcement" not in described
+    assert "full_verification" not in described
+
+
+def test_key_check_sends_nothing_when_internet_is_off(dialog, monkeypatch) -> None:
+    # The unsaved checkbox must win even if the stored config still says on.
+    dialog.internet_check.setChecked(False)
+    monkeypatch.setattr(
+        "boardmodeler.ui.setup_dialog.verify_key",
+        lambda *a, **k: pytest.fail("key check must not reach Bob"),
+    )
+
+    dialog._start_key_check(SECRET)
+
+    assert dialog._key_check is None
+    assert dialog.save_key_button.isEnabled()
+    assert "nothing was sent" in dialog.key_status.text()
 
 
 def test_the_smoke_test_is_run_and_reported(dialog, monkeypatch, tmp_path: Path) -> None:
