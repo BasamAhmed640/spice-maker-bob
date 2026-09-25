@@ -493,3 +493,15 @@ The fixture build judged 9 PASS / 0 FAIL / 21 UNKNOWN / 8 NOT_APPLICABLE;
 the saved model retest passed all 8 LTspice checks. Bob's CLI does not have a
 `model open` command in 1.6.0, but `model test --out` reloads a saved model
 and reruns its verification. See [fresh-download evidence](evidence/2026-09-25-release/REPORT.md).
+
+## 2026-09-25 — buck template slice (shared with Spice Maker)
+
+Same shared-core and template change as Spice Maker (D-045–D-047): gates on the model's own
+ground, benches that must touch node 0, buck rules through sense elements and pin aliases,
+statement-based parameter mapping, deterministic current-limit bench. Evidence is in Spice
+Maker's `docs/evidence/2026-09-25-buck-slice/REPORT.md`; next families in `docs/TEMPLATE_CATALOG.md`.
+
+| Check | Result |
+|---|---|
+| `pytest tests/authoring tests/models tests/pipeline tests/ltspice tests/test_shared_core.py` (`LTSPICE_EXE`) | 594 passed, 7 skipped (HTTP-only / general-catalog tests), 0 failed |
+| `tools/shared_core.py --compare ..\spice-maker` | identical: 42 files |

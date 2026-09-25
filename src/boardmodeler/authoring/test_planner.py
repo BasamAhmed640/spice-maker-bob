@@ -511,6 +511,38 @@ def _has_catch_diode(lines, ph, ground):
     return False
 
 
+#: A series element this small is a current sense, not part of the circuit's function.
+_SENSE_OHMS = 1.0
+
+
+def _series_sense_nodes(lines, start, ground):
+    """``start`` plus every node reached from it through current-sense elements only.
+
+    A sense element is a resistor of at most ``_SENSE_OHMS`` or a 0 V voltage source
+    (LTspice's ammeter idiom). Ground is never crossed.
+    """
+    reached = {start}
+    frontier = [start]
+    while frontier:
+        node = frontier.pop()
+        for parts in lines:
+            if len(parts) < 4 or {parts[1].casefold(), parts[2].casefold()} & {ground}:
+                continue
+            a, b = parts[1].casefold(), parts[2].casefold()
+            if node not in (a, b):
+                continue
+            kind = parts[0][0].upper()
+            value = _spice_scalar(parts[3]) if kind in "RV" else None
+            if (kind == "R" and value is not None and 0 < value <= _SENSE_OHMS) or (
+                kind == "V" and value == 0
+            ):
+                other = b if node == a else a
+                if other not in reached:
+                    reached.add(other)
+                    frontier.append(other)
+    return reached
+
+
 def _buck_fixture_issue(recipe, source_rows, statement):
     """Reject a physically impossible active asynchronous-buck bench before freezing it.
 
@@ -518,16 +550,30 @@ def _buck_fixture_issue(recipe, source_rows, statement):
     COMP current/voltage budget. An inactive shutdown test needs no power stage.
     """
     terminals = {key.upper(): value.casefold() for key, value in recipe.terminals.items()}
-    if not {"PH", "VIN", "COMP", "VSENSE", "GND"} <= terminals.keys() or _fixture_disabled(recipe):
+    needed = {"PH", "VIN", "COMP", "VSENSE", "GND"}
+    if not needed <= terminals.keys():
+        # A buck whose pins are named SW/FB/AGND... is the same bench under other
+        # names; without this mapping every rule below was skipped for it.
+        from boardmodeler.models.buck_switching import match_pins
+
+        match = match_pins(tuple(recipe.terminals))
+        if match.ok:
+            terminals = {
+                role: recipe.terminals[name].casefold() for role, name in match.roles.items()
+            }
+    if not needed <= terminals.keys() or _fixture_disabled(recipe):
         return None
     ph, comp, ground = (terminals[name] for name in ("PH", "COMP", "GND"))
     lines = [line.split() for line in recipe.components]
+    # The inductor may sit behind a current-sense element (observed: a 0.02 ohm
+    # resistor from PH to the inductor hid the whole power stage, so no rule ran).
+    switch_nodes = _series_sense_nodes(lines, ph, ground)
     output_nodes = [
-        parts[2].casefold() if parts[1].casefold() == ph else parts[1].casefold()
+        parts[2].casefold() if parts[1].casefold() in switch_nodes else parts[1].casefold()
         for parts in lines
         if len(parts) >= 4
         and parts[0][0].upper() == "L"
-        and ph in (parts[1].casefold(), parts[2].casefold())
+        and switch_nodes & {parts[1].casefold(), parts[2].casefold()}
     ]
     if not output_nodes:
         return None

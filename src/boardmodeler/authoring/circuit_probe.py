@@ -84,6 +84,20 @@ class Measurement(BaseModel):
         return self
 
 
+def _component_nodes(components) -> list[str]:
+    """Circuit nodes named by fixture elements (two for most, four for E/G sources)."""
+    nodes: list[str] = []
+    for line in components:
+        words = str(line).split()
+        if not words or words[0].startswith((".", "*")):
+            continue
+        count = 4 if words[0][0].upper() in "EG" else 2
+        if len(words) > 3 and re.match(r"(?i)(value|table|poly|laplace)", words[3]):
+            count = 2
+        nodes.extend(words[1 : count + 1])
+    return nodes
+
+
 class CircuitRecipe(BaseModel):
     model_config = ConfigDict(extra="forbid")
     purpose: str
@@ -107,8 +121,14 @@ class CircuitRecipe(BaseModel):
         if not isinstance(value, dict) or not isinstance(value.get("measurement"), dict):
             return value
         # LTspice treats the top-level node name GND as node 0. A planner's
-        # floating ground-current sense node must keep its distinct identity.
-        if any(re.search(r"\bgnd\b", line, re.I) for line in value.get("components", [])):
+        # ground-current sense node must keep its distinct identity, but only when
+        # the fixture also names node 0 (the sense element sits between the two).
+        # Renaming a fixture whose only ground is GND would leave the whole bench
+        # floating, and a model referenced to node 0 would then see a different
+        # ground than its own pins (observed: every logic gate held off).
+        if any(re.search(r"\bgnd\b", line, re.I) for line in value.get("components", [])) and any(
+            node == "0" for node in _component_nodes(value.get("components", []))
+        ):
             reserved = "bm_fixture_ground"
             if not any(reserved in line.lower() for line in value.get("components", [])):
 
@@ -163,6 +183,14 @@ class CircuitRecipe(BaseModel):
 
     @model_validator(mode="after")
     def valid(self):
+        grounds = {"0", "gnd"}
+        if not any(node.casefold() in grounds for node in _component_nodes(self.components)) and (
+            not any(node.casefold() in grounds for node in self.terminals.values())
+        ):
+            raise ValueError(
+                "fixture_floating_ground: no fixture element or terminal connects to node 0, "
+                "so every voltage in the bench is undefined"
+            )
         if not self.terminals or any(
             not re.fullmatch(_NODE, node) for node in self.terminals.values()
         ):

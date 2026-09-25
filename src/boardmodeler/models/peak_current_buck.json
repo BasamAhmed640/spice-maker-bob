@@ -2,31 +2,481 @@
   "schema_version": 1,
   "id": "peak_current_buck_v1",
   "description": "Reduced peak-current-mode buck with exposed PH and compensation pins",
-  "required_ports": ["BOOT", "VIN", "EN", "SS", "VSENSE", "COMP", "GND", "PH"],
-  "optional_ports": ["POWERPAD"],
+  "required_ports": [
+    "BOOT",
+    "VIN",
+    "EN",
+    "SS",
+    "VSENSE",
+    "COMP",
+    "GND",
+    "PH"
+  ],
+  "optional_ports": [
+    "POWERPAD"
+  ],
   "parameters": [
-    {"name": "VREF", "unit": "V", "default": 0.8, "sources": [{"suffix": "_VREF", "field": "typ_value"}]},
-    {"name": "FSW", "unit": "Hz", "default": 1000000.0, "sources": [{"suffix": "_FSW", "field": "typ_value"}, {"suffix": "_FEAT_FSW", "field": "typ_value"}, {"suffix": "_SWITCH_FREQ_TYPICAL", "field": "typ_value"}]},
-    {"name": "TONMIN", "unit": "s", "default": 1.1e-7, "sources": [{"suffix": "_MIN_ON_TIME", "field": "typ_value"}]},
-    {"name": "DMAX", "unit": "ratio", "default": 0.91, "sources": [{"suffix": "_DUTY_MAX", "field": "max_value", "scale": 0.01, "source_unit": "%"}, {"suffix": "_MAX_DUTY", "field": "typ_value", "scale": 0.01, "source_unit": "%"}]},
-    {"name": "ILIM", "unit": "A", "default": 5.35, "sources": [{"suffix": "_ILIM", "field": "bounds_midpoint"}]},
-    {"name": "GMCS", "unit": "A/V", "default": 12.0, "sources": [{"suffix": "_SW_CURRENT_TO_COMP", "field": "typ_value"}]},
-    {"name": "VECO", "unit": "V", "default": 0.5, "sources": [{"suffix": "_ECOMODE_COMP_0P5V", "field": "typ_value"}]},
-    {"name": "ECO_I", "unit": "A", "default": 0.16, "sources": [{"suffix": "_ECOMODE_TH", "field": "typ_value"}]},
-    {"name": "EAGM", "unit": "S", "default": 9.2e-5, "sources": [{"suffix": "_EA_GM", "field": "typ_value", "scale": 1e-6, "source_unit": "μmhos"}]},
-    {"name": "EAI", "unit": "A", "default": 7e-6, "sources": [{"suffix": "_EA_ISOURCE_SINK", "field": "typ_value"}]},
-    {"name": "ISS", "unit": "A", "default": 2e-6, "sources": [{"suffix": "_SS_CHARGE", "field": "typ_value"}]},
-    {"name": "SSOFS", "unit": "V", "default": 0.01, "sources": [{"suffix": "_SS_VSENSE_MATCH", "field": "typ_value"}]},
-    {"name": "ENTH", "unit": "V", "default": 1.25, "sources": [{"suffix": "_EN_THRESHOLD", "field": "typ_value"}, {"suffix": "_EN_TH", "field": "bounds_midpoint"}]},
-    {"name": "ENHYS", "unit": "V", "default": 0.05, "sources": []},
-    {"name": "UVTH", "unit": "V", "default": 3.5, "sources": [{"suffix": "_UVLO_VIN", "field": "min_value"}, {"suffix": "_REC_VIN", "field": "min_value"}]},
-    {"name": "UVHYS", "unit": "V", "default": 0.2, "sources": []},
-    {"name": "IQOP", "unit": "A", "default": 8.2e-5, "sources": [{"suffix": "_IOP_NONSW", "field": "typ_value"}]},
-    {"name": "IQSD_BASE", "unit": "A", "default": 0.0, "sources": []},
-    {"name": "EN_PULLUP", "unit": "A", "default": 1e-6, "sources": [{"suffix": "_EN_I_NEG50MV", "field": "typ_value", "absolute": true}]},
-    {"name": "RON", "unit": "ohm", "default": 0.08, "sources": []},
-    {"name": "FOLD6", "unit": "V", "default": 0.6, "sources": [{"suffix": "_SW_FREQ_VSENSE_GE_0P6", "field": "literal", "literal": 0.6, "source_unit": ""}]},
-    {"name": "FOLD4", "unit": "V", "default": 0.4, "sources": [{"suffix": "_SW_FREQ_VSENSE_0P4_TO_0P6", "field": "literal", "literal": 0.4, "source_unit": ""}]},
-    {"name": "FOLD2", "unit": "V", "default": 0.2, "sources": [{"suffix": "_SW_FREQ_VSENSE_LT_0P2", "field": "literal", "literal": 0.2, "source_unit": ""}]}
+    {
+      "name": "VREF",
+      "unit": "V",
+      "default": 0.8,
+      "sources": [
+        {
+          "suffix": "_VREF",
+          "field": "typ_value"
+        },
+        {
+          "statement": "\\b(?:voltage|feedback) reference\\b|\\breference voltage\\b",
+          "field": "typ_value"
+        }
+      ]
+    },
+    {
+      "name": "FSW",
+      "unit": "Hz",
+      "default": 1000000.0,
+      "sources": [
+        {
+          "suffix": "_FSW",
+          "field": "typ_value"
+        },
+        {
+          "suffix": "_FEAT_FSW",
+          "field": "typ_value"
+        },
+        {
+          "suffix": "_SWITCH_FREQ_TYPICAL",
+          "field": "typ_value"
+        },
+        {
+          "statement": "\\bswitching frequency\\b",
+          "field": "typ_value"
+        }
+      ]
+    },
+    {
+      "name": "TONMIN",
+      "unit": "s",
+      "default": 1.1e-07,
+      "sources": [
+        {
+          "suffix": "_MIN_ON_TIME",
+          "field": "typ_value"
+        },
+        {
+          "statement": "\\bminimum (?:controllable )?on[- ]?time\\b",
+          "field": "typ_value"
+        },
+        {
+          "statement": "\\bminimum (?:controllable )?on[- ]?time\\b",
+          "field": "min_value"
+        }
+      ]
+    },
+    {
+      "name": "DMAX",
+      "unit": "ratio",
+      "default": 0.91,
+      "sources": [
+        {
+          "suffix": "_DUTY_MAX",
+          "field": "max_value",
+          "scale": 0.01,
+          "source_unit": "%"
+        },
+        {
+          "suffix": "_MAX_DUTY",
+          "field": "typ_value",
+          "scale": 0.01,
+          "source_unit": "%"
+        },
+        {
+          "statement": "\\bmaximum (?:controllable )?duty\\b",
+          "field": "typ_value",
+          "scale": 0.01,
+          "source_unit": "%"
+        },
+        {
+          "statement": "\\bmaximum (?:controllable )?duty\\b",
+          "field": "bounds_midpoint",
+          "scale": 0.01,
+          "source_unit": "%"
+        }
+      ]
+    },
+    {
+      "name": "ILIM",
+      "unit": "A",
+      "default": 5.35,
+      "sources": [
+        {
+          "suffix": "_ILIM",
+          "field": "typ_value"
+        },
+        {
+          "statement": "\\bcurrent limit\\b",
+          "field": "typ_value"
+        },
+        {
+          "suffix": "_ILIM",
+          "field": "bounds_midpoint"
+        },
+        {
+          "statement": "\\bcurrent limit\\b",
+          "field": "bounds_midpoint"
+        }
+      ]
+    },
+    {
+      "name": "GMCS",
+      "unit": "A/V",
+      "default": 12.0,
+      "sources": [
+        {
+          "suffix": "_SW_CURRENT_TO_COMP",
+          "field": "typ_value"
+        },
+        {
+          "statement": "switch current to COMP|COMP to switch current|current[- ]sense (?:gain|transconductance)",
+          "field": "typ_value"
+        }
+      ]
+    },
+    {
+      "name": "VECO",
+      "unit": "V",
+      "default": 0.5,
+      "sources": [
+        {
+          "suffix": "_ECOMODE_COMP_0P5V",
+          "field": "typ_value"
+        },
+        {
+          "statement": "(?:eco-?mode|pulse[- ]skip)[^.]*\\bCOMP\\b|\\bCOMP\\b[^.]*(?:eco-?mode|pulse[- ]skip)",
+          "field": "typ_value"
+        }
+      ]
+    },
+    {
+      "name": "ECO_I",
+      "unit": "A",
+      "default": 0.16,
+      "sources": [
+        {
+          "suffix": "_ECOMODE_TH",
+          "field": "typ_value"
+        },
+        {
+          "statement": "(?:eco-?mode|pulse[- ]skip)[^.]*current threshold",
+          "field": "typ_value"
+        }
+      ]
+    },
+    {
+      "name": "EAGM",
+      "unit": "S",
+      "default": 9.2e-05,
+      "sources": [
+        {
+          "suffix": "_EA_GM",
+          "field": "typ_value",
+          "scale": 1e-06,
+          "source_unit": "μmhos"
+        },
+        {
+          "statement": "error amplifier transconductance",
+          "field": "typ_value",
+          "scale": 1e-06,
+          "source_unit": "μmhos"
+        },
+        {
+          "statement": "error amplifier transconductance",
+          "field": "typ_value",
+          "scale": 1e-06,
+          "source_unit": "μA/V"
+        },
+        {
+          "statement": "error amplifier transconductance",
+          "field": "typ_value"
+        }
+      ]
+    },
+    {
+      "name": "EAI",
+      "unit": "A",
+      "default": 7e-06,
+      "sources": [
+        {
+          "suffix": "_EA_ISOURCE_SINK",
+          "field": "typ_value"
+        },
+        {
+          "statement": "error amplifier (?:source/sink|source and sink|source|sink) current",
+          "field": "typ_value"
+        }
+      ]
+    },
+    {
+      "name": "ISS",
+      "unit": "A",
+      "default": 2e-06,
+      "sources": [
+        {
+          "suffix": "_SS_CHARGE",
+          "field": "typ_value"
+        },
+        {
+          "statement": "(?:slow|soft)[- ]?start (?:pin )?charge current|\\bSS\\b[^.]*charge current",
+          "field": "typ_value"
+        }
+      ]
+    },
+    {
+      "name": "SSOFS",
+      "unit": "V",
+      "default": 0.01,
+      "sources": [
+        {
+          "suffix": "_SS_VSENSE_MATCH",
+          "field": "typ_value"
+        },
+        {
+          "statement": "\\bSS to VSENSE\\b|\\bSS\\b[^.]*\\bVSENSE\\b[^.]*matching",
+          "field": "typ_value"
+        }
+      ]
+    },
+    {
+      "name": "ENTH",
+      "unit": "V",
+      "default": 1.25,
+      "sources": [
+        {
+          "suffix": "_EN_THRESHOLD",
+          "field": "typ_value"
+        },
+        {
+          "suffix": "_EN_TH",
+          "field": "bounds_midpoint"
+        },
+        {
+          "statement": "\\benable threshold\\b(?![^.]*[–−-]\\s*\\d+\\s*mV)(?![^.]*\\+\\s*\\d+\\s*mV)",
+          "field": "typ_value"
+        },
+        {
+          "statement": "\\benable threshold\\b(?![^.]*[–−-]\\s*\\d+\\s*mV)(?![^.]*\\+\\s*\\d+\\s*mV)",
+          "field": "bounds_midpoint"
+        }
+      ]
+    },
+    {
+      "name": "ENHYS",
+      "unit": "V",
+      "default": 0.05,
+      "sources": []
+    },
+    {
+      "name": "UVTH",
+      "unit": "V",
+      "default": 3.5,
+      "sources": [
+        {
+          "suffix": "_UVLO_VIN",
+          "field": "min_value"
+        },
+        {
+          "suffix": "_REC_VIN",
+          "field": "min_value"
+        },
+        {
+          "statement": "^(?![^.]*\\bboot)[^.]*\\b(?:undervoltage lockout|UVLO)\\b",
+          "field": "min_value"
+        }
+      ]
+    },
+    {
+      "name": "UVHYS",
+      "unit": "V",
+      "default": 0.2,
+      "sources": []
+    },
+    {
+      "name": "IQOP",
+      "unit": "A",
+      "default": 8.2e-05,
+      "sources": [
+        {
+          "suffix": "_IOP_NONSW",
+          "field": "typ_value"
+        },
+        {
+          "statement": "\\boperating (?:non-switching )?(?:supply )?current\\b",
+          "field": "typ_value"
+        }
+      ]
+    },
+    {
+      "name": "IQSD_BASE",
+      "unit": "A",
+      "default": 0.0,
+      "sources": []
+    },
+    {
+      "name": "EN_PULLUP",
+      "unit": "A",
+      "default": 1e-06,
+      "sources": [
+        {
+          "suffix": "_EN_I_NEG50MV",
+          "field": "typ_value",
+          "absolute": true
+        },
+        {
+          "statement": "(?:enable|EN)[^.]*threshold\\s*[–−-]\\s*50\\s*mV",
+          "field": "typ_value",
+          "absolute": true
+        }
+      ]
+    },
+    {
+      "name": "RON",
+      "unit": "ohm",
+      "default": 0.08,
+      "sources": [
+        {
+          "statement": "high[- ]side (?:MOSFET )?on[- ]resistance|\\bR\\s*DS\\s*\\(?on\\)?",
+          "field": "typ_value"
+        }
+      ]
+    },
+    {
+      "name": "FOLD6",
+      "unit": "V",
+      "default": 0.6,
+      "sources": [
+        {
+          "suffix": "_SW_FREQ_VSENSE_GE_0P6",
+          "field": "literal",
+          "literal": 0.6,
+          "source_unit": ""
+        },
+        {
+          "statement": "switching frequency[^.]*VSENSE[^.]*(?:≥|>=|greater than or equal to)\\s*0\\.6\\s*V",
+          "field": "literal",
+          "literal": 0.6,
+          "source_unit": "Hz"
+        }
+      ]
+    },
+    {
+      "name": "FOLD4",
+      "unit": "V",
+      "default": 0.4,
+      "sources": [
+        {
+          "suffix": "_SW_FREQ_VSENSE_0P4_TO_0P6",
+          "field": "literal",
+          "literal": 0.4,
+          "source_unit": ""
+        },
+        {
+          "statement": "0\\.6\\s*V\\s*>\\s*VSENSE\\s*(?:≥|>=)\\s*0\\.4\\s*V",
+          "field": "literal",
+          "literal": 0.4,
+          "source_unit": "Hz"
+        }
+      ]
+    },
+    {
+      "name": "FOLD2",
+      "unit": "V",
+      "default": 0.2,
+      "sources": [
+        {
+          "suffix": "_SW_FREQ_VSENSE_LT_0P2",
+          "field": "literal",
+          "literal": 0.2,
+          "source_unit": ""
+        },
+        {
+          "statement": "0\\.4\\s*V\\s*>\\s*VSENSE\\s*(?:≥|>=)\\s*0\\.2\\s*V",
+          "field": "literal",
+          "literal": 0.2,
+          "source_unit": "Hz"
+        }
+      ]
+    }
+  ],
+  "pin_roles": {
+    "BOOT": [
+      "BOOT",
+      "BST",
+      "CB",
+      "CBOOT"
+    ],
+    "VIN": [
+      "VIN",
+      "PVIN"
+    ],
+    "EN": [
+      "EN",
+      "ENABLE"
+    ],
+    "SS": [
+      "SS",
+      "SS_TR",
+      "TR_SS"
+    ],
+    "VSENSE": [
+      "VSENSE",
+      "FB",
+      "VFB"
+    ],
+    "COMP": [
+      "COMP",
+      "VC",
+      "ITH"
+    ],
+    "GND": [
+      "GND",
+      "AGND",
+      "SGND"
+    ],
+    "PH": [
+      "PH",
+      "SW",
+      "LX"
+    ]
+  },
+  "ground_tie_pins": [
+    "POWERPAD",
+    "PAD",
+    "EP",
+    "EPAD",
+    "PGND",
+    "PWRPAD",
+    "THERMALPAD",
+    "DAP"
+  ],
+  "supported_behaviors": [
+    "fixed-frequency peak-current-mode switching of PH through an internal high-side switch (RON)",
+    "VSENSE frequency foldback in steps of 1, 1/2, 1/4 and 1/8 at the FOLD6/FOLD4/FOLD2 thresholds",
+    "cycle-by-cycle switch current limit ILIM with minimum on-time TONMIN and maximum duty DMAX",
+    "transconductance error amplifier (EAGM) with bounded source/sink current EAI into an external COMP network",
+    "switch-current-to-COMP gain GMCS and Eco-mode pulse skipping below VECO / ECO_I",
+    "EN threshold with hysteresis and EN pull-up current, so a floating EN enables",
+    "VIN undervoltage lockout with hysteresis",
+    "SS charge current ISS, SS-to-VSENSE offset and SS discharge while disabled",
+    "operating (non-switching) and shutdown supply current"
+  ],
+  "unsupported_behaviors": [
+    "temperature dependence and thermal shutdown",
+    "BOOT capacitor undervoltage monitoring and 100 % duty-cycle dropout operation",
+    "slope compensation, sub-harmonic behaviour and loop-bandwidth accuracy beyond the reduced amplifier",
+    "switching-edge detail: dead time, ringing, diode reverse recovery, gate-drive loss",
+    "overvoltage protection, output discharge and power-good (no PG pin)",
+    "external clock synchronisation or programmable frequency (no RT/SYNC pin)",
+    "internal compensation (parts without a COMP pin use a different topology)",
+    "line/load transient accuracy, PSRR and noise"
   ]
 }

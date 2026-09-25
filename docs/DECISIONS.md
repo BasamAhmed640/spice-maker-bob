@@ -303,3 +303,36 @@ previously saved off choice into permission to send a request. The refusal
 names the SETUP switch, environment override and invalid settings as possible
 causes. Focused tests cover the unreadable-config path and Bob's refusal
 before its process starts.
+
+## D-045 — Logic gates reference their own ground; a bench must touch node 0 (2026-09-25)
+
+LTspice ignores an unused A-device input only when it sits on that gate's own common
+(8th) node; on any other node it counts as logic low. The buck template tied unused inputs
+to global `0` while each gate's common was the model's `GND` pin, and the fixture loader
+had renamed a bench's only ground to `bm_fixture_ground`, which nothing tied to node 0. The
+saved current-limit bench therefore never switched (1.21198e-9 A against 4.2 A). Now: the
+template ties unused inputs to its `GND`; lint `a_device_input_ground` flags any model that
+does otherwise; `GND` is renamed only when the bench also names node 0 (a real ground-
+current sense); a bench with no connection to node 0 is refused as `fixture_floating_ground`.
+Proof: `docs/evidence/2026-09-25-buck-slice/ground-proof/`.
+
+## D-046 — Buck rules see through sense elements and pin aliases (2026-09-25)
+
+The pre-freeze buck rules found the power stage only through an inductor on a pin literally
+named PH. A 0.02 Ω PH-to-inductor sense resistor, or pins named SW/FB/AGND, made every rule
+— soft-start timing, COMP shunt, catch diode — silently not apply. PH is now traced through
+current-sense elements (≤ 1 Ω, 0 V sources) and terminal names are mapped through the
+template's aliases first. Limits are unchanged; the saved 0.5 ms current-limit window is
+rejected because cited SS charging needs 3.86 ms.
+
+## D-047 — Template parameters come from what a row says, not its id (2026-09-25)
+
+A fresh extraction names rows generically (`B002_REQ_016`), so the suffix-only mapping gave
+the saved GUI build 23 template defaults and 0 cited values — a second buck would silently
+have carried TPS54332 numbers. Each contract parameter now also has statement + unit
+sources (suffix sources stay first for older frozen specs), a cited typical current limit
+is preferred to a bounds midpoint, and the contract states pin-role aliases, ground-tie
+pins and supported/unsupported behaviours. `authoring/buck_fixtures.py` builds the
+current-limit bench deterministically from the matched pins and cited rows; it must pass
+the same pre-freeze rules as an AI-planned bench. It is proven on TPS54332DDA and TPS54331
+but not yet used by `bind()` to skip planning.

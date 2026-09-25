@@ -369,6 +369,23 @@ def lint_library(text: str, *, floating_ok: tuple[str, ...] = ()) -> list[LintFi
                             "`A1 S R 0 0 0 QB Q 0 SRFLOP Vhigh=1 Vlow=0`. Use 0 for unused inputs.",
                         )
                     )
+                nodes = element.text.split()[1:9]
+                if arity is not None and arity[0] == 8 and nodes[7] != "0":
+                    stray = [str(index + 1) for index, node in enumerate(nodes[:5]) if node == "0"]
+                    if stray:
+                        findings.append(
+                            LintFinding(
+                                ERROR,
+                                "a_device_input_ground",
+                                element.line,
+                                element.name,
+                                f"`{element.name}` ties input(s) {', '.join(stray)} to global node 0 "
+                                f"but its common node is `{nodes[7]}`. LTspice ignores an unused "
+                                "input only on the gate's own common node; on node 0 it reads as "
+                                "logic low whenever the circuit's ground is a different node, so an "
+                                f"AND gate stays off. Tie unused inputs to `{nodes[7]}`.",
+                            )
+                        )
                 continue
             if kind not in {"B", "E", "G"}:
                 continue
