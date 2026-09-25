@@ -65,6 +65,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from boardmodeler.domain.enums import EvidenceLevel, ModelKind
 from boardmodeler.domain.hashing import sha256_text
 from boardmodeler.domain.records import BEHAVIOR_KEYS, Limit, ModelCapability
+from boardmodeler.models.buck_switching import BuckSeed, seed_from_spec
 from boardmodeler.models.primitives import primitive_text
 from boardmodeler.models.regulator import (
     REGULATOR_EXTRA_PARAMS,
@@ -86,6 +87,7 @@ __all__ = [
     "FAMILY_TEMPLATES",
     "ApplicationDeck",
     "BehaviorClaim",
+    "BuckSeed",
     "ContractError",
     "DeckMeasure",
     "DeckSource",
@@ -102,6 +104,7 @@ __all__ = [
     "load_contract",
     "parse_subckt_header",
     "render_subckt",
+    "seed_from_spec",
     "validate_rendered_subckt",
     "write_application_deck",
 ]

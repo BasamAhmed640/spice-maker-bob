@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "id": "peak_current_buck_v1",
+  "description": "Reduced peak-current-mode buck with exposed PH and compensation pins",
+  "required_ports": ["BOOT", "VIN", "EN", "SS", "VSENSE", "COMP", "GND", "PH"],
+  "optional_ports": ["POWERPAD"],
+  "parameters": [
+    {"name": "VREF", "unit": "V", "default": 0.8, "sources": [{"suffix": "_VREF", "field": "typ_value"}]},
+    {"name": "FSW", "unit": "Hz", "default": 1000000.0, "sources": [{"suffix": "_FSW", "field": "typ_value"}, {"suffix": "_FEAT_FSW", "field": "typ_value"}, {"suffix": "_SWITCH_FREQ_TYPICAL", "field": "typ_value"}]},
+    {"name": "TONMIN", "unit": "s", "default": 1.1e-7, "sources": [{"suffix": "_MIN_ON_TIME", "field": "typ_value"}]},
+    {"name": "DMAX", "unit": "ratio", "default": 0.91, "sources": [{"suffix": "_DUTY_MAX", "field": "max_value", "scale": 0.01, "source_unit": "%"}, {"suffix": "_MAX_DUTY", "field": "typ_value", "scale": 0.01, "source_unit": "%"}]},
+    {"name": "ILIM", "unit": "A", "default": 5.35, "sources": [{"suffix": "_ILIM", "field": "bounds_midpoint"}]},
+    {"name": "GMCS", "unit": "A/V", "default": 12.0, "sources": [{"suffix": "_SW_CURRENT_TO_COMP", "field": "typ_value"}]},
+    {"name": "VECO", "unit": "V", "default": 0.5, "sources": [{"suffix": "_ECOMODE_COMP_0P5V", "field": "typ_value"}]},
+    {"name": "ECO_I", "unit": "A", "default": 0.16, "sources": [{"suffix": "_ECOMODE_TH", "field": "typ_value"}]},
+    {"name": "EAGM", "unit": "S", "default": 9.2e-5, "sources": [{"suffix": "_EA_GM", "field": "typ_value", "scale": 1e-6, "source_unit": "μmhos"}]},
+    {"name": "EAI", "unit": "A", "default": 7e-6, "sources": [{"suffix": "_EA_ISOURCE_SINK", "field": "typ_value"}]},
+    {"name": "ISS", "unit": "A", "default": 2e-6, "sources": [{"suffix": "_SS_CHARGE", "field": "typ_value"}]},
+    {"name": "SSOFS", "unit": "V", "default": 0.01, "sources": [{"suffix": "_SS_VSENSE_MATCH", "field": "typ_value"}]},
+    {"name": "ENTH", "unit": "V", "default": 1.25, "sources": [{"suffix": "_EN_THRESHOLD", "field": "typ_value"}, {"suffix": "_EN_TH", "field": "bounds_midpoint"}]},
+    {"name": "ENHYS", "unit": "V", "default": 0.05, "sources": []},
+    {"name": "UVTH", "unit": "V", "default": 3.5, "sources": [{"suffix": "_UVLO_VIN", "field": "min_value"}, {"suffix": "_REC_VIN", "field": "min_value"}]},
+    {"name": "UVHYS", "unit": "V", "default": 0.2, "sources": []},
+    {"name": "IQOP", "unit": "A", "default": 8.2e-5, "sources": [{"suffix": "_IOP_NONSW", "field": "typ_value"}]},
+    {"name": "IQSD_BASE", "unit": "A", "default": 0.0, "sources": []},
+    {"name": "EN_PULLUP", "unit": "A", "default": 1e-6, "sources": [{"suffix": "_EN_I_NEG50MV", "field": "typ_value", "absolute": true}]},
+    {"name": "RON", "unit": "ohm", "default": 0.08, "sources": []},
+    {"name": "FOLD6", "unit": "V", "default": 0.6, "sources": [{"suffix": "_SW_FREQ_VSENSE_GE_0P6", "field": "literal", "literal": 0.6, "source_unit": ""}]},
+    {"name": "FOLD4", "unit": "V", "default": 0.4, "sources": [{"suffix": "_SW_FREQ_VSENSE_0P4_TO_0P6", "field": "literal", "literal": 0.4, "source_unit": ""}]},
+    {"name": "FOLD2", "unit": "V", "default": 0.2, "sources": [{"suffix": "_SW_FREQ_VSENSE_LT_0P2", "field": "literal", "literal": 0.2, "source_unit": ""}]}
+  ]
+}
