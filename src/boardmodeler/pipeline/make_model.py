@@ -72,6 +72,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import hashlib
 import json
 import re
 import threading
@@ -114,6 +115,12 @@ from boardmodeler.providers.base import ProviderError
 from boardmodeler.providers.registry import select_provider
 from boardmodeler.requirements.model import validate_requirements
 from boardmodeler.requirements.review import apply_review, verify_citations
+from boardmodeler.security.network import (
+    NetworkRefused,
+    internet_allowed,
+    refusal_detail,
+    require_network,
+)
 from boardmodeler.simulation.ltspice import locate
 
 __all__ = [
@@ -1385,6 +1392,8 @@ class _Run:
         self.asy_path: Path | None = None
         self.card_path: Path | None = None
         self.files: list[Path] = []
+        self.template_seed: dict[str, Any] | None = None
+        self.template_seed_bytes: bytes | None = None
 
     # ------------------------------------------------------------------ stages
 
@@ -1533,6 +1542,10 @@ class _Run:
                     fixture_dir=self.cache_dir,
                 ).provider
             else:
+                try:
+                    require_network("extracting datasheet rows through Bob")
+                except NetworkRefused as exc:
+                    raise _Stop("extract", Status.BLOCKED.value, exc.detail) from exc
                 self.backend = build_backend(self.request)
                 extraction_provider = AgentExtractionProvider(
                     self.backend,
@@ -1809,6 +1822,51 @@ class _Run:
 
     # ------------------------------------------------------------ author/judge
 
+    def _seed_buck_template(
+        self, request: BuildRequest, path: Path, cancel: threading.Event | None
+    ) -> HarnessReport | None:
+        """Judge a deterministic buck seed before spending a Bob author turn."""
+        if path.is_file() or self.spec is None:
+            return None
+        from boardmodeler.authoring.harness import run_harness
+        from boardmodeler.authoring.validation_cache import validation_key, write_report
+        from boardmodeler.models.buck_switching import TemplateSeedError, seed_from_spec
+
+        try:
+            seed = seed_from_spec(self.spec, unverified=self.unverified)
+        except TemplateSeedError as exc:
+            self.log.emit("author", "skipped", f"buck template unavailable: {exc}")
+            return None
+        if seed is None:
+            return None
+        seed.write(path)
+        self.template_seed = seed.payload()
+        self.template_seed_bytes = path.read_bytes()
+        self.log.emit("author", "running", "judging a cited buck template before Bob repair")
+        cache_root = self.workdir / "validation-cache"
+        key = validation_key(path, self.spec, request.ltspice, request.timeout_s)
+        run_dir = (
+            cache_root / key if key is not None else self.workdir / "harness" / "template-seed"
+        )
+        try:
+            report = run_harness(
+                model_lib=path,
+                subckt=request.subckt,
+                spec=self.spec,
+                workdir=run_dir,
+                ltspice=request.ltspice,
+                timeout_s=request.timeout_s,
+                cancel=cancel,
+            )
+        except Exception as exc:
+            self.log.emit(
+                "judge", "failed", f"buck template simulation failed: {type(exc).__name__}: {exc}"
+            )
+            return None
+        write_report(cache_root, key, report)
+        self._on_report(report)
+        return report
+
     def author(self, cancel: threading.Event | None) -> None:
         self.log.emit("author", "running", f"checking the {self.request.backend_name!r} backend")
         backend = self.backend or build_backend(self.request)
@@ -1882,7 +1940,11 @@ class _Run:
             self.log.emit("author", "skipped", detail)
             self.status, self.detail = Status.UNKNOWN.value, detail
             return
-        from boardmodeler.authoring.validation_cache import read_report, validation_key
+        from boardmodeler.authoring.validation_cache import (
+            progress_score,
+            read_report,
+            validation_key,
+        )
 
         request = BuildRequest(
             part=self.request.part,
@@ -1902,10 +1964,24 @@ class _Run:
         normalize_ground_reference(
             path, self.spec.pin_map, self.workdir / "evidence" / "ground-reference", spec=self.spec
         )
+        seed_report = self._seed_buck_template(request, path, cancel)
+        if seed_report is not None and seed_report.passed():
+            self.outcome = BuildOutcome(
+                status=Status.PASS.value,
+                iterations=0,
+                report=seed_report,
+                history=("cited buck template passed the LTspice harness; zero Bob turns",),
+                detail="template passed every bound simulator row; zero Bob turns",
+            )
+            self.report = seed_report
+            self.log.emit("author", "ok", "template passed; zero Bob turns", {"turns": 0})
+            return
         key = validation_key(path, self.spec, install.path, self.request.timeout_s)
         cached = read_report(self.workdir / "validation-cache", key, self.spec, path)
-        prechecked = cached is None and not (cancel and cancel.is_set())
-        if prechecked:
+        prechecked = seed_report is not None or (
+            cached is None and not (cancel and cancel.is_set())
+        )
+        if prechecked and seed_report is None:
             # A fresh process has no receipt for an existing candidate. Re-judge it with
             # one LTspice run before any remote reinforcement or author turn is spent.
             revalidated = revalidate_candidate(request, cancel)
@@ -1921,12 +1997,36 @@ class _Run:
                 self.log.emit("judge", "ok", "reused revalidated simulator evidence")
                 return
         if cached is None or not cached.passed():
-            usable, reason = backend.availability()
+            if _author_needs_network(self.request) and not internet_allowed():
+                usable, reason = False, refusal_detail("authoring a model through Bob")
+            else:
+                usable, reason = backend.availability()
             if not usable:
+                if seed_report is not None and any(
+                    row.status in (Status.PASS.value, Status.FAIL.value) and row.artifacts
+                    for row in seed_report.outcomes
+                ):
+                    self.outcome = BuildOutcome(
+                        status=Status.UNKNOWN.value,
+                        iterations=0,
+                        report=seed_report,
+                        history=("template simulated; Bob repair unavailable",),
+                        detail=f"template model measured with unresolved rows; Bob repair: {reason}",
+                    )
+                    self.report = seed_report
+                    self.log.emit(
+                        "author", "ok", "template delivered with measured limits", {"turns": 0}
+                    )
+                    return
                 self.log.emit("author", "failed", reason)
                 self.status, self.detail = Status.BLOCKED.value, reason
                 return
-            self._gather_supporting_material(cancel)
+            if seed_report is None or self.request.reinforce is True:
+                self._gather_supporting_material(cancel)
+            else:
+                self.log.emit(
+                    "reinforce", "skipped", "template already supplies the repair context"
+                )
             request = dataclasses.replace(
                 request,
                 supporting_context="\n".join(
@@ -1934,6 +2034,12 @@ class _Run:
                     for source in (self.reinforcement.sources if self.reinforcement else ())
                     if source.retrieved and source.sha256 and source.excerpt
                 ),
+            )
+        if seed_report is not None:
+            request = dataclasses.replace(
+                request,
+                max_iterations=1,
+                turn_timeout_s=min(request.turn_timeout_s or 150.0, 150.0),
             )
         self.log.emit(
             "judge",
@@ -1953,6 +2059,19 @@ class _Run:
                 outcome = build_model(request, cancel, candidate_revalidated=prechecked)
         finally:
             _BUILD_LOCK.release()
+        if seed_report is not None and self.template_seed_bytes is not None:
+            better = bool(outcome.report.outcomes) and progress_score(
+                outcome.report, self.spec
+            ) < progress_score(seed_report, self.spec)
+            if not better and outcome.status != Status.PASS.value:
+                path.write_bytes(self.template_seed_bytes)
+                outcome = BuildOutcome(
+                    status=Status.UNKNOWN.value,
+                    iterations=outcome.iterations,
+                    report=seed_report,
+                    history=(*outcome.history, "restored the measured template seed"),
+                    detail=f"template retained after bounded repair; {outcome.detail}",
+                )
         self.outcome = outcome
         self.report = outcome.report
         model_written = model_file(self.workdir, self.request.subckt).is_file()
@@ -1977,14 +2096,10 @@ class _Run:
         reported as such, and the run continues. ``cancel`` is the build's event; it and
         ``reinforce_timeout_s`` bound only this search, never the author loop.
         """
-        enabled = self.request.reinforce
-        if enabled is None:
-            try:
-                from boardmodeler.config import load_config
-
-                enabled = bool(load_config().web_reinforcement)
-            except Exception:  # pragma: no cover - a broken config must not stop a build
-                enabled = True
+        if not internet_allowed():
+            self.log.emit("reinforce", "skipped", refusal_detail("the supporting-material search"))
+            return
+        enabled = self.request.reinforce is not False
         digest = self.spec.digest() if self.spec is not None else ""
         try:
             report = reinforce(
@@ -2034,6 +2149,14 @@ class _Run:
         source = None if self.spec is None else model_file(self.workdir, self.request.subckt)
         if self.request.verification == "sanity" and not self.sanity_ok:
             source = None
+        if self.template_seed is not None and not any(
+            row.status in (Status.PASS.value, Status.FAIL.value) and row.artifacts
+            for row in self.report.outcomes
+        ):
+            source = None
+            self.detail = (
+                f"{self.detail}; template_not_simulated: no measured LTspice artifact was produced"
+            ).strip("; ")
         if source is not None and source.is_file():
             try:
                 self._publish(source, notes)
@@ -2107,7 +2230,12 @@ class _Run:
             spec=self.spec,
             report=self.report,
             document=self.spec.doc_id if self.spec is not None else None,
-            backend=self.backend_name or None,
+            backend=(
+                "buck_template"
+                if self.template_seed_bytes is not None
+                and text.encode("utf-8") == self.template_seed_bytes
+                else self.backend_name or None
+            ),
             iterations=None if self.outcome is None else int(self.outcome.iterations),
             reinforcement=self.reinforcement,
         )
@@ -2115,6 +2243,49 @@ class _Run:
             (path for path in written if path.name == "MODEL_CARD.md"),
             self.out_dir / "MODEL_CARD.md",
         )
+        if self.template_seed is not None and self.template_seed_bytes is not None:
+            same_as_seed = text.encode("utf-8") == self.template_seed_bytes
+            metadata = {
+                **self.template_seed,
+                "seed_sha256": hashlib.sha256(self.template_seed_bytes).hexdigest(),
+                "final_model_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                "final_model_matches_seed": same_as_seed,
+            }
+            self._write_text(
+                self.out_dir / "template-parameters.json",
+                json.dumps(metadata, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+            )
+            defaults = [
+                parameter
+                for parameter in metadata["parameters"]
+                if parameter["origin"] == "template_default"
+            ]
+            provenance = [
+                "\n## Buck template parameter origins\n",
+                "The starting template and its cited rows are recorded in "
+                "`template-parameters.json`. This file is provenance, not verification.\n",
+            ]
+            if same_as_seed:
+                provenance.append(
+                    "The delivered library matches the simulator-judged template seed.\n"
+                )
+                if defaults:
+                    provenance.append("Template defaults without a cited datasheet value:\n")
+                    provenance.extend(
+                        f"- `{entry['name']}` = {entry['value']:g} {entry['unit']} "
+                        "(template default)\n"
+                        for entry in defaults
+                    )
+            else:
+                provenance.append(
+                    "Bob changed the seed during repair. Parameter origins in the JSON "
+                    "describe the starting seed; review the delivered library for final values.\n"
+                )
+            self._write_text(
+                self.card_path,
+                self.card_path.read_text(encoding="utf-8") + "".join(provenance),
+            )
+            notes.append("saved buck template parameter origins")
         if request.verification == "sanity":
             from boardmodeler.authoring.sanity import write_card
 
@@ -2324,6 +2495,13 @@ def _confirmed_wrong(outcome: BuildOutcome, max_iterations: int | None) -> bool:
 # entry point
 
 
+_NETWORK_BACKENDS = frozenset({"", "api", "bob"})
+
+
+def _author_needs_network(request: MakeModelRequest) -> bool:
+    return str(request.backend_name or "").strip().lower() in _NETWORK_BACKENDS
+
+
 def make_model(
     request: MakeModelRequest,
     progress: Callable[[StageEvent], None] | None = None,
@@ -2340,6 +2518,13 @@ def make_model(
     request = _checked(request)
     log = _StageLog(progress)
     run = _Run(request, log)
+    local_spec_supplied = (
+        request.requirements_json is not None and request.bindings_json is not None
+    )
+    if _author_needs_network(request) and not internet_allowed() and not local_spec_supplied:
+        detail = refusal_detail("extracting and authoring a model through Bob")
+        log.emit("author", "failed", detail)
+        return _empty_result(request, log, detail)
     try:
         run.out_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:

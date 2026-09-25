@@ -59,3 +59,26 @@ def test_bob_author_and_key_check_do_not_call_a_runner_when_off(
 
     checked = verify_key(default_provider(), "fixture-key")
     assert checked.status == "unverified" and "nothing was sent" in checked.detail
+
+
+def test_model_build_refuses_before_read_or_bob_spawn_when_off(tmp_path: Path, monkeypatch) -> None:
+    from boardmodeler.pipeline import make_model as engine
+
+    monkeypatch.setenv("BOARDMODELER_NO_NETWORK", "1")
+    monkeypatch.setattr(
+        engine,
+        "build_backend",
+        lambda *_args: pytest.fail("a backend was constructed with Internet off"),
+    )
+    out = tmp_path / "out"
+    request = engine.MakeModelRequest(
+        part="TPS54332DDA",
+        subckt="TPS54332DDA",
+        datasheet=tmp_path / "absent.pdf",
+        out_dir=out,
+        backend_name="bob",
+    )
+    result = engine.make_model(request)
+    assert result.status == "BLOCKED"
+    assert "internet_access_off" in result.detail
+    assert not out.exists()

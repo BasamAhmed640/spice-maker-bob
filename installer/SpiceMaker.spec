@@ -99,7 +99,13 @@ a = Analysis(
     binaries=[],
     # The window looks for its icon next to the executable and inside the bundle;
     # "installer/assets/pepper.ico" is the mark the splash and the .ico are drawn from.
-    datas=[(os.fspath(ICON), ".")],
+    datas=[
+        (os.fspath(ICON), "."),
+        (
+            os.fspath(REPO / "src" / "boardmodeler" / "models" / "peak_current_buck.json"),
+            "boardmodeler/models",
+        ),
+    ],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
