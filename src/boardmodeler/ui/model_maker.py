@@ -820,6 +820,22 @@ class ModelMakerWindow(QMainWindow):
         assert item is not None
         return item
 
+    def _finish_stages(self, status: str, detail: str) -> None:
+        """Reconcile the stage table with a terminal result or error."""
+        fallback = status == "UNKNOWN" and "template retained after bounded repair" in detail.lower()
+        for row in range(self.stages.rowCount()):
+            stage = self._stage_item(row, 0).text()
+            state = self._stage_item(row, 1)
+            previous_detail = self._stage_item(row, 2).text()
+            if state.text() != "running" and not (fallback and stage == "author"):
+                continue
+            state.setText(status)
+            state.setForeground(_colour(_STATUS_COLOUR.get(status, "#ffffff")))
+            final_detail = previous_detail if fallback and stage == "author" else detail
+            final_detail = final_detail or f"Build ended: {status}"
+            self._stage_item(row, 2).setText(final_detail)
+            self._stage_item(row, 2).setToolTip(final_detail)
+
     def _on_stage(self, event: object) -> None:
         stage = getattr(event, "stage", "?")
         status = getattr(event, "status", "?")
@@ -854,6 +870,7 @@ class ModelMakerWindow(QMainWindow):
         status = getattr(result, "status", "UNKNOWN")
         counts = getattr(result, "counts", {}) or {}
         detail = getattr(result, "detail", "")
+        self._finish_stages(str(status), str(detail))
         self.status_label.setText(f"{status} — {counts} — {detail}"[:200])
         self.status_label.setToolTip(detail)
         self.status_label.setStyleSheet(
@@ -889,6 +906,7 @@ class ModelMakerWindow(QMainWindow):
 
     def _on_failed(self, message: str) -> None:
         self._set_busy(False)
+        self._finish_stages("failed", "Build stopped with an error")
         self.status_label.setText("failed — " + message[:160])
         self.status_label.setStyleSheet("color: #ff5555; font-family: Consolas; font-size: 10pt;")
         QMessageBox.critical(self, "The run failed", message)

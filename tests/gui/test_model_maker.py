@@ -170,6 +170,41 @@ def test_a_successful_run_fills_the_stage_and_row_tables(qtbot, tmp_path, monkey
     assert window.cancel_button.isEnabled() is False
 
 
+def test_unknown_template_fallback_finishes_author_and_judge_stages(qtbot, tmp_path) -> None:
+    """A completed run must not leave the last verification stage looking active."""
+    from boardmodeler.ui.model_maker import ModelMakerWindow
+
+    window = ModelMakerWindow()
+    qtbot.addWidget(window)
+    fallback = "template retained after bounded repair; turn_timeout after 300 s"
+    window._on_stage(_Stage("author", "ok", fallback))
+    window._on_stage(_Stage("judge", "running", "checking the model"))
+    window._on_result(
+        _Result(
+            status="UNKNOWN",
+            detail=fallback,
+            part="TPS54332DDA",
+            out_dir=tmp_path,
+            card_path=tmp_path / "MODEL_CARD.md",
+            lib_path=tmp_path / "TPS54332DDA.lib",
+            asy_path=tmp_path / "TPS54332DDA.asy",
+            rows=(),
+            counts={"PASS": 10, "FAIL": 1, "UNKNOWN": 53},
+        )
+    )
+
+    stages = {
+        window.stages.item(row, 0).text(): (
+            window.stages.item(row, 1).text(), window.stages.item(row, 2).text()
+        )
+        for row in range(window.stages.rowCount())
+    }
+    assert stages["author"] == ("UNKNOWN", fallback)
+    assert stages["judge"] == ("UNKNOWN", fallback)
+    assert all(state != "running" for state, _ in stages.values())
+    assert window.status_label.text().startswith("UNKNOWN")
+
+
 def test_a_blocked_run_still_reports_something_useful(qtbot, tmp_path, monkeypatch) -> None:
     calls: list[_Request] = []
     result = _Result(
