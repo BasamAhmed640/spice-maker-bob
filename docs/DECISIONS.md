@@ -214,3 +214,47 @@ negative) and extraction sends only the selected pages. Every page is accounted 
 named gap. A page with no text layer goes to OCR when an engine is available and is
 otherwise an explicit `extract_page_gap` — never silently dropped. A provider reply cut
 off mid-JSON is refused as `extraction_response_truncated` before it can be cached.
+
+## D-037 — A second PDF reader, not a stopped build (2026-09-24)
+
+pypdf 6.19.0 raised `NameError: name '_LENGTH_LIMIT' is not defined` inside
+`NumberObject.read_from_stream` while registering a readable datasheet (the LM358 PDF,
+1 of 7 runs with a provider key in the environment, 0 of 7 without; the error names a class
+attribute that exists, so it is not a property of the file). That one fault stopped the
+whole build at "read". `documents/pdf.read_pdf` now reads the same inventory — page text,
+raster image counts, `/Info` metadata — through pdfium when pypdf raises anything, and
+raises pypdf's own error only when pdfium cannot read the file either. Page labels stay
+undeclared (`{}`) on the pdfium path, because a label is reported only when the document's
+own tree was read.
+
+## D-038 — One gate fixture, then the rest in parallel (2026-09-24)
+
+The harness runs the first fixture alone. A candidate that times out or does not converge
+there is still sent back for repair with every other fixture deferred (UNKNOWN), as before.
+Once the gate simulates, the remaining fixtures run concurrently
+(`BOARDMODELER_HARNESS_WORKERS`, default `min(4, cores)`, `1` restores serial runs), and a
+later timeout or convergence failure marks only its own rows UNKNOWN. Before, one 120 s
+timeout deferred every remaining fixture — 8 TPS54332DDA rows in one recorded turn.
+
+## D-039 — Readiness is visible before GO (2026-09-24)
+
+The build window shows six lights — API KEY, MODEL (Bob edition: BOB SHELL), LTSPICE, PDF,
+OCR, INTERNET — and a VERIFY KEY & TOOLS button. The lights open from local state only
+(nothing is sent). VERIFY sends one request in exactly the shape a build sends (endpoint,
+model id, reasoning switch, the app's User-Agent) and passes MODEL only when the reply parses
+as the generator's `{"files": ...}` object; it then runs the LTspice RC smoke circuit. In the
+Bob edition it first reads `bob run --help` offline and turns BOB SHELL red when a flag every
+build passes is missing, then runs Bob Shell once with every tool group disabled. No key,
+request or response text is ever put in a light's detail. Found while building it: without
+the app's User-Agent the OpenCode endpoint answered HTTP 403, which reads as a rejected key.
+
+## D-040 — Symbols follow the schematic convention (2026-09-24)
+
+Generated `.asy` symbols place positive supplies on top, grounds, negative supplies and
+exposed pads at the bottom, inputs and controls on the left, and outputs plus the
+feedback/compensation network on the right. Numbered channels are grouped: an op-amp channel
+reads IN+, OUT, IN− with the output between its own inputs. The old two-column heuristic
+matched the hint "a" inside any name, which put POWERPAD among the inputs, VIN at the
+bottom-left and VEE among the outputs. Geometry only: `SpiceOrder` still follows the
+`.subckt` declaration, checked by `validate_symbol` and by a real LTspice netlist test.
+`tools/render_symbol.py` draws an `.asy` the way LTspice places pin names, for review.

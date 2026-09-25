@@ -34,6 +34,12 @@ STATE_COLOURS: dict[str, str] = {
 }
 _STATE_WORDS = {"ok": "ready", "warn": "limited", "fail": "problem", "unchecked": "not tested"}
 
+
+def _light_text(label: str) -> str:
+    """A large dot (the cue) followed by the light's name."""
+    return f'<span style="font-size: 15pt;">●</span>&nbsp;<b>{label}</b>'
+
+
 #: A verification that has not answered by then is reported as such, not waited on.
 VERIFY_TIMEOUT_S = 120.0
 
@@ -51,6 +57,7 @@ class ReadinessStrip(QWidget):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(6)
         self.lights: dict[str, QLabel] = {}
+        self._labels: dict[str, str] = {}
         for key, label in (
             ("key", "API KEY"),
             ("model", agent_light_label()),
@@ -59,7 +66,8 @@ class ReadinessStrip(QWidget):
             ("ocr", "OCR"),
             ("internet", "INTERNET"),
         ):
-            light = QLabel(f"● {label}")
+            self._labels[key] = label
+            light = QLabel(_light_text(label))
             light.setObjectName(f"ready_{key}")
             self.lights[key] = light
             row.addWidget(light)
@@ -76,10 +84,7 @@ class ReadinessStrip(QWidget):
         self._timer.setInterval(150)
         self._timer.timeout.connect(self._poll)
         self.show_checks(
-            [
-                Check(key, light.text()[2:], "unchecked", "checking…")
-                for key, light in self.lights.items()
-            ]
+            [Check(key, self._labels[key], "unchecked", "checking…") for key in self.lights]
         )
 
     def state_of(self, key: str) -> str:
@@ -92,7 +97,7 @@ class ReadinessStrip(QWidget):
             if light is None:
                 continue
             colour = STATE_COLOURS.get(check.state, CGA["grey"])
-            light.setText(f"● {check.label}")
+            light.setText(_light_text(check.label))
             light.setStyleSheet(f"color: {colour}; font-family: Consolas; font-size: 9pt;")
             light.setToolTip(
                 f"{check.label}: {_STATE_WORDS.get(check.state, check.state)} — {check.detail}"
