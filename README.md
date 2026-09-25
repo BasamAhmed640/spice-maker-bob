@@ -1,9 +1,7 @@
 # Spice Maker Bob
 
-Source version: **1.6.0**. The checked-in `Install.exe` is still the **1.5.0**
-build shown in `INSTALL.txt`; it will contain the new source only after the
-1.6.0 installer is rebuilt and committed. Check `SHA256SUMS.txt` against the
-installer in the ZIP you download.
+Source and checked-in installer version: **1.6.0**. Check `SHA256SUMS.txt`
+against the installer in the ZIP you download.
 
 **Safety update:** SETUP requires you to choose an LTspice executable with **BROWSE** and save it. The app does not search installed programs or adopt an inherited `LTSPICE_EXE`. Bob Shell receives the complete prompt through stdin with its read, edit, execute, MCP, skill, todo, subagent and mode tools disabled. The application writes Bob's model text and runs LTspice itself; a Bob reply cannot mark a model verified.
 
@@ -49,7 +47,7 @@ final duration. See [what the agents and simulator do](docs/AGENT_WORKFLOW.md).
 ## Install on Windows
 
 On the **main** branch, choose **Code → Download ZIP**, extract the archive and run
-**Install.exe** beside this README. The currently checked-in 1.5.0 installer retains the animated
+**Install.exe** beside this README. The checked-in 1.6.0 installer retains the animated
 pepper setup. INSTALL.txt contains instructions; SHA256SUMS.txt authenticates the installer.
 Python is bundled. LTspice and IBM Bob Shell are separate prerequisites. This build is unsigned.
 
