@@ -144,3 +144,21 @@ def test_ordinary_independent_sources_are_left_alone(tmp_path) -> None:
     lib.write_bytes(original)
     assert not normalize_behavioral_sources(lib, tmp_path / "evidence")
     assert lib.read_bytes() == original
+
+
+def test_an_a_device_with_seven_nodes_is_named_before_ltspice_runs():
+    """Observed: an authored SRFLOP with 7 nodes; LTspice said only "Expected valid special
+    function name here" under ``Vhigh=1``. The lint names the count and the fix."""
+    from boardmodeler.authoring.convergence import lint_library
+
+    bad = (
+        ".subckt T S R GND\n"
+        "Vlogic logic GND 1\n"
+        "Aeco S 0 logic GND eco eco_n GND SRFLOP Vhigh=1 Vlow=0\n"
+        "R1 eco GND 1k\nR2 eco_n GND 1k\nR3 S GND 1k\n.ends T\n"
+    )
+    found = [f for f in lint_library(bad) if f.code == "a_device_node_count"]
+    assert len(found) == 1 and found[0].severity == "error"
+    assert "7 node(s)" in found[0].message and "exactly 8" in found[0].message
+    good = bad.replace("Aeco S 0 logic GND eco eco_n GND", "Aeco S 0 0 0 0 eco_n eco GND")
+    assert not [f for f in lint_library(good) if f.code == "a_device_node_count"]

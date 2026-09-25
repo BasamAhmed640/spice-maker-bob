@@ -259,6 +259,44 @@ def _elements(body: list[tuple[int, str]]) -> list[_Element]:
     return elements
 
 
+#: LTspice's special-function (A-device) types, as the model keyword after the 8 nodes.
+_A_DEVICE_TYPES = frozenset(
+    {
+        "and",
+        "or",
+        "xor",
+        "inv",
+        "buf",
+        "dflop",
+        "srflop",
+        "schmitt",
+        "schmtbuf",
+        "schmtinv",
+        "diffschmitt",
+        "diffschmtbuf",
+        "diffschmtinv",
+        "phidet",
+        "samplehold",
+        "counter",
+        "modulate",
+        "modulate2",
+        "varistor",
+        "ota",
+        "dlatch",
+        "srlatch",
+    }
+)
+
+
+def _a_device_arity(line: str) -> tuple[int, str] | None:
+    """``(nodes before the type keyword, keyword)`` for an A-device line, if it names one."""
+    words = line.split()
+    for index, word in enumerate(words[1:], start=1):
+        if word.lower() in _A_DEVICE_TYPES:
+            return index - 1, word
+    return None
+
+
 def _is_ground(node: str) -> bool:
     return node.lower() in _GROUND_NAMES
 
@@ -316,6 +354,22 @@ def lint_library(text: str, *, floating_ok: tuple[str, ...] = ()) -> list[LintFi
         node_names |= {p.lower() for p in ports}
         for element in elements:
             kind = element.name[0].upper()
+            if kind == "A":
+                arity = _a_device_arity(element.text)
+                if arity is not None and arity[0] != 8:
+                    findings.append(
+                        LintFinding(
+                            ERROR,
+                            "a_device_node_count",
+                            element.line,
+                            element.name,
+                            f"`{element.name}` lists {arity[0]} node(s) before `{arity[1]}`; an "
+                            "LTspice A-device takes exactly 8: five inputs, then QB (inverted "
+                            "output), Q (output) and the common node, e.g. "
+                            "`A1 S R 0 0 0 QB Q 0 SRFLOP Vhigh=1 Vlow=0`. Use 0 for unused inputs.",
+                        )
+                    )
+                continue
             if kind not in {"B", "E", "G"}:
                 continue
             expression = _expression(element.text)
