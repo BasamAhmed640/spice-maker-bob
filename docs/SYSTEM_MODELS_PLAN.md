@@ -42,7 +42,7 @@ commits may record those IDs afterward.
 | Milestone | Scope and acceptance | Status | Date | Evidence path | General commit | Bob commit |
 | --- | --- | --- | --- | --- | --- | --- |
 | M0 | D-048, 22-family catalog, plan; general evidence report covering both editions and status in both | DONE | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m0/REPORT.md` (general) | `13a578e8e7c2132029c47b33fa3e7df26c725911` | `c8c60c080d38d4de90b501aa90a24003df6819c7` |
-| M1 | Fresh-rendered TPS54332 vs TI model with the same passives; gain slope at ≥3 active points, resistive overload and short, ripple, edges, startup, load step; evidence only | DONE (measured; FAIL/UNKNOWN retained) | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m1/REPORT.md` (general) | pending commit | pending commit |
+| M1 | Fresh-rendered TPS54332 vs TI model with the same passives; gain slope at ≥3 active points, resistive overload and short, ripple, edges, startup, load step; evidence only | DONE (measured; FAIL/UNKNOWN retained) | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m1/REPORT.md` (general) | `380988f131deba87bbf151a229cf4b989d9992ad` | `f3598591bb6c9312d84939b25e5a15873692189b` |
 | M2 | Pre-freeze guard rules and code-built gain, limit, ripple, edge, load-step, startup benches | TODO | — | — | — | — |
 | M3 | Remove unjustified ground/pad ties; required-connection check and alarm; explain frozen-row changes | TODO | — | — | — | — |
 | M4 | Matching SW and AVG peak-current buck modes; both-mode key values; SW shapes; speed; release checkpoint | TODO | — | — | — | — |
