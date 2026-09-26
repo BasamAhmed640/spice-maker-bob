@@ -122,7 +122,7 @@ def test_steady_state_window_cannot_precede_cited_soft_start_charging():
             "citation_verified": True,
         },
     ]
-    with pytest.raises(ValueError, match=r"buck_fixture_soft_start.*0\.00386 s"):
+    with pytest.raises(ValueError, match=r"buck_fixture_soft_start.*0\.005 s"):
         _validate(data, context=context)
     data["stop"] = 0.006
     data["measurement"].update(start=0.005, end=0.006)

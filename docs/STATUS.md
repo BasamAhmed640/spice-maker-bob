@@ -1,3 +1,26 @@
+## 2026-09-25 — M2 cited guards and buck benches (Bob edition)
+
+M2 is complete; the [general-edition measured report](https://github.com/BasamAhmed640/spice-maker/blob/main/docs/evidence/2026-09-25-system-models-m2/REPORT.md)
+records the real LTspice TPS54332DDA runs. Bob now has the same cited
+current-sense-gain and current-limit pre-freeze guards, seven deterministic
+buck benches, and waveform evaluator. The two editions have **43 byte-identical
+shared core files**. Bob's focused regression set passed **620 tests with 7
+edition-specific skips in 193.07 s**; Ruff, formatting, manifest, and diff
+checks passed. The general edition's live run produced six usable measurements
+and one unresolved PH-edge `UNKNOWN`; these are not separate Bob simulations.
+M1's ripple **FAIL** and low-COMP gain anomaly remain open. No Bob AI or network
+call was made, no board-level suite case activated, and no vendor library or raw
+waveform was committed. Next: M3 PCB ground/pad connection rules.
+
+The focused Bob command was
+`.\.venv\Scripts\python.exe -m pytest -q -m 'not network' tests/authoring tests/models tests/pipeline tests/ltspice tests/test_shared_core.py`,
+with `LTSPICE_EXE` explicitly set to
+`C:\Users\basam\AppData\Local\Programs\ADI\LTspice\LTspice.exe` and the
+offline override removed for mocked-provider tests. Style and parity commands
+were `.\.venv\Scripts\python.exe -m ruff check src tests tools`, `git diff --check`,
+and `.\.venv\Scripts\python.exe tools/shared_core.py --check`; changed files
+also passed Ruff format checking.
+
 ## 2026-09-25 — M1 system-model check-in (Bob edition)
 
 The [general-edition M1 TPS54332DDA side-by-side report](https://github.com/BasamAhmed640/spice-maker/blob/main/docs/evidence/2026-09-25-system-models-m1/REPORT.md)

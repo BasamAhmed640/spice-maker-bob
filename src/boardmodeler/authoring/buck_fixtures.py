@@ -7,8 +7,9 @@ to look; the verdict still comes from the LTspice harness against the frozen lim
 
 The current-limit bench measures the peak switch current through a 20 mOhm sense
 resistor between PH and the inductor, with a load that asks for 1.5x the highest cited
-limit, and only after the cited soft-start has had time to reach the minimum reference.
-The earlier planned bench looked at 0.5-1 ms while cited SS charging needs 3.86 ms.
+limit, and only after the calculated soft-start reaches the highest supplied
+reference voltage, plus a settling margin. A calculation from a cited SS charge
+current is not itself a measured or guaranteed silicon maximum.
 """
 
 from __future__ import annotations
@@ -43,6 +44,7 @@ def current_limit_recipe(
     reference_typ: float,
     limit_high: float,
     evidence: str,
+    reference_max: float | None = None,
     output_voltage: float = 3.3,
     inductance: float = 10e-6,
     output_capacitance: float = 22e-6,
@@ -51,11 +53,16 @@ def current_limit_recipe(
 
     ``roles`` maps template role -> the part's terminal name (see ``match_pins``).
     ``limit_high`` is the highest cited current-limit value (maximum, else typical); the
-    load demands 1.5x that so the converter must be in current limit.
+    load demands 1.5x that so the converter must be in current limit. Supply the
+    cited ``reference_max`` when one exists; otherwise the typical value is the
+    highest supplied reference.
     """
     if min(vin, output_voltage, limit_high, reference_typ) <= 0 or output_voltage >= vin:
         raise ValueError("current-limit bench needs 0 < VOUT < VIN and a positive limit")
-    start = soft_start_time(SS_CAPACITANCE, charge_current, reference_min) + SETTLE_S
+    highest_reference = reference_typ if reference_max is None else reference_max
+    if highest_reference < max(reference_min, reference_typ):
+        raise ValueError("current-limit bench reference maximum cannot be below min/typ")
+    start = soft_start_time(SS_CAPACITANCE, charge_current, highest_reference) + SETTLE_S
     stop = start + WINDOW_S
     upper = FEEDBACK_LOWER_OHMS * (output_voltage / reference_typ - 1)
     load = output_voltage / (1.5 * limit_high)
@@ -103,7 +110,8 @@ def current_limit_recipe(
         "condition_evidence": (
             f"{evidence} Deterministic template bench: VIN {vin:g} V, load {load:.4g} ohm asks "
             f"for 1.5x the {limit_high:g} A limit; SS {SS_CAPACITANCE:g} F at the cited "
-            f"{charge_current:g} A reaches {reference_min:g} V at {start - SETTLE_S:.4g} s, "
+            f"{charge_current:g} A reaches {highest_reference:g} V at "
+            f"{start - SETTLE_S:.4g} s (not a guaranteed silicon maximum), "
             f"so the peak is read from {start:.4g} s to {stop:.4g} s."
         ),
     }

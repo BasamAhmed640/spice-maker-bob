@@ -1,6 +1,7 @@
 {
   "authoring/__init__.py": "5b8c35c57fda429ffd55541228f0de9397af9ba06c5e00bcd6f0261f0f11b05b",
-  "authoring/buck_fixtures.py": "41f223e112056203ae115e3a41c5c68fbb21d280dc3b85723b1a424deebb9209",
+  "authoring/buck_fixtures.py": "9547541a4f7f075686506fa2fb8ca8907e7fd00cf2a833bd381de15a4b54c933",
+  "authoring/buck_system_fixtures.py": "d2532222ea8285faa0cc40abd9fbaf8d6213748d4e0b5fa16bc4405c61976221",
   "authoring/card.py": "142e79642403f92c98f788d1a1d9b68a93b67ac402cb9adb7e6d0a6161dfdfef",
   "authoring/circuit_probe.py": "1d054d3569042cdc3f70346954788cc282046a6e03a79c5789b651e3fb4e1920",
   "authoring/conditions.py": "3d4cba0db4fb674218e812cd8f18ecd2c8b429f36086cde3d3863f90f94803f9",
@@ -17,7 +18,7 @@
   "authoring/reinforce.py": "fc52671dfaa8cf0dbde1c143c98ae283d70ece4a7df0ef351900cc6947deeab4",
   "authoring/spec.py": "0fea71fb7e694143d572e7cb0995217c694bc64b1ac98cc27bed6c8acd007aac",
   "authoring/standard_fixtures.py": "93588b289d4e2e398f5f695401815d7cdc1a328856d837776e1b6653c10d9027",
-  "authoring/test_planner.py": "1ad70903455f27ad222dbee6269532af5c890091d62416c5103542875977d37c",
+  "authoring/test_planner.py": "d34dad45cc1907c040b7b2047dc878a1eb2b36f7db51155abf8205f7009d9bea",
   "authoring/validation_cache.py": "8ca91fedd02e6693b459082462c028309dd5afa22b6ee6424e25695d5c0da7a2",
   "documents/__init__.py": "47780fc36e4c2bef386651af1f75881759878a9003bb6ab8835b9688dd29a5ca",
   "documents/chunk.py": "1e33ca6d5a6b3ffaacc28a98901228cf33348c92375e26ca340bd5f9298cd386",

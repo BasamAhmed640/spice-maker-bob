@@ -97,9 +97,9 @@ def test_the_saved_current_limit_window_is_rejected_as_premature():
     recipe = CircuitRecipe.model_validate(_recipe())
     issue = _buck_fixture_issue(recipe, SOURCE_ROWS, STATEMENT)
     assert issue is not None and issue.startswith("buck_fixture_soft_start")
-    assert "0.00386" in issue  # 10 nF x 0.772 V / 2 uA
+    assert "0.00514" in issue  # 10 nF x 0.828 V / 2 uA + 1 ms settling
 
 
 def test_a_window_after_cited_soft_start_is_accepted():
-    recipe = CircuitRecipe.model_validate(_recipe(start=5e-3, stop=8e-3))
+    recipe = CircuitRecipe.model_validate(_recipe(start=5.2e-3, stop=8e-3))
     assert _buck_fixture_issue(recipe, SOURCE_ROWS, STATEMENT) is None

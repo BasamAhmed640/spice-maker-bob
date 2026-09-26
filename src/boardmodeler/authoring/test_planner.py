@@ -6,13 +6,16 @@ import hashlib
 import json
 import math
 import re
+from collections.abc import Collection, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from boardmodeler.authoring.backends import AuthorRequest
+from boardmodeler.authoring.buck_fixtures import SETTLE_S
 from boardmodeler.authoring.circuit_probe import CircuitRecipe
 from boardmodeler.authoring.pin_roles import physical_terminals
 from boardmodeler.domain.enums import RequirementClass
+from boardmodeler.domain.records import Requirement
 from boardmodeler.providers.http_inference import extract_json_object
 from boardmodeler.requirements.model import UnknownUnitError, normalize_unit, scale_factor
 
@@ -257,6 +260,7 @@ def plan_bindings(
                 eligible.append(req)
         context = [
             {
+                "req_id": r.req_id,
                 "statement": r.statement,
                 "limits": r.limits.model_dump() if r.limits else None,
                 "conditions": [c.model_dump() for c in r.conditions],
@@ -415,14 +419,21 @@ def plan_bindings(
     raise AssertionError("unreachable")
 
 
-def _source_rows(requirements, context):
+def _source_rows(requirements, context, unverified=()):
     """Verified source statements used only for fixture feasibility, never new limits."""
+    excluded = set(unverified)
     for req in requirements:
-        if req.citation_verified:
+        if req.citation_verified and req.req_id not in excluded:
             yield " ".join([req.statement, *(e.excerpt for e in req.evidence)]), req.limits
     rows = context.get("records", []) if isinstance(context, dict) else context or []
     for row in rows:
-        if row.get("citation_verified"):
+        # An unidentifiable context row cannot be cleared against an explicit
+        # unverified-id list, so omit it rather than laundering a citation.
+        if (
+            row.get("citation_verified")
+            and row.get("req_id") not in excluded
+            and (not excluded or row.get("req_id"))
+        ):
             yield (
                 " ".join(
                     [
@@ -445,6 +456,77 @@ def _numeric_limit(limits, side):
         return abs(float(value) * scale_factor(unit, normalize_unit(unit)))
     except ValueError, TypeError, UnknownUnitError:
         return None
+
+
+def _positive_numeric_limit(limits, side):
+    if limits is None:
+        return None
+    raw = limits.get(side) if isinstance(limits, dict) else getattr(limits, side)
+    try:
+        if raw is None or float(raw) <= 0:
+            return None
+    except TypeError, ValueError:
+        return None
+    return _numeric_limit(limits, side)
+
+
+def _limit_has_unit(limits, expected: str) -> bool:
+    if limits is None:
+        return False
+    unit = limits.get("unit") if isinstance(limits, dict) else limits.unit
+    try:
+        return normalize_unit(unit) == expected
+    except ValueError, TypeError, UnknownUnitError:
+        return False
+
+
+def _cited_veco(source_rows) -> float | None:
+    """Highest verified COMP pulse-skip boundary, in volts, when one is cited."""
+    values = [
+        value
+        for text, limits in source_rows
+        if re.search(
+            r"(?:eco.mode|pulse.skip).*\bCOMP\b|\bCOMP\b.*(?:eco.mode|pulse.skip)",
+            text,
+            re.I,
+        )
+        and _limit_has_unit(limits, "V")
+        for side in ("min", "typ", "max")
+        if (value := _positive_numeric_limit(limits, side)) is not None
+    ]
+    return max(values) if values else None
+
+
+def validate_buck_gain_sweep(
+    comp_fit_voltages: Sequence[float],
+    source_requirements: Sequence[Requirement],
+    *,
+    unverified: Collection[str] = (),
+) -> float:
+    """Check a code-built gain sweep before freezing it; return the cited VECO.
+
+    Only citation-verified requirements can establish the COMP threshold. Every
+    proposed fit point must be strictly above that threshold. A single-point
+    fixture cannot determine the switch-current-to-COMP slope.
+    """
+    rows = tuple(_source_rows(source_requirements, None, unverified))
+    veco = _cited_veco(rows)
+    if veco is None:
+        raise ValueError("buck_fixture_gain_veco_unverified: no cited COMP pulse-skip voltage")
+    try:
+        points = tuple(float(value) for value in comp_fit_voltages)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("buck_fixture_gain_comp_invalid: COMP fit points must be numeric") from exc
+    if not all(math.isfinite(value) for value in points):
+        raise ValueError("buck_fixture_gain_comp_invalid: COMP fit points must be finite")
+    if any(value <= veco for value in points):
+        raise ValueError(
+            f"buck_fixture_gain_comp_inactive: every COMP fit point must exceed cited VECO "
+            f"({veco:g} V)"
+        )
+    if len(set(points)) < 2:
+        raise ValueError("buck_fixture_gain_needs_two_points: a slope needs distinct COMP levels")
+    return veco
 
 
 def _spice_scalar(token):
@@ -543,24 +625,41 @@ def _series_sense_nodes(lines, start, ground):
     return reached
 
 
+def _buck_role_nodes(recipe: CircuitRecipe) -> dict[str, str]:
+    terminals = {key.upper(): value.casefold() for key, value in recipe.terminals.items()}
+    needed = {"PH", "VIN", "COMP", "VSENSE", "GND"}
+    if needed <= terminals.keys():
+        return terminals
+    # Alias pin names (SW/FB/AGND, for example) still denote the same circuit.
+    from boardmodeler.models.buck_switching import match_pins
+
+    match = match_pins(tuple(recipe.terminals))
+    if match.ok:
+        return {role: recipe.terminals[name].casefold() for role, name in match.roles.items()}
+    return terminals
+
+
+def _buck_current_sense_gain(req: Requirement, recipe: CircuitRecipe) -> bool:
+    if req.limits is None or not _limit_has_unit(req.limits, "A/V"):
+        return False
+    text = req.statement.casefold()
+    if "comp" not in text or not any(
+        term in text
+        for term in ("switch current", "current-sense", "current sense", "peak inductor")
+    ):
+        return False
+    return {"PH", "VIN", "COMP", "VSENSE", "GND"} <= _buck_role_nodes(recipe).keys()
+
+
 def _buck_fixture_issue(recipe, source_rows, statement):
     """Reject a physically impossible active asynchronous-buck bench before freezing it.
 
     This applies only where verified source rows establish the external diode or
     COMP current/voltage budget. An inactive shutdown test needs no power stage.
     """
-    terminals = {key.upper(): value.casefold() for key, value in recipe.terminals.items()}
+    source_rows = tuple(source_rows)
+    terminals = _buck_role_nodes(recipe)
     needed = {"PH", "VIN", "COMP", "VSENSE", "GND"}
-    if not needed <= terminals.keys():
-        # A buck whose pins are named SW/FB/AGND... is the same bench under other
-        # names; without this mapping every rule below was skipped for it.
-        from boardmodeler.models.buck_switching import match_pins
-
-        match = match_pins(tuple(recipe.terminals))
-        if match.ok:
-            terminals = {
-                role: recipe.terminals[name].casefold() for role, name in match.roles.items()
-            }
     if not needed <= terminals.keys() or _fixture_disabled(recipe):
         return None
     ph, comp, ground = (terminals[name] for name in ("PH", "COMP", "GND"))
@@ -577,6 +676,25 @@ def _buck_fixture_issue(recipe, source_rows, statement):
     ]
     if not output_nodes:
         return None
+
+    current_limit = bool(re.search(r"\bcurrent[- ]limit\b", statement, re.I))
+    load_nodes = {
+        node for output in output_nodes for node in _series_sense_nodes(lines, output, ground)
+    }
+    if current_limit and any(
+        (
+            parts[0][0].upper() == "I"
+            or (parts[0][0].upper() == "B" and parts[3].upper().startswith("I="))
+        )
+        and {parts[1].casefold(), parts[2].casefold()} == {output, ground}
+        for parts in lines
+        if len(parts) >= 4
+        for output in load_nodes
+    ):
+        return (
+            "buck_fixture_current_limit_ideal_sink: an imposed current source "
+            "forces output current instead of testing a resistive overload"
+        )
 
     has_catch_requirement = any(
         re.search(r"\b(?:external\s+)?catch\s+diode\b", text, re.I) for text, _ in source_rows
@@ -599,25 +717,18 @@ def _buck_fixture_issue(recipe, source_rows, statement):
                 "needs an output capacitor to ground"
             )
 
-    if not re.search(r"(?:slow|soft)[ -]?start", statement, re.I):
-        charge_currents = [
-            value
-            for text, limits in source_rows
-            if re.search(r"(?:slow|soft)[ -]?start.*\bcharge\s+current\b", text, re.I)
-            for side in ("max", "typ", "min")
-            if (value := _numeric_limit(limits, side)) is not None and value > 0
-        ]
-        references = [
-            value
-            for text, limits in source_rows
-            if re.search(r"\bvoltage\s+reference\b", text, re.I)
-            for side in ("min", "typ", "max")
-            if (value := _numeric_limit(limits, side)) is not None and value > 0
-        ]
+    startup_observation = bool(
+        re.search(
+            r"\b(?:slow[- ]?start|soft[- ]?start|start[- ]?up|startup|power[- ]?up|"
+            r"ramp|turn[- ]?on|transition)\b",
+            f"{statement} {recipe.purpose}",
+            re.I,
+        )
+    )
+    if current_limit or not startup_observation:
         ss = terminals.get("SS")
-        if ss and charge_currents and references:
-            fastest_charge = max(charge_currents)
-            lowest_reference = min(references)
+        if ss:
+            capacitances = []
             for parts in lines:
                 if (
                     parts[0][0].upper() == "C"
@@ -629,13 +740,48 @@ def _buck_fixture_issue(recipe, source_rows, statement):
                         return (
                             "buck_fixture_soft_start: SS capacitance is not a positive fixed value"
                         )
-                    charge_time = capacitance * lowest_reference / fastest_charge
-                    if recipe.measurement.start < charge_time:
+                    capacitances.append(capacitance)
+            if current_limit and not capacitances:
+                return (
+                    "buck_fixture_soft_start_cap_missing: current-limit bench needs an SS capacitor"
+                )
+            if capacitances:
+                charge_currents = [
+                    (value, side)
+                    for text, limits in source_rows
+                    if re.search(r"(?:slow|soft)[ -]?start.*\bcharge\s+current\b", text, re.I)
+                    and _limit_has_unit(limits, "A")
+                    for side in ("min", "typ")
+                    if (value := _positive_numeric_limit(limits, side)) is not None
+                    and (side == "min" or _positive_numeric_limit(limits, "min") is None)
+                ]
+                references = [
+                    value
+                    for text, limits in source_rows
+                    if re.search(r"\bvoltage\s+reference\b", text, re.I)
+                    and _limit_has_unit(limits, "V")
+                    for side in ("min", "typ", "max")
+                    if (value := _positive_numeric_limit(limits, side)) is not None
+                ]
+                if current_limit and (not charge_currents or not references):
+                    return (
+                        "buck_fixture_soft_start_evidence_missing: current-limit window "
+                        "needs cited positive SS charge current (min or typ) and voltage reference"
+                    )
+                if charge_currents and references:
+                    capacitance = sum(capacitances)
+                    charge_current, charge_basis = min(charge_currents)
+                    highest_reference = max(references)
+                    charge_time = capacitance * highest_reference / charge_current
+                    earliest_start = charge_time + SETTLE_S
+                    if recipe.measurement.start < earliest_start:
                         return (
                             "buck_fixture_soft_start: steady-state measurement starts at "
-                            f"{recipe.measurement.start:g} s before cited SS charging can reach "
-                            f"minimum reference ({charge_time:g} s with {capacitance:g} F, "
-                            f"{fastest_charge:g} A and {lowest_reference:g} V)"
+                            f"{recipe.measurement.start:g} s before calculated SS charging "
+                            f"and settling ({earliest_start:g} s = {charge_time:g} s with "
+                            f"{capacitance:g} F, {charge_current:g} A cited {charge_basis} and "
+                            f"{highest_reference:g} V, plus {SETTLE_S:g} s settling; "
+                            "not a guaranteed silicon maximum)"
                         )
 
     ea_currents = [
@@ -754,7 +900,7 @@ def validate_plan(payload, requirements, terminals, unverified, pin_map=None, *,
         ),
     ]
     result = []
-    source_rows = tuple(_source_rows(requirements, context))
+    source_rows = tuple(_source_rows(requirements, context, unverified))
     for entry in entries:
         req = by_id[entry["req_id"]]
 
@@ -792,6 +938,16 @@ def validate_plan(payload, requirements, terminals, unverified, pin_map=None, *,
         recipe = CircuitRecipe.model_validate(declared_delay_threshold(entry["recipe"], req))
         recipe = _ac_open_loop(recipe, pin_map)
         m = recipe.measurement
+        if _buck_current_sense_gain(req, recipe):
+            if _cited_veco(source_rows) is None:
+                raise ValueError(
+                    f"{req.req_id}: buck_fixture_gain_veco_unverified: "
+                    "no cited COMP pulse-skip voltage"
+                )
+            raise ValueError(
+                f"{req.req_id}: buck_fixture_gain_needs_sweep: a scalar circuit "
+                "measurement cannot establish switch-current-to-COMP slope"
+            )
         issue = _buck_fixture_issue(recipe, source_rows, req.statement)
         if issue:
             raise ValueError(f"{req.req_id}: {issue}")

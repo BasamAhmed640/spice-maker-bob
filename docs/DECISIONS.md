@@ -392,3 +392,23 @@ path must remain available behind an explicit flag. `system-verified` will be a 
 status reached only after the pinout gate and real LTspice measurements support the
 applicable claims; otherwise preserve FAIL, UNKNOWN and their reasons. Per-model time
 is measured against a 5–10 minute goal without weakening these gates.
+
+## D-049 — Verify fixed buck benches from raw cited rows (2026-09-25)
+
+The M2 bench builder accepts the frozen characteristics only alongside the
+matching raw requirement record. It checks `citation_verified`, document ID,
+page, excerpt, and SI-normalized value before selecting the VREF, frequency,
+gain, pulse-skip, current-limit, or SS-charge row. A page number in a derived
+spec alone cannot establish a verified citation. Gain fits use distinct active
+COMP points; a scalar current-sense-gain probe is an explicit coverage gap.
+Current-limit benches use a resistive overload after calculated SS charging and
+settling. Because the TPS54332 SS current is typical only, that calculation is
+not a guaranteed latest silicon start time. The two current-limit corners are
+subcircuit instance-parameter checks, not claims about silicon process corners.
+
+Generated decks alone confer no electrical verdict. The evaluator records
+measured metrics or UNKNOWN, preserving the M1 ripple failure and unresolved PH
+edge. The LTspice executable is passed explicitly and the code-built runner
+keeps artifacts inside ignored `runs/`; raw waveform files are hashed before
+local removal. Evidence: `docs/evidence/2026-09-25-system-models-m2/REPORT.md`
+in the general edition.

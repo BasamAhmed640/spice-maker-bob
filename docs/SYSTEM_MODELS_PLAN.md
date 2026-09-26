@@ -32,6 +32,39 @@ datasheet-bounded key values, and plausible switching and transient shapes.
    unfinished tests DONE. Continue to the next milestone after M1 is complete,
    with progress check-ins about every hour.
 
+## This run: M2, deterministic pre-freeze guards and benches
+
+M2 is split by deliverable because six waveform benches and the pre-freeze
+validation need separate review. M2a is the first acceptance unit; M2b follows
+without treating M2a as the whole milestone.
+
+1. Confirm both current commits and frozen TPS54332 row citations. Inspect
+   `authoring/test_planner.py`, `buck_fixtures.py`, `circuit_probe.py`, their
+   focused tests, and the M1 waveform definitions before editing.
+2. **M2a guards:** in the shared planner, reject a buck current-sense-gain
+   fixture with fewer than two active COMP points, any fit point at or below
+   cited VECO, or an unsupported/missing VECO citation. Reject an ideal current
+   sink as a current-limit output load (either orientation) and a measurement
+   window opening before cited soft-start charging plus settling. Use the latest
+   VREF bound with the cited positive SS current; the TPS54332 2 µA value is
+   typical, so do not call the calculated time a guaranteed silicon maximum.
+   Add a clean control and a fault case for every rejection, including aliases.
+3. **M2b benches:** build gain, min/max current-limit, ripple, PH edge, 1→3 A
+   load-step, and startup decks deterministically from cited rows and explicit
+   bench passives. Keep a 0.50 V diagnostic point out of the production gain
+   fit; all production sweep points must exceed VECO. Reuse M1 waveform rules
+   where valid, and correct the loose full-recovery interpretation. Generated
+   decks alone never make an electrical PASS; real LTspice artifacts are needed.
+4. Work in the general edition first. Run targeted guard/generator tests,
+   existing `tests/authoring tests/models tests/pipeline tests/ltspice`, the
+   frozen TPS54332 and LM358 regressions when model/harness behavior changes,
+   Ruff and `git diff --check`. Copy shared production files to Bob only after
+   general checks, run Bob's focused tests, and compare the 42-file shared core.
+5. Record measured times, pass/fail/unknown outcomes, and any remaining M2b
+   work in `docs/evidence/2026-09-25-system-models-m2/REPORT.md` and both
+   status files. M2 activates no board-level suite case. Push both main branches
+   only after focused checks pass; keep about-hourly check-ins.
+
 ## Milestones
 
 `DONE` means its acceptance evidence exists. A partial milestone must be split
@@ -43,7 +76,9 @@ commits may record those IDs afterward.
 | --- | --- | --- | --- | --- | --- | --- |
 | M0 | D-048, 22-family catalog, plan; general evidence report covering both editions and status in both | DONE | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m0/REPORT.md` (general) | `13a578e8e7c2132029c47b33fa3e7df26c725911` | `c8c60c080d38d4de90b501aa90a24003df6819c7` |
 | M1 | Fresh-rendered TPS54332 vs TI model with the same passives; gain slope at ≥3 active points, resistive overload and short, ripple, edges, startup, load step; evidence only | DONE (measured; FAIL/UNKNOWN retained) | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m1/REPORT.md` (general) | `380988f131deba87bbf151a229cf4b989d9992ad` | `f3598591bb6c9312d84939b25e5a15873692189b` |
-| M2 | Pre-freeze guard rules and code-built gain, limit, ripple, edge, load-step, startup benches | TODO | — | — | — | — |
+| M2 | Pre-freeze guard rules and code-built gain, limit, ripple, edge, load-step, startup benches | DONE (measured; edge UNKNOWN and M1 ripple FAIL retained) | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m2/REPORT.md` (general) | pending commit | pending commit |
+| M2a | Cited gain/current-limit pre-freeze guards with clean and fault controls | DONE | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m2/REPORT.md` (general) | pending commit | pending commit |
+| M2b | Six deterministic bench families, waveform analysis, and measured LTspice proof | DONE (six MEASURED, edge UNKNOWN) | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m2/REPORT.md` (general) | pending commit | pending commit |
 | M3 | Remove unjustified ground/pad ties; required-connection check and alarm; explain frozen-row changes | TODO | — | — | — | — |
 | M4 | Matching SW and AVG peak-current buck modes; both-mode key values; SW shapes; speed; release checkpoint | TODO | — | — | — | — |
 | M5 | Generic PinDefinition-based pin model and positive/negative tests for every alarm | TODO | — | — | — | — |
