@@ -448,15 +448,25 @@
       "LX"
     ]
   },
-  "ground_tie_pins": [
-    "POWERPAD",
-    "PAD",
-    "EP",
-    "EPAD",
-    "PGND",
-    "PWRPAD",
-    "THERMALPAD",
-    "DAP"
+  "required_connections": [
+    {
+      "id": "exposed_pad_to_gnd",
+      "pin_aliases": [
+        "POWERPAD",
+        "PAD",
+        "EP",
+        "EPAD",
+        "PGND",
+        "PWRPAD",
+        "THERMALPAD",
+        "DAP"
+      ],
+      "to_role": "GND",
+      "location": "PCB",
+      "applies_when": "pin_present",
+      "citation_required": true,
+      "statement": "Check the part's verified datasheet for its exposed-pad connection requirement."
+    }
   ],
   "supported_behaviors": [
     "fixed-frequency peak-current-mode switching of PH through an internal high-side switch (RON)",

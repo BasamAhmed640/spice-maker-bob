@@ -114,6 +114,7 @@ def test_aliases_map_a_differently_named_buck_onto_the_roles():
         "PH": "SW",
     }
     assert match.ground_ties == ("PGND",)
+    assert match.required_ground_connections == ("PGND",)
 
 
 @pytest.mark.parametrize(
@@ -125,6 +126,10 @@ def test_aliases_map_a_differently_named_buck_onto_the_roles():
         ),
         (("BOOT", "VIN", "EN", "VSENSE", "COMP", "GND", "PH"), "pin_role_missing: SS"),
         (("BOOT", "VIN", "EN", "SS", "FB", "VSENSE", "COMP", "GND", "PH"), "pin_role_duplicate"),
+        (
+            ("BOOT", "VIN", "EN", "SS", "VSENSE", "COMP", "GND", "PH", "UNKNOWNPAD"),
+            "pin_role_unsupported: UNKNOWNPAD",
+        ),
     ],
 )
 def test_a_pinout_the_template_cannot_represent_is_refused_with_its_reason(ports, reason):
@@ -150,14 +155,32 @@ def test_generic_row_ids_are_mapped_by_statement_and_unit():
     assert params["ENHYS"].origin == "template_default"
 
 
-def test_the_rendered_model_uses_the_parts_own_pin_names_and_ties_pads():
+def test_the_rendered_model_keeps_the_pad_external_with_only_a_convergence_leak():
     names = ("BST", "VIN", "EN", "SS_TR", "FB", "COMP", "AGND", "SW", "PGND")
     seed = seed_from_spec(_spec(names))
     assert seed is not None
     text = seed.library_text
     assert re.search(r"^\.subckt BUCKX BST VIN EN SS_TR FB COMP AGND SW PGND$", text, re.M)
-    assert "RPGND PGND AGND 1m" in text
+    assert "RPGND_leak PGND AGND 1G" in text
+    assert "RPGND PGND AGND 1m" not in text
+    active_pad_lines = [
+        line for line in text.splitlines() if "PGND" in line and not line.startswith("*")
+    ]
+    assert active_pad_lines == [
+        ".subckt BUCKX BST VIN EN SS_TR FB COMP AGND SW PGND",
+        "RPGND_leak PGND AGND 1G",
+        "Bchk_pgnd chk_pgnd AGND V=if(abs(V(PGND,AGND))>0.1,1,0)",
+    ]
     assert not re.search(r"\b(?:PH|VSENSE|BOOT)\b", text.split("\n", 3)[3].split(".ends")[0])
+
+
+def test_a_part_without_an_exposed_pad_keeps_all_eight_ports_and_needs_no_pad_leak():
+    match = match_pins(ROLES)
+    assert match.ok and match.required_ground_connections == ()
+    seed = seed_from_spec(_spec(ROLES))
+    assert seed is not None
+    assert ".subckt BUCKX BOOT VIN EN SS VSENSE COMP GND PH\n" in seed.library_text
+    assert "_leak" not in seed.library_text
 
 
 def test_every_logic_gate_references_the_models_own_ground():
@@ -170,6 +193,14 @@ def test_every_logic_gate_references_the_models_own_ground():
 
 def test_the_contract_states_what_the_template_does_and_does_not_model():
     contract = _load_contract()
+    assert "ground_tie_pins" not in contract
+    rule = contract["required_connections"][0]
+    assert rule["id"] == "exposed_pad_to_gnd"
+    assert rule["to_role"] == "GND"
+    assert rule["location"] == "PCB" and rule["applies_when"] == "pin_present"
+    assert rule["citation_required"] is True
+    assert "POWERPAD" in rule["pin_aliases"] and "PGND" in rule["pin_aliases"]
+    assert "source" not in rule
     assert any("current limit" in item for item in contract["supported_behaviors"])
     assert any("temperature" in item for item in contract["unsupported_behaviors"])
 

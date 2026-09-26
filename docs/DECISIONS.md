@@ -412,3 +412,22 @@ edge. The LTspice executable is passed explicitly and the code-built runner
 keeps artifacts inside ignored `runs/`; raw waveform files are hashed before
 local removal. Evidence: `docs/evidence/2026-09-25-system-models-m2/REPORT.md`
 in the general edition.
+
+## D-050 — Keep required PCB ties external and cite each part (2026-09-25)
+
+A template may expose an additional ground or pad terminal, but it may not
+silently satisfy that terminal's board connection with an internal low-ohm
+element. The TPS54332 PowerPAD remains distinct from GND; its 1 GΩ internal
+resistor exists only for numerical convergence. A card-level static check uses
+the verified raw `B001_PIN_POWERPAD` citation, physical pins 9 and 7, and the
+declared/built netlist to require the actual PCB tie. The generic buck contract
+does not reuse the TPS-specific citation for another part.
+
+An internal `chk_powerpad` node supports a synthetic clean/open diagnostic.
+The 0.1 V threshold and external 1 nA test injection are test equipment, not
+TI limits; the ordinary model injects no diagnostic current. Both clean and
+fault runs must yield LTspice raw data before an alarm is called measured.
+This slice does not complete the full Card A `GND-02` suite case. Frozen
+TPS54332 regressions check input hashes and spec digest as well as row IDs, so
+changed limits cannot appear to be an unchanged result. Evidence in the
+general edition: `docs/evidence/2026-09-25-system-models-m3/REPORT.md`.

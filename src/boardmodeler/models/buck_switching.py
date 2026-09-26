@@ -32,6 +32,7 @@ __all__ = [
 
 _CONTRACT = Path(__file__).with_name("peak_current_buck.json")
 _SUBCKT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+PAD_DIAGNOSTIC_THRESHOLD_V = 0.1  # Synthetic alarm threshold, not a device limit.
 _PARAMETER_NAMES = (
     "VREF",
     "FSW",
@@ -147,9 +148,30 @@ def _load_contract() -> dict[str, Any]:
     roles = contract.get("pin_roles")
     if not isinstance(roles, dict) or set(roles) != set(contract["required_ports"]):
         raise TemplateSeedError("buck_template_contract_pin_roles")
-    for key in ("ground_tie_pins", "supported_behaviors", "unsupported_behaviors"):
+    for key in ("supported_behaviors", "unsupported_behaviors"):
         if not isinstance(contract.get(key), list) or not contract[key]:
             raise TemplateSeedError(f"buck_template_contract_{key}")
+    if "ground_tie_pins" in contract:
+        raise TemplateSeedError("buck_template_contract_legacy_ground_ties")
+    connections = contract.get("required_connections")
+    if not isinstance(connections, list) or len(connections) != 1:
+        raise TemplateSeedError("buck_template_contract_required_connections")
+    pad_rule = connections[0]
+    if (
+        not isinstance(pad_rule, dict)
+        or pad_rule.get("id") != "exposed_pad_to_gnd"
+        or pad_rule.get("to_role") != "GND"
+        or pad_rule.get("location") != "PCB"
+        or pad_rule.get("applies_when") != "pin_present"
+        or pad_rule.get("citation_required") is not True
+        or not isinstance(pad_rule.get("statement"), str)
+        or not pad_rule["statement"].strip()
+        or not isinstance(pad_rule.get("pin_aliases"), list)
+        or not pad_rule["pin_aliases"]
+        or not all(isinstance(alias, str) and alias for alias in pad_rule["pin_aliases"])
+        or "source" in pad_rule
+    ):
+        raise TemplateSeedError("buck_template_contract_required_connections")
     for entry in contract["parameters"]:
         if not math.isfinite(float(entry["default"])):
             raise TemplateSeedError(f"buck_template_contract_nonfinite: {entry['name']}")
@@ -280,7 +302,7 @@ def _render(
     parameters: tuple[ParameterOrigin, ...],
     pins: PinMatch | None = None,
 ) -> str:
-    """The template in the part's own terminal names (roles renamed, pads tied to GND)."""
+    """The template in the part's own terminal names, with pads left external."""
     pins = pins or match_pins(ports)
     body = _BODY
     for role, name in pins.roles.items():
@@ -295,8 +317,20 @@ def _render(
     ]
     for start in range(0, len(declarations), 5):
         lines.append(".param " + " ".join(declarations[start : start + 5]))
+    if pins.ground_ties:
+        lines.append(
+            "* Pad leak is for convergence only; the PCB tie needs separate cited verification."
+        )
     for pad in pins.ground_ties:
-        lines.append(f"R{pad} {pad} {ground} 1m")
+        lines.append(f"R{pad}_leak {pad} {ground} 1G")
+        lines.append(
+            f"Bchk_{pad.lower()} chk_{pad.lower()} {ground} "
+            f"V=if(abs(V({pad},{ground}))>{_spice(PAD_DIAGNOSTIC_THRESHOLD_V)},1,0)"
+        )
+    if pins.ground_ties:
+        lines.append(
+            "* chk_* is a synthetic test alarm at 0.1 V, not an IC limit; inject only in a diagnostic deck."
+        )
     lines.extend(body.splitlines())
     lines.append(f".ends {subckt}")
     return "\n".join(lines) + "\n"
@@ -374,18 +408,26 @@ class PinMatch:
     """How a part's physical terminals fill the template's roles, or why they cannot."""
 
     roles: dict[str, str]  # template role -> the part's terminal name
-    ground_ties: tuple[str, ...]  # extra ground pins tied to the GND role
+    # Historical field name retained for fixture callers. The fixture supplies
+    # an external ground connection; a requirement alarm needs part-specific evidence.
+    ground_ties: tuple[str, ...]
     reason: str = ""
 
     @property
     def ok(self) -> bool:
         return not self.reason
 
+    @property
+    def required_ground_connections(self) -> tuple[str, ...]:
+        """Present pad terminals whose PCB requirement needs part-specific evidence."""
+        return self.ground_ties
+
 
 def match_pins(ports: Collection[str], contract: dict[str, Any] | None = None) -> PinMatch:
     """Map terminal names onto ``peak_current_buck_v1`` roles through the contract's aliases.
 
-    Every terminal must be used exactly once: a role pin, or a ground pad tied to GND.
+    Every terminal must be used exactly once: a role pin or a recognized pad. The
+    model leaves pad connection external; any requirement needs cited part evidence.
     A terminal the template does not model (RT, SYNC, PG, ...) refuses the match with
     its name, rather than leaving a datasheet pin silently unconnected.
     """
@@ -393,7 +435,9 @@ def match_pins(ports: Collection[str], contract: dict[str, Any] | None = None) -
     alias_to_role = {
         alias.upper(): role for role, aliases in contract["pin_roles"].items() for alias in aliases
     }
-    ties = {name.upper() for name in contract["ground_tie_pins"]}
+    ties = {
+        name.upper() for rule in contract["required_connections"] for name in rule["pin_aliases"]
+    }
     roles: dict[str, str] = {}
     ground_ties: list[str] = []
     unmodelled: list[str] = []

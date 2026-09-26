@@ -1,3 +1,22 @@
+## 2026-09-25 — M3 cited PowerPAD connection (Bob edition)
+
+M3 is complete in the Bob edition with the same 44 provider-neutral core files
+as the general edition. The model keeps PowerPAD distinct from GND, with only
+a 1 GΩ convergence leak; the verified TPS54332 requirement is checked against
+the card and built netlist. The internal `chk_powerpad` alarm was exercised
+by the [general-edition M3 evidence](https://github.com/BasamAhmed640/spice-maker/blob/main/docs/evidence/2026-09-25-system-models-m3/REPORT.md),
+not by a separate Bob simulation. Its synthetic clean/fault slice had zero
+clean findings, one correctly cited open-pad finding, and measured alarm
+states 0/1. The full Card A `GND-02` suite case remains NOT BUILT.
+
+The same report records unchanged frozen TPS54332 results (12 PASS, 4 FAIL,
+3 UNKNOWN across 19 rows) and unchanged LM358 results (19 passing probe
+cases / 32 passing rows). Bob's focused suite passed **705 tests with 7 skips
+in 196.80 s**; the general edition passed **836 in 186.27 s**. Ruff,
+formatting, diff checks, shared-core manifests, and the **44-file byte-for-byte
+comparison** passed. No Bob AI or network call, vendor model, raw waveform,
+or secret was committed. Next: M4 switching/average buck modes.
+
 ## 2026-09-25 — M2 cited guards and buck benches (Bob edition)
 
 M2 is complete; the [general-edition measured report](https://github.com/BasamAhmed640/spice-maker/blob/main/docs/evidence/2026-09-25-system-models-m2/REPORT.md)

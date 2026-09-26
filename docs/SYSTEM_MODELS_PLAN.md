@@ -65,6 +65,39 @@ without treating M2a as the whole milestone.
    status files. M2 activates no board-level suite case. Push both main branches
    only after focused checks pass; keep about-hourly check-ins.
 
+## This run: M3, exposed-pad connection and frozen regression
+
+M3 is split by the evidence it needs: **M3a** removes the internal pad-to-ground
+tie and changes the contract to an external required connection; **M3b** adds a
+cited static check and a real-simulation alarm, then reruns the frozen 19-row
+TPS54332 regression. Neither subpart is DONE until its own proof is recorded.
+
+1. Inspect the current nine-port template, contract, saved 19-row results, and
+   the verified `B001_PIN_POWERPAD` requirement (PDF page index 2, printed p. 3).
+   Keep the nine-pin subcircuit and symbol order byte-for-byte compatible.
+2. **M3a:** replace `ground_tie_pins` in the contract with a required external
+   connection to the GND role. Render POWERPAD and its aliases as distinct
+   electrical pins: no 1 mΩ or other functional internal tie. A ≥1 GΩ
+   convergence leak may remain only if needed and must never satisfy the
+   required-connection rule. Test named and alias pads, no-pad parts, and
+   wrong/missing pins; freshly render the frozen TPS model and inspect its netlist.
+3. **M3b:** use the verified PowerPAD requirement to flag a disconnected or
+   wrong-net pad on a code-built synthetic card, while a clean PCB tie produces
+   zero findings. Add a simulator-observed alarm with a clean/fault pair and
+   explicit pin, net, citation and waveform hash. If any alarm cannot be
+   measured, keep it UNKNOWN and split the remaining work rather than count it
+   as detection. Activate GND-02 only when both static and alarm evidence exist.
+4. Rerun the exact frozen 19-row LTspice regression with the updated model and
+   compare every verdict with the committed baseline. Explain each change,
+   including a new UNKNOWN or FAIL, without relaxing a limit or editing the
+   frozen spec. Keep decks and logs in ignored `runs/`; hash raw files before
+   removal. Use an explicitly supplied LTspice path and no AI/network call.
+5. Work in general first, then copy reviewed provider-neutral changes to Bob.
+   Run targeted and existing model/harness tests, the frozen TPS and LM358
+   regressions where applicable, Ruff, shared-core comparison, and diff checks.
+   Update both status files and the M3 evidence report; push both branches only
+   after tests pass. Send the next substantive check-in about one hour after M2.
+
 ## Milestones
 
 `DONE` means its acceptance evidence exists. A partial milestone must be split
@@ -79,7 +112,9 @@ commits may record those IDs afterward.
 | M2 | Pre-freeze guard rules and code-built gain, limit, ripple, edge, load-step, startup benches | DONE (measured; edge UNKNOWN and M1 ripple FAIL retained) | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m2/REPORT.md` (general) | `6bbc5717ec3c66a6f0ee7de9aeb53b087fa0e3b9` | `431af5b415bad1310457b2843b6c8b7a8b46716d` |
 | M2a | Cited gain/current-limit pre-freeze guards with clean and fault controls | DONE | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m2/REPORT.md` (general) | `6bbc5717ec3c66a6f0ee7de9aeb53b087fa0e3b9` | `431af5b415bad1310457b2843b6c8b7a8b46716d` |
 | M2b | Six deterministic bench families, waveform analysis, and measured LTspice proof | DONE (six MEASURED, edge UNKNOWN) | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m2/REPORT.md` (general) | `6bbc5717ec3c66a6f0ee7de9aeb53b087fa0e3b9` | `431af5b415bad1310457b2843b6c8b7a8b46716d` |
-| M3 | Remove unjustified ground/pad ties; required-connection check and alarm; explain frozen-row changes | TODO | — | — | — | — |
+| M3 | Remove unjustified ground/pad ties; required-connection check and internal alarm; explain frozen-row changes | DONE (synthetic slice; full Card A remains NOT BUILT) | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m3/REPORT.md` (general) | pending tracker | pending tracker |
+| M3a | Separate pad pin and external-connection contract, with render and alias tests | DONE | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m3/REPORT.md` (general) | pending tracker | pending tracker |
+| M3b | Cited static/internal-alarm clean-fault controls, frozen 19-row TPS and LM358 regressions | DONE (synthetic slice; 12/4/3 TPS unchanged) | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m3/REPORT.md` (general) | pending tracker | pending tracker |
 | M4 | Matching SW and AVG peak-current buck modes; both-mode key values; SW shapes; speed; release checkpoint | TODO | — | — | — | — |
 | M5 | Generic PinDefinition-based pin model and positive/negative tests for every alarm | TODO | — | — | — | — |
 | M6 | Pinout evidence and confirmation gate in CLI/GUI; no system-verified status without confirmation | TODO | — | — | — | — |

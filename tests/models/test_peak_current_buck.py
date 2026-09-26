@@ -91,6 +91,9 @@ def test_seed_preserves_physical_order_and_records_cited_and_default_values(tmp_
     assert seed.ports == tuple(port.upper() for port in _PORTS)
     assert seed.library_text.startswith("* Reduced peak-current-mode buck")
     assert ".subckt DEMO_BUCK BOOT VIN EN SS VSENSE COMP GND PH POWERPAD" in seed.library_text
+    assert "RPOWERPAD_leak POWERPAD GND 1G" in seed.library_text
+    assert "RPOWERPAD POWERPAD GND 1m" not in seed.library_text
+    assert "Bchk_powerpad chk_powerpad GND V=if(abs(V(POWERPAD,GND))>0.1,1,0)" in seed.library_text
     parameters = {item.name: item for item in seed.parameters}
     assert parameters["FSW"].value == 800_000
     assert parameters["FSW"].origin == "cited_row"

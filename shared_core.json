@@ -41,5 +41,6 @@
   "verification/assertions.py": "cbed9cd3137516721bc5ce5aa8ccc8fbf1f8b7013bc26d2a871f0cba798b71cb",
   "verification/corners.py": "bd960db34388a1c93f0acd8dffcd72c313f3bba601cb86d9191e124046ae1fe7",
   "verification/engine.py": "feb061f30a0314ad11ffc2a8e11a49f85014d509cabcfbc1a2f05984bf9b1134",
+  "verification/required_connections.py": "2ee19ddef1ce1fdb95ee70dbc32d7242878a31d437e5fdd586f11d19738f7ca6",
   "verification/scenarios.py": "e2b374efadb8e60819ca6c871959d444bfd65b764b32ea4409e9c16ce7de1358"
 }
