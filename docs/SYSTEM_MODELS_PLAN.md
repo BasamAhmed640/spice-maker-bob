@@ -189,7 +189,7 @@ commits may record those IDs afterward.
 | M4 | Matching SW and AVG peak-current buck modes; both-mode key values; SW shapes; speed; release checkpoint | TODO | — | — | — | — |
 | M4a | Explicit AVG candidate with same ports/device parameters and measured smoke controls | DONE (candidate; full M4 checks open) | 2026-09-26 | `docs/evidence/2026-09-26-system-models-m4a/REPORT.md` (general) | `e7418a6142b8db4feae3027d71a7c0c5dafbd750` | `30609bdc710711b259d85ecef8c0f054b0d97c6a` |
 | M4b | Both-mode cited qualification, SW ballpark shapes, honest AVG UNKNOWNs, speed | TODO | — | — | — | — |
-| M4b1 | Both-mode cited VREF, SS charge, and state-checked supply current | DONE (8 clean PASS / 8 wrong-value FAIL per edition) | 2026-09-26 | `docs/evidence/2026-09-26-system-models-m4b1/REPORT.md` | pending | pending |
+| M4b1 | Both-mode cited VREF, SS charge, and state-checked supply current | DONE (8 clean PASS / 8 wrong-value FAIL per edition) | 2026-09-26 | `docs/evidence/2026-09-26-system-models-m4b1/REPORT.md` | `0aa00a51196a59cad7a4c7f7e43d9ee8fa0a32c0` | `f1fc60f2647f901555fc36c2ad58b96bf6ad46d7` |
 | M4b2 | Bidirectional UVLO/EN and gain/limit corner checks | TODO | — | — | — | — |
 | M4b3 | SW shapes, power behavior, speed, and full M4b acceptance | TODO | — | — | — | — |
 | M4c | Versioned installer and ZIP release checkpoint after M4b acceptance | TODO | — | — | — | — |
