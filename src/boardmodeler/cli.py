@@ -85,12 +85,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     ui_cmd = sub.add_parser("ui", help="launch the model maker window (add --installer for setup)")
-    ui_cmd.add_argument("--project", type=Path, default=None, help="project directory to open")
     ui_cmd.add_argument(
         "--installer", action="store_true", help="open the setup page instead of the model maker"
     )
 
-    run = sub.add_parser("run", help="execute project work (earlier board workflow)")
+    run = sub.add_parser("run", help="run model verification tests")
     run_sub = run.add_subparsers(dest="run_command", required=True)
     run_tests = run_sub.add_parser(
         "tests", help="run the project's test cases against the simulator"
@@ -120,47 +119,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--strict",
         action="store_true",
         help="exit 1 when any result is not PASS (statuses are data otherwise)",
-    )
-
-    run_mutations = run_sub.add_parser(
-        "mutations", help="inject every fault into its own copy and record detection"
-    )
-    run_mutations.add_argument("--project", type=Path, required=True, help="project directory")
-    run_mutations.add_argument(
-        "--report", type=Path, required=True, help="where to write the report"
-    )
-    run_mutations.add_argument(
-        "--fault", action="append", default=None, help="only these faults (repeatable)"
-    )
-    run_mutations.add_argument("--json", action="store_true")
-
-    demo = sub.add_parser("demo", help="the board demonstration (earlier spec)")
-    demo_sub = demo.add_subparsers(dest="demo_command", required=True)
-    demo_build = demo_sub.add_parser("build", help="assemble the demo project from the fixtures")
-    demo_build.add_argument("--out", type=Path, required=True, help="project directory to create")
-    demo_build.add_argument("--json", action="store_true")
-    demo_build.add_argument(
-        "--no-probe", action="store_true", help="skip capability probing (faster, less evidence)"
-    )
-
-    circuit = sub.add_parser("circuit", help="circuit-level checks (earlier spec)")
-    circuit_sub = circuit.add_subparsers(dest="circuit_command", required=True)
-    circuit_check = circuit_sub.add_parser(
-        "check", help="static checks plus the dynamic scenarios against a built project"
-    )
-    circuit_check.add_argument("--project", type=Path, required=True)
-    circuit_check.add_argument(
-        "--circuit", type=Path, default=None, help="schematic to netlist-check"
-    )
-    circuit_check.add_argument("--scope", default=None, help="only cases in this scope")
-    circuit_check.add_argument(
-        "--fault-matrix", action="store_true", help="also run the fault matrix"
-    )
-    circuit_check.add_argument("--json", action="store_true")
-    circuit_check.add_argument("--out", type=Path, default=None, help="results JSON path")
-    circuit_check.add_argument("--report", type=Path, default=None, help="HTML report path")
-    circuit_check.add_argument(
-        "--strict", action="store_true", help="exit 1 when the overall status is not PASS"
     )
 
     export = sub.add_parser("export", help="write the portable model/test export")
@@ -337,10 +295,7 @@ def _ltspice_section(*, run_smoke: bool, smoke_workdir: Path | None) -> dict[str
                 "(it does not fall back to another installation)"
             )
         elif outcome.reason == "unset":
-            detail = (
-                "LTspice is not configured: SETUP is required to choose the LTspice "
-                "executable"
-            )
+            detail = "LTspice is not configured: SETUP is required to choose the LTspice executable"
         elif outcome.probed_paths:
             detail = "LTspice executable not found; probed: " + ", ".join(outcome.probed_paths)
         else:
@@ -1370,8 +1325,6 @@ def main(argv: list[str] | None = None) -> int:
         from boardmodeler.ui.app import main as ui_main
 
         forwarded: list[str] = []
-        if args.project is not None:
-            forwarded += ["--project", str(args.project)]
         if getattr(args, "installer", False):
             forwarded.append("--installer")
         return ui_main(forwarded)
@@ -1383,15 +1336,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run" and args.run_command == "tests":
         return _cmd_run_tests(args)
-
-    if args.command == "run" and args.run_command == "mutations":
-        return _cmd_run_mutations(args)
-
-    if args.command == "demo" and args.demo_command == "build":
-        return _cmd_demo_build(args)
-
-    if args.command == "circuit" and args.circuit_command == "check":
-        return _cmd_circuit_check(args)
 
     if args.command == "export":
         return _cmd_export(args)

@@ -10,6 +10,14 @@ circuits, three M6 pinout-gate checks, and six `NOT COVERED` wiring cases.
 M8 is `REMOVED`; M4b2/M4b3/M4c and M5/M6/M7/M9+ remain planned. Safety,
 citation, and honest-verdict gates are unchanged. See [D-052](DECISIONS.md).
 
+The source CLI now rejects legacy `demo build`, `circuit check`, and
+`run mutations` commands; the direct `--board-ui` and unused `ui --project`
+routes are removed. The model maker, `model` commands, and model test runner
+remain available. Internal board helpers and their tests remain in place.
+Focused CLI/UI checks passed 28 tests in General and 29 in Bob, with Ruff and
+changed-file formatting clean. The checked-in installer binary was not rebuilt
+here; the next versioned installer checkpoint is M4c.
+
 ## 2026-09-26 — M4b1 cited TPS values in both modes (Bob edition)
 
 The [M4b1 evidence](evidence/2026-09-26-system-models-m4b1/REPORT.md)

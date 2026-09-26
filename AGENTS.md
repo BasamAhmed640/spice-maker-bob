@@ -45,7 +45,8 @@ The GUI defaults to full electrical verification. Quick structural checks remain
   from the vendor's own documentation (D-005) and carry its URL in the entry.
 * The board/circuit layers (`schematic/`, `pipeline/demo.py`, `ui/main_window.py`,
   `reporting/html.py`) belong to the earlier spec. They are dormant: the model path must not
-  import them, and they are reached only by explicit flags.
+  import them, and no public CLI or UI route may expose them. Internal model-alarm tests
+  may reuse their helpers in small code-built circuits. D-052 supersedes board workflows.
 
 ## Layout rules
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from boardmodeler.ui.app import build_application, main
@@ -17,11 +15,8 @@ def test_build_application_is_a_singleton(qapp) -> None:
     assert app.applicationName() == "Spice Maker"
 
 
-def test_main_opens_the_window_for_a_project(qapp, tmp_path: Path) -> None:
-    from boardmodeler.pipeline.project import create_project
-
-    project = create_project(tmp_path / "proj", project_id="P1", name="Entry point")
-    assert main(["--project", str(project.root)], exec_app=False) == 0
+def test_main_opens_the_model_maker(qapp) -> None:
+    assert main([], exec_app=False) == 0
 
 
 def test_main_with_installer_flag_builds_the_wizard(qapp) -> None:

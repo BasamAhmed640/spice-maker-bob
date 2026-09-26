@@ -1,6 +1,6 @@
 """QApplication entry point (INTERFACES §4).
 
-``boardmodeler ui [--project DIR] [--installer]``. Importing this module
+``boardmodeler ui [--installer]``. Importing this module
 requires Qt; importing :mod:`boardmodeler.ui` does not (the package facade
 imports this lazily).
 """
@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
-from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
@@ -70,14 +69,8 @@ def main(argv: Sequence[str] | None = None, *, exec_app: bool = True) -> int:
     parser = argparse.ArgumentParser(
         prog="boardmodeler ui", description="Spice Maker desktop application"
     )
-    parser.add_argument("--project", type=Path, default=None, help="project directory to open")
     parser.add_argument(
         "--installer", action="store_true", help="open the setup page instead of the model maker"
-    )
-    parser.add_argument(
-        "--board-ui",
-        action="store_true",
-        help="launch the earlier board/circuit window instead of the model maker",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -93,17 +86,6 @@ def main(argv: Sequence[str] | None = None, *, exec_app: bool = True) -> int:
             SetupDialog()
             return 0
         return int(SetupDialog().exec())
-
-    if args.board_ui:
-        from boardmodeler.ui.main_window import MainWindow
-
-        window = MainWindow()
-        if args.project is not None:
-            window.load_project(args.project)
-        window.show()
-        if not exec_app:
-            return 0
-        return int(app.exec())
 
     from boardmodeler.ui.model_maker import ModelMakerWindow
 
