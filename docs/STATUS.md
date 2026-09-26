@@ -1,3 +1,24 @@
+## 2026-09-26 — M4b1 cited TPS values in both modes (Bob edition)
+
+The [M4b1 evidence](evidence/2026-09-26-system-models-m4b1/REPORT.md)
+records Bob's 16 real LTspice runs alongside 16 separate general-edition
+runs: four TPS54332DDA rows passed in SW and AVG, and every deliberate
+wrong-value control failed. They cover VREF, SS charge current near 0.4 V,
+shutdown current, and non-switching operating current. DUT VIN current is
+measured through a shunt after the fixture capacitor; quiet PH and inductor
+waveforms are required before either IQ verdict. All clean values also fell
+within the separately declared ±10% typical comparison, while IQ PASS/FAIL
+uses each cited maximum. Raw/log hashes matched the locally retained ignored
+files in both editions.
+
+M4b is still open for bidirectional UVLO/EN, gain and limit corners, SW
+shapes, power behavior, and matched speed. The M1 SW ripple FAIL and PH-edge
+UNKNOWN remain. M4b1 changes the verifier only, so the frozen full TPS
+regression was not rerun.
+The focused evaluator tests passed 10/10 in each edition; integration passed
+269 tests with 11 expected skips in General and 269/11 in Bob. Scoped Ruff,
+changed-file formatting, diff checks, and 44-file shared-core parity passed.
+
 ## 2026-09-26 — M4a measured average-mode candidate (Bob edition)
 
 M4a is complete as a **candidate** in Bob; M4b qualification and M4c

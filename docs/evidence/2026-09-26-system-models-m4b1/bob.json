@@ -1,0 +1,3281 @@
+{
+  "control_violations": 0,
+  "controls": [
+    {
+      "case": "vref",
+      "clean_verdict": "PASS",
+      "fault_verdict": "FAIL",
+      "mode": "SW",
+      "status": "OK"
+    },
+    {
+      "case": "vref",
+      "clean_verdict": "PASS",
+      "fault_verdict": "FAIL",
+      "mode": "AVG",
+      "status": "OK"
+    },
+    {
+      "case": "ss_charge",
+      "clean_verdict": "PASS",
+      "fault_verdict": "FAIL",
+      "mode": "SW",
+      "status": "OK"
+    },
+    {
+      "case": "ss_charge",
+      "clean_verdict": "PASS",
+      "fault_verdict": "FAIL",
+      "mode": "AVG",
+      "status": "OK"
+    },
+    {
+      "case": "shutdown_iq",
+      "clean_verdict": "PASS",
+      "fault_verdict": "FAIL",
+      "mode": "SW",
+      "status": "OK"
+    },
+    {
+      "case": "shutdown_iq",
+      "clean_verdict": "PASS",
+      "fault_verdict": "FAIL",
+      "mode": "AVG",
+      "status": "OK"
+    },
+    {
+      "case": "operating_iq",
+      "clean_verdict": "PASS",
+      "fault_verdict": "FAIL",
+      "mode": "SW",
+      "status": "OK"
+    },
+    {
+      "case": "operating_iq",
+      "clean_verdict": "PASS",
+      "fault_verdict": "FAIL",
+      "mode": "AVG",
+      "status": "OK"
+    }
+  ],
+  "expected_cases": [
+    "vref",
+    "ss_charge",
+    "shutdown_iq",
+    "operating_iq"
+  ],
+  "expected_modes": [
+    "SW",
+    "AVG"
+  ],
+  "expected_variants": [
+    "clean",
+    "fault"
+  ],
+  "failed": 0,
+  "measured": 16,
+  "provenance": {
+    "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+    "contract_sha256": "195a09d4f5192df5797273a932dfc22c88bc777f396a94a0a621c57e2a5027a0",
+    "external_inductance_h": 2.5e-06,
+    "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+    "model_sha256": {
+      "AVG": "adce082491d0035c6514aaa9b3ada916f75bcd998da4731caebe58fa2294d0dc",
+      "SW": "21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2"
+    },
+    "parameters": [
+      {
+        "excerpt": "Voltage reference 0.772 0.8 0.828 V",
+        "name": "VREF",
+        "origin": "cited_row",
+        "page": 5,
+        "row_id": "B002_TPS54332DDA_VREF",
+        "transform": "none",
+        "unit": "V",
+        "value": 0.8
+      },
+      {
+        "excerpt": "Fixed 1-MHz switching frequency",
+        "name": "FSW",
+        "origin": "cited_row",
+        "page": 0,
+        "row_id": "B001_FEAT_FSW",
+        "transform": "none",
+        "unit": "Hz",
+        "value": 1000000.0
+      },
+      {
+        "excerpt": "Minimum controllable on time VIN = 12 V, 25\u00b0C 110 135 ns",
+        "name": "TONMIN",
+        "origin": "cited_row",
+        "page": 5,
+        "row_id": "B002_TPS54332DDA_MIN_ON_TIME",
+        "transform": "none",
+        "unit": "s",
+        "value": 1.1e-07
+      },
+      {
+        "excerpt": "The upper limit of the output voltage set point is constrained by the maximum duty cycle of 91% and is given by Equation 32.",
+        "name": "DMAX",
+        "origin": "cited_row",
+        "page": 19,
+        "row_id": "B004_REQ_TPS54332DDA_DUTY_MAX",
+        "transform": "scaled by 0.01",
+        "unit": "ratio",
+        "value": 0.91
+      },
+      {
+        "excerpt": "Current limit threshold VIN = 12 V 4.2 6.5 A",
+        "name": "ILIM",
+        "origin": "derived_from_bounds",
+        "page": 5,
+        "row_id": "B002_TPS54332DDA_ILIM",
+        "transform": "midpoint of cited minimum and maximum",
+        "unit": "A",
+        "value": 5.35
+      },
+      {
+        "excerpt": "Switch current to COMP transconductance VIN = 12 V 12 A/V",
+        "name": "GMCS",
+        "origin": "cited_row",
+        "page": 5,
+        "row_id": "B002_TPS54332DDA_SW_CURRENT_TO_COMP",
+        "transform": "none",
+        "unit": "A/V",
+        "value": 12.0
+      },
+      {
+        "excerpt": "When the peak inductor current is lower than pulse skip threshold, the COMP pin voltage falls to 0.5 V (typical) \nand the device enters Eco-mode . When the device is in Eco-mode, the COMP pin voltage is clamped at 0.5 V \ninternally which prevents the high-side integrated MOSFET from switching.",
+        "name": "VECO",
+        "origin": "cited_row",
+        "page": 12,
+        "row_id": "B003_REQ_TPS54332_ECOMODE_COMP_0P5V",
+        "transform": "none",
+        "unit": "V",
+        "value": 0.5
+      },
+      {
+        "excerpt": "Pulse-skipping Eco-mode switch current threshold 160 mA",
+        "name": "ECO_I",
+        "origin": "cited_row",
+        "page": 5,
+        "row_id": "B002_TPS54332DDA_ECOMODE_TH",
+        "transform": "none",
+        "unit": "A",
+        "value": 0.16
+      },
+      {
+        "excerpt": "Error amplifier transconductance (gm) \u20132 \u03bcA < ICOMP < 2 \u03bcA, V(COMP) = 1 V 92 \u03bcmhos",
+        "name": "EAGM",
+        "origin": "cited_row",
+        "page": 5,
+        "row_id": "B002_TPS54332DDA_EA_GM",
+        "transform": "scaled by 1e-06",
+        "unit": "S",
+        "value": 9.2e-05
+      },
+      {
+        "excerpt": "Error amplifier source/sink current V(COMP) = 1.0 V, 100-mV overdrive \u00b17 \u03bcA",
+        "name": "EAI",
+        "origin": "cited_row",
+        "page": 5,
+        "row_id": "B002_TPS54332DDA_EA_ISOURCE_SINK",
+        "transform": "none",
+        "unit": "A",
+        "value": 7e-06
+      },
+      {
+        "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+        "name": "ISS",
+        "origin": "cited_row",
+        "page": 5,
+        "row_id": "B002_TPS54332DDA_SS_CHARGE",
+        "transform": "none",
+        "unit": "A",
+        "value": 2e-06
+      },
+      {
+        "excerpt": "SS to VSENSE matching V(SS) = 0.4 V 10 mV",
+        "name": "SSOFS",
+        "origin": "cited_row",
+        "page": 5,
+        "row_id": "B002_TPS54332DDA_SS_VSENSE_MATCH",
+        "transform": "none",
+        "unit": "V",
+        "value": 0.01
+      },
+      {
+        "excerpt": "The enable threshold voltage is 1.25 V typical. With EN held below that voltage the device is disabled and \nswitching is inhibited even if VIN is above its UVLO threshold. The IC quiescent current is reduced in this state.",
+        "name": "ENTH",
+        "origin": "cited_row",
+        "page": 11,
+        "row_id": "B003_REQ_TPS54332_EN_THRESHOLD",
+        "transform": "none",
+        "unit": "V",
+        "value": 1.25
+      },
+      {
+        "excerpt": null,
+        "name": "ENHYS",
+        "origin": "template_default",
+        "page": null,
+        "row_id": null,
+        "transform": null,
+        "unit": "V",
+        "value": 0.05
+      },
+      {
+        "excerpt": "Internal undervoltage lockout threshold Rising and Falling 3.5 V",
+        "name": "UVTH",
+        "origin": "cited_row",
+        "page": 5,
+        "row_id": "B002_TPS54332DDA_UVLO_VIN",
+        "transform": "none",
+        "unit": "V",
+        "value": 3.5
+      },
+      {
+        "excerpt": null,
+        "name": "UVHYS",
+        "origin": "template_default",
+        "page": null,
+        "row_id": null,
+        "transform": null,
+        "unit": "V",
+        "value": 0.2
+      },
+      {
+        "excerpt": "Operating \u2013 non switching supply current VSENSE = 0.85 V 82 120 \u03bcA",
+        "name": "IQOP",
+        "origin": "cited_row",
+        "page": 5,
+        "row_id": "B002_TPS54332DDA_IOP_NONSW",
+        "transform": "none",
+        "unit": "A",
+        "value": 8.2e-05
+      },
+      {
+        "excerpt": null,
+        "name": "IQSD_BASE",
+        "origin": "template_default",
+        "page": null,
+        "row_id": null,
+        "transform": null,
+        "unit": "A",
+        "value": 0.0
+      },
+      {
+        "excerpt": "Input current Enable threshold \u2013 50 mV -1 \u03bcA",
+        "name": "EN_PULLUP",
+        "origin": "cited_row",
+        "page": 5,
+        "row_id": "B002_TPS54332DDA_EN_I_NEG50MV",
+        "transform": "magnitude of cited signed current",
+        "unit": "A",
+        "value": 1e-06
+      },
+      {
+        "excerpt": "BOOT-PH = 3 V, VIN = 3.5 V 115 200\nm\u2126",
+        "name": "RON",
+        "origin": "cited_row",
+        "page": 5,
+        "row_id": "B002_TPS54332DDA_RDSON_3V",
+        "transform": "none",
+        "unit": "ohm",
+        "value": 0.115
+      },
+      {
+        "excerpt": "1 MHz VSENSE \u2265 0.6 V\n1 MHz / 2 0.6 V > VSENSE \u2265 0.4 V\n1 MHz / 4 0.4 V > VSENSE \u2265 0.2 V\n1 MHz / 8 0.2 V > VSENSE",
+        "name": "FOLD6",
+        "origin": "cited_row",
+        "page": 11,
+        "row_id": "B003_REQ_TPS54332_SW_FREQ_VSENSE_GE_0P6",
+        "transform": "literal value in cited excerpt",
+        "unit": "V",
+        "value": 0.6
+      },
+      {
+        "excerpt": "1 MHz VSENSE \u2265 0.6 V\n1 MHz / 2 0.6 V > VSENSE \u2265 0.4 V\n1 MHz / 4 0.4 V > VSENSE \u2265 0.2 V\n1 MHz / 8 0.2 V > VSENSE",
+        "name": "FOLD4",
+        "origin": "cited_row",
+        "page": 11,
+        "row_id": "B003_REQ_TPS54332_SW_FREQ_VSENSE_0P4_TO_0P6",
+        "transform": "literal value in cited excerpt",
+        "unit": "V",
+        "value": 0.4
+      },
+      {
+        "excerpt": "1 MHz VSENSE \u2265 0.6 V\n1 MHz / 2 0.6 V > VSENSE \u2265 0.4 V\n1 MHz / 4 0.4 V > VSENSE \u2265 0.2 V\n1 MHz / 8 0.2 V > VSENSE",
+        "name": "FOLD2",
+        "origin": "cited_row",
+        "page": 11,
+        "row_id": "B003_REQ_TPS54332_SW_FREQ_VSENSE_LT_0P2",
+        "transform": "literal value in cited excerpt",
+        "unit": "V",
+        "value": 0.2
+      }
+    ],
+    "part": "TPS54332DDA",
+    "passive_source": "TI-derived TPS54332 M1 passive deck; values are bench choices",
+    "physical_ports": [
+      "BOOT",
+      "VIN",
+      "EN",
+      "SS",
+      "VSENSE",
+      "COMP",
+      "GND",
+      "PH",
+      "POWERPAD"
+    ],
+    "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+    "schema_version": 1,
+    "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+    "spec_digest": "499ed2442781bd4cad22041e7cb028bb6af9ec3df7bd34fe053750b9782b14d7",
+    "verdict_scope": "four cited nominal-25C waveform checks; not all M4b or process corners"
+  },
+  "runs": [
+    {
+      "bench_components": [
+        "Vin vin 0 PULSE(0 12 0 1u 1u 30m 60m)",
+        "Cin vin 0 1e-05",
+        "Ven en 0 3.3",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": null
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "vref",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\vref-sw-clean\\deck.cir",
+      "deck_sha256": "71a47f4fdf215a5bf3c1baa1608a532ecb71165603c1d991d16d7c9dc7eaa1cc",
+      "elapsed_s": 18.558,
+      "exit_code": 0,
+      "fault_override": null,
+      "judgement": {
+        "band": [
+          0.772,
+          0.828
+        ],
+        "basis": "cited numeric min/max at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            0.7200000000000001,
+            0.8800000000000001
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "WITHIN",
+          "value": 0.8
+        },
+        "verdict": "PASS"
+      },
+      "l_ext_h": null,
+      "log_sha256": "7e68e754b66eaf0b6e9846043192b0fc65ddbc24dbbac8e87f69dde28a30b23c",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 18.551,
+      "max_step_s": 5e-08,
+      "measurement": {
+        "distinct_time_points": 670388,
+        "metrics": {
+          "feedback_divider_fraction": 0.3177257525083612,
+          "inductor_a": {
+            "early_mean": 0.9999725456915943,
+            "late_mean": 0.9999850878737299,
+            "max": 1.4687385559082031,
+            "mean": 0.9999788167826622,
+            "min": 0.5331321954727173
+          },
+          "ss_v": {
+            "early_mean": 1.0440809893907357,
+            "late_mean": 1.077378913139104,
+            "max": 1.094027519226074,
+            "mean": 1.06072995126492,
+            "min": 1.0274316072463987
+          },
+          "vin_dut_v": {
+            "early_mean": 12.0,
+            "late_mean": 12.0,
+            "max": 12.0,
+            "mean": 12.0,
+            "min": 12.0
+          },
+          "vout_v": {
+            "early_mean": 2.5177641229353953,
+            "late_mean": 2.517764366496858,
+            "max": 2.5184552669525146,
+            "mean": 2.5177642447161266,
+            "min": 2.51660418510437
+          },
+          "vsense_v": {
+            "early_mean": 0.7999325765744943,
+            "late_mean": 0.7999326537521798,
+            "max": 0.8001521825790405,
+            "mean": 0.799932615163337,
+            "min": 0.7995640635490417
+          }
+        },
+        "raw_points": 670388,
+        "state": {
+          "checks": {
+            "feedback_divider_consistent": true,
+            "output_settled": true,
+            "positive_delivered_current": true,
+            "positive_output": true,
+            "sense_settled": true,
+            "ss_above_reference": true,
+            "vin_12v": true
+          },
+          "status": "READY"
+        },
+        "unit": "V",
+        "value": 0.799932615163337,
+        "window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ]
+      },
+      "mode": "SW",
+      "model_sha256": "21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2",
+      "op_raw_bytes": 1162,
+      "op_raw_sha256": "6c4f6cb525ddfea50d6b060fa2ce032e48284044cb1d73a02c0f0c99dd3f1be2",
+      "raw_bytes": 34861340,
+      "raw_retained": true,
+      "raw_sha256": "ffe4b3afaa0841823632a17bf87bee9de6fbee562f4690a4050d4fa5cdddc477",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:55:12.302635+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=18.55s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_VREF",
+        "excerpt": "Voltage reference 0.772 0.8 0.828 V",
+        "max_value": 0.828,
+        "min_value": 0.772,
+        "source_page": 5,
+        "statement": "Voltage reference: 0.772 V min, 0.8 V typical, 0.828 V max.",
+        "typ_value": 0.8,
+        "unit": "V"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_VREF",
+          "excerpt": "Voltage reference 0.772 0.8 0.828 V",
+          "max_value": 0.828,
+          "min_value": 0.772,
+          "source_page": 5,
+          "statement": "Voltage reference: 0.772 V min, 0.8 V typical, 0.828 V max.",
+          "typ_value": 0.8,
+          "unit": "V"
+        },
+        {
+          "char_id": "B002_TPS54332DDA_SS_CHARGE",
+          "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+          "max_value": null,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+          "typ_value": 2e-06,
+          "unit": "A"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "clean",
+      "verdict": "PASS",
+      "window_s": [
+        0.007709999999999998,
+        0.008209999999999999
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 PULSE(0 12 0 1u 1u 30m 60m)",
+        "Cin vin 0 1e-05",
+        "Ven en 0 3.3",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": null
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "vref",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\vref-sw-fault\\deck.cir",
+      "deck_sha256": "db30db7a926b62b678d6b86ed6957b2f8455a20fbf873a41400860b1eaec0575",
+      "elapsed_s": 17.957,
+      "exit_code": 0,
+      "fault_override": {
+        "VREF": 0.72
+      },
+      "judgement": {
+        "band": [
+          0.772,
+          0.828
+        ],
+        "basis": "cited numeric min/max at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            0.7200000000000001,
+            0.8800000000000001
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "OUTSIDE",
+          "value": 0.8
+        },
+        "verdict": "FAIL"
+      },
+      "l_ext_h": null,
+      "log_sha256": "18c7338b6e6b8471dcd2ef824d2675e61293ec3acd7794f1f60f9ce0781a824f",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 17.947,
+      "max_step_s": 5e-08,
+      "measurement": {
+        "distinct_time_points": 666237,
+        "metrics": {
+          "feedback_divider_fraction": 0.3177257525083612,
+          "inductor_a": {
+            "early_mean": 0.8999162645922183,
+            "late_mean": 0.8998768329674557,
+            "max": 1.3411279916763306,
+            "mean": 0.899896548779837,
+            "min": 0.46125954389572144
+          },
+          "ss_v": {
+            "early_mean": 1.0440809890562466,
+            "late_mean": 1.0773789142799504,
+            "max": 1.094027519226074,
+            "mean": 1.0607299516680984,
+            "min": 1.0274316072463987
+          },
+          "vin_dut_v": {
+            "early_mean": 12.0,
+            "late_mean": 12.0,
+            "max": 12.0,
+            "mean": 12.0,
+            "min": 12.0
+          },
+          "vout_v": {
+            "early_mean": 2.265968445708067,
+            "late_mean": 2.2659691344949744,
+            "max": 2.266584873199463,
+            "mean": 2.2659687901015206,
+            "min": 2.264864683151245
+          },
+          "vsense_v": {
+            "early_mean": 0.7199331981435918,
+            "late_mean": 0.719933417012575,
+            "max": 0.7201290130615234,
+            "mean": 0.7199333075780833,
+            "min": 0.7195824980735779
+          }
+        },
+        "raw_points": 666237,
+        "state": {
+          "checks": {
+            "feedback_divider_consistent": true,
+            "output_settled": true,
+            "positive_delivered_current": true,
+            "positive_output": true,
+            "sense_settled": true,
+            "ss_above_reference": true,
+            "vin_12v": true
+          },
+          "status": "READY"
+        },
+        "unit": "V",
+        "value": 0.7199333075780833,
+        "window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ]
+      },
+      "mode": "SW",
+      "model_sha256": "21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2",
+      "op_raw_bytes": 1162,
+      "op_raw_sha256": "b9644de4707e1eaccdb9866bbe7c22bbdfb67236db78297310a4ed509e029503",
+      "raw_bytes": 34645488,
+      "raw_retained": true,
+      "raw_sha256": "db2b5dcb82768c3ccdf889037291c62c0c1d65216051dbf44efcd48f843cfb28",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:55:31.116113+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=17.95s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_VREF",
+        "excerpt": "Voltage reference 0.772 0.8 0.828 V",
+        "max_value": 0.828,
+        "min_value": 0.772,
+        "source_page": 5,
+        "statement": "Voltage reference: 0.772 V min, 0.8 V typical, 0.828 V max.",
+        "typ_value": 0.8,
+        "unit": "V"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_VREF",
+          "excerpt": "Voltage reference 0.772 0.8 0.828 V",
+          "max_value": 0.828,
+          "min_value": 0.772,
+          "source_page": 5,
+          "statement": "Voltage reference: 0.772 V min, 0.8 V typical, 0.828 V max.",
+          "typ_value": 0.8,
+          "unit": "V"
+        },
+        {
+          "char_id": "B002_TPS54332DDA_SS_CHARGE",
+          "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+          "max_value": null,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+          "typ_value": 2e-06,
+          "unit": "A"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "fault",
+      "verdict": "FAIL",
+      "window_s": [
+        0.007709999999999998,
+        0.008209999999999999
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 PULSE(0 12 0 1u 1u 30m 60m)",
+        "Cin vin 0 1e-05",
+        "Ven en 0 3.3",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": null
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "vref",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\vref-avg-clean\\deck.cir",
+      "deck_sha256": "340b9c79daa56e81e308c4526dc6185ebe3e8109dc85ad186238750792757438",
+      "elapsed_s": 0.748,
+      "exit_code": 0,
+      "fault_override": null,
+      "judgement": {
+        "band": [
+          0.772,
+          0.828
+        ],
+        "basis": "cited numeric min/max at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            0.7200000000000001,
+            0.8800000000000001
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "WITHIN",
+          "value": 0.8
+        },
+        "verdict": "PASS"
+      },
+      "l_ext_h": 2.5e-06,
+      "log_sha256": "da9b05e0d3952dc31109a4b5ab2b3f645aebb9ee925251b703ce01dbb075fed6",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 0.744,
+      "max_step_s": 1e-06,
+      "measurement": {
+        "distinct_time_points": 8377,
+        "metrics": {
+          "feedback_divider_fraction": 0.3177257525083612,
+          "inductor_a": {
+            "early_mean": 1.0001159906387331,
+            "late_mean": 1.0001159906387331,
+            "max": 1.000115990638733,
+            "mean": 1.000115990638733,
+            "min": 1.000115990638733
+          },
+          "ss_v": {
+            "early_mean": 1.0440809797165016,
+            "late_mean": 1.0773789045844042,
+            "max": 1.094027519226074,
+            "mean": 1.0607299421504528,
+            "min": 1.0274316857395667
+          },
+          "vin_dut_v": {
+            "early_mean": 12.0,
+            "late_mean": 12.0,
+            "max": 12.0,
+            "mean": 12.0,
+            "min": 12.0
+          },
+          "vout_v": {
+            "early_mean": 2.5177628993988037,
+            "late_mean": 2.5177628993988037,
+            "max": 2.5177628993988037,
+            "mean": 2.5177628993988037,
+            "min": 2.5177628993988037
+          },
+          "vsense_v": {
+            "early_mean": 0.7999321818351746,
+            "late_mean": 0.7999321818351747,
+            "max": 0.7999321818351746,
+            "mean": 0.7999321818351747,
+            "min": 0.7999321818351746
+          }
+        },
+        "raw_points": 8377,
+        "state": {
+          "checks": {
+            "feedback_divider_consistent": true,
+            "output_settled": true,
+            "positive_delivered_current": true,
+            "positive_output": true,
+            "sense_settled": true,
+            "ss_above_reference": true,
+            "vin_12v": true
+          },
+          "status": "READY"
+        },
+        "unit": "V",
+        "value": 0.7999321818351747,
+        "window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ]
+      },
+      "mode": "AVG",
+      "model_sha256": "adce082491d0035c6514aaa9b3ada916f75bcd998da4731caebe58fa2294d0dc",
+      "op_raw_bytes": 1164,
+      "op_raw_sha256": "9ce7043b89b7517185b2b74b37595a449089063f5c484ede3ce753b6187d11b5",
+      "raw_bytes": 436770,
+      "raw_retained": true,
+      "raw_sha256": "d79d1282f4b843568fa3068f5ee0734c4404f50d4b7024277bf6aab11586c790",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:55:49.335917+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=0.74s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_VREF",
+        "excerpt": "Voltage reference 0.772 0.8 0.828 V",
+        "max_value": 0.828,
+        "min_value": 0.772,
+        "source_page": 5,
+        "statement": "Voltage reference: 0.772 V min, 0.8 V typical, 0.828 V max.",
+        "typ_value": 0.8,
+        "unit": "V"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_VREF",
+          "excerpt": "Voltage reference 0.772 0.8 0.828 V",
+          "max_value": 0.828,
+          "min_value": 0.772,
+          "source_page": 5,
+          "statement": "Voltage reference: 0.772 V min, 0.8 V typical, 0.828 V max.",
+          "typ_value": 0.8,
+          "unit": "V"
+        },
+        {
+          "char_id": "B002_TPS54332DDA_SS_CHARGE",
+          "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+          "max_value": null,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+          "typ_value": 2e-06,
+          "unit": "A"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "clean",
+      "verdict": "PASS",
+      "window_s": [
+        0.007709999999999998,
+        0.008209999999999999
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 PULSE(0 12 0 1u 1u 30m 60m)",
+        "Cin vin 0 1e-05",
+        "Ven en 0 3.3",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": null
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "vref",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\vref-avg-fault\\deck.cir",
+      "deck_sha256": "1d00651756d8214dd0480aec54b8221e0f1e97146765ac154d5cd3bb2e3ed2df",
+      "elapsed_s": 0.799,
+      "exit_code": 0,
+      "fault_override": {
+        "VREF": 0.72
+      },
+      "judgement": {
+        "band": [
+          0.772,
+          0.828
+        ],
+        "basis": "cited numeric min/max at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            0.7200000000000001,
+            0.8800000000000001
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "OUTSIDE",
+          "value": 0.8
+        },
+        "verdict": "FAIL"
+      },
+      "l_ext_h": 2.5e-06,
+      "log_sha256": "f08b3f6c17f4fe5b3f5fd98962e0c1684e80a4ee64625acf924b34256709b35a",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 0.792,
+      "max_step_s": 1e-06,
+      "measurement": {
+        "distinct_time_points": 8377,
+        "metrics": {
+          "feedback_divider_fraction": 0.3177257525083612,
+          "inductor_a": {
+            "early_mean": 0.9000974297523497,
+            "late_mean": 0.9000974297523499,
+            "max": 0.9000974297523499,
+            "mean": 0.9000974297523499,
+            "min": 0.9000974297523499
+          },
+          "ss_v": {
+            "early_mean": 1.0440809798482469,
+            "late_mean": 1.0773789042392037,
+            "max": 1.094027519226074,
+            "mean": 1.0607299420437253,
+            "min": 1.0274316858712753
+          },
+          "vin_dut_v": {
+            "early_mean": 12.0,
+            "late_mean": 12.0,
+            "max": 12.0,
+            "mean": 12.0,
+            "min": 12.0
+          },
+          "vout_v": {
+            "early_mean": 2.265969038009643,
+            "late_mean": 2.265969038009643,
+            "max": 2.2659690380096436,
+            "mean": 2.2659690380096427,
+            "min": 2.2659690380096436
+          },
+          "vsense_v": {
+            "early_mean": 0.7199333310127258,
+            "late_mean": 0.7199333310127257,
+            "max": 0.7199333310127258,
+            "mean": 0.7199333310127257,
+            "min": 0.7199333310127258
+          }
+        },
+        "raw_points": 8377,
+        "state": {
+          "checks": {
+            "feedback_divider_consistent": true,
+            "output_settled": true,
+            "positive_delivered_current": true,
+            "positive_output": true,
+            "sense_settled": true,
+            "ss_above_reference": true,
+            "vin_12v": true
+          },
+          "status": "READY"
+        },
+        "unit": "V",
+        "value": 0.7199333310127257,
+        "window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ]
+      },
+      "mode": "AVG",
+      "model_sha256": "adce082491d0035c6514aaa9b3ada916f75bcd998da4731caebe58fa2294d0dc",
+      "op_raw_bytes": 1164,
+      "op_raw_sha256": "2901394922715bdb5e9a42e967d1ca1ca3ffc003974d1dcd2f204bccd57b3fbc",
+      "raw_bytes": 436770,
+      "raw_retained": true,
+      "raw_sha256": "5b46b3e080f9135b378a9ce1f43dfb8785849c5eefc5f6c55f62e00ba4080b8b",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:55:50.104022+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=0.79s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_VREF",
+        "excerpt": "Voltage reference 0.772 0.8 0.828 V",
+        "max_value": 0.828,
+        "min_value": 0.772,
+        "source_page": 5,
+        "statement": "Voltage reference: 0.772 V min, 0.8 V typical, 0.828 V max.",
+        "typ_value": 0.8,
+        "unit": "V"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_VREF",
+          "excerpt": "Voltage reference 0.772 0.8 0.828 V",
+          "max_value": 0.828,
+          "min_value": 0.772,
+          "source_page": 5,
+          "statement": "Voltage reference: 0.772 V min, 0.8 V typical, 0.828 V max.",
+          "typ_value": 0.8,
+          "unit": "V"
+        },
+        {
+          "char_id": "B002_TPS54332DDA_SS_CHARGE",
+          "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+          "max_value": null,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+          "typ_value": 2e-06,
+          "unit": "A"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "fault",
+      "verdict": "FAIL",
+      "window_s": [
+        0.007709999999999998,
+        0.008209999999999999
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 PULSE(0 12 0 1u 1u 30m 60m)",
+        "Cin vin 0 1e-05",
+        "Ven en 0 3.3",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": null
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "ss_charge",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\ss_charge-sw-clean\\deck.cir",
+      "deck_sha256": "cf4893271c1b4c14990d95a307651538c337bb32d7e02d2544f9d263769b79fb",
+      "elapsed_s": 20.679,
+      "exit_code": 0,
+      "fault_override": null,
+      "judgement": {
+        "band": [
+          1.8e-06,
+          2.2e-06
+        ],
+        "basis": "cited typical +/-10% at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            1.8e-06,
+            2.2e-06
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "WITHIN",
+          "value": 2e-06
+        },
+        "verdict": "PASS"
+      },
+      "l_ext_h": null,
+      "log_sha256": "dfa571e4adc5c716eeb223cb54eaffc89d2a08a8b2a68d9e7f2a1402fc2f1c39",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 20.674,
+      "max_step_s": 5e-08,
+      "measurement": {
+        "distinct_time_points": 670388,
+        "metrics": {
+          "en_at_mid_v": 3.299999952316284,
+          "method": "external Css * 0.1 V / crossing time near cited Vss=0.4 V",
+          "ss_cap_f": 1.5e-08,
+          "ss_crossing_times_s": [
+            0.0026257540269058292,
+            0.0033760550055228497
+          ],
+          "ss_voltage_interval_v": [
+            0.35,
+            0.45
+          ],
+          "vin_at_mid_v": 12.0
+        },
+        "raw_points": 670388,
+        "state": {
+          "checks": {
+            "en_high": true,
+            "vin_12v": true,
+            "window_near_cited_ss_point": true
+          },
+          "status": "READY"
+        },
+        "unit": "A",
+        "value": 1.9991977123165286e-06,
+        "window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ]
+      },
+      "mode": "SW",
+      "model_sha256": "21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2",
+      "op_raw_bytes": 1172,
+      "op_raw_sha256": "4a8d8772bc51316a3e24302588e171c73bcb9567e160179d085e2a97e3a3e1fa",
+      "raw_bytes": 34861350,
+      "raw_retained": true,
+      "raw_sha256": "56f8e383173b852fbabaf457fb5c6332bec3e4a7d7cb6b60abd3421f5160d678",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:55:50.949546+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=20.67s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_SS_CHARGE",
+        "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+        "max_value": null,
+        "min_value": null,
+        "source_page": 5,
+        "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+        "typ_value": 2e-06,
+        "unit": "A"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_SS_CHARGE",
+          "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+          "max_value": null,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+          "typ_value": 2e-06,
+          "unit": "A"
+        },
+        {
+          "char_id": "B002_TPS54332DDA_VREF",
+          "excerpt": "Voltage reference 0.772 0.8 0.828 V",
+          "max_value": 0.828,
+          "min_value": 0.772,
+          "source_page": 5,
+          "statement": "Voltage reference: 0.772 V min, 0.8 V typical, 0.828 V max.",
+          "typ_value": 0.8,
+          "unit": "V"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "clean",
+      "verdict": "PASS",
+      "window_s": [
+        0.007709999999999998,
+        0.008209999999999999
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 PULSE(0 12 0 1u 1u 30m 60m)",
+        "Cin vin 0 1e-05",
+        "Ven en 0 3.3",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": null
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "ss_charge",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\ss_charge-sw-fault\\deck.cir",
+      "deck_sha256": "9a8313a662e894e2b2e27365a3ff0089513220ce94de3e10b23921e12a5c0cc9",
+      "elapsed_s": 16.804,
+      "exit_code": 0,
+      "fault_override": {
+        "ISS": 1e-06
+      },
+      "judgement": {
+        "band": [
+          1.8e-06,
+          2.2e-06
+        ],
+        "basis": "cited typical +/-10% at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            1.8e-06,
+            2.2e-06
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "OUTSIDE",
+          "value": 2e-06
+        },
+        "verdict": "FAIL"
+      },
+      "l_ext_h": null,
+      "log_sha256": "a193f2d576766bb9ef043671480c92d8a01919d17f9c960ad6844766ed516d11",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 16.798,
+      "max_step_s": 5e-08,
+      "measurement": {
+        "distinct_time_points": 607562,
+        "metrics": {
+          "en_at_mid_v": 3.299999952316284,
+          "method": "external Css * 0.1 V / crossing time near cited Vss=0.4 V",
+          "ss_cap_f": 1.5e-08,
+          "ss_crossing_times_s": [
+            0.005252135939161831,
+            0.006753339214285714
+          ],
+          "ss_voltage_interval_v": [
+            0.35,
+            0.45
+          ],
+          "vin_at_mid_v": 12.0
+        },
+        "raw_points": 607562,
+        "state": {
+          "checks": {
+            "en_high": true,
+            "vin_12v": true,
+            "window_near_cited_ss_point": true
+          },
+          "status": "READY"
+        },
+        "unit": "A",
+        "value": 9.991984595665214e-07,
+        "window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ]
+      },
+      "mode": "SW",
+      "model_sha256": "21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2",
+      "op_raw_bytes": 1172,
+      "op_raw_sha256": "414ac670e91e5e526bcf83b227c24596846d90efb87ed947d202539f5d4d0ed2",
+      "raw_bytes": 31594398,
+      "raw_retained": true,
+      "raw_sha256": "f96e8900baa4beb0b8a513fa58fab6d4f4233243429f99afa7112f9aeed65600",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:56:11.933940+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=16.80s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_SS_CHARGE",
+        "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+        "max_value": null,
+        "min_value": null,
+        "source_page": 5,
+        "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+        "typ_value": 2e-06,
+        "unit": "A"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_SS_CHARGE",
+          "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+          "max_value": null,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+          "typ_value": 2e-06,
+          "unit": "A"
+        },
+        {
+          "char_id": "B002_TPS54332DDA_VREF",
+          "excerpt": "Voltage reference 0.772 0.8 0.828 V",
+          "max_value": 0.828,
+          "min_value": 0.772,
+          "source_page": 5,
+          "statement": "Voltage reference: 0.772 V min, 0.8 V typical, 0.828 V max.",
+          "typ_value": 0.8,
+          "unit": "V"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "fault",
+      "verdict": "FAIL",
+      "window_s": [
+        0.007709999999999998,
+        0.008209999999999999
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 PULSE(0 12 0 1u 1u 30m 60m)",
+        "Cin vin 0 1e-05",
+        "Ven en 0 3.3",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": null
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "ss_charge",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\ss_charge-avg-clean\\deck.cir",
+      "deck_sha256": "54ca0dec1b0027a6a93b139654c34a924e1389d6272dee0fe00b57de012c4ab8",
+      "elapsed_s": 0.753,
+      "exit_code": 0,
+      "fault_override": null,
+      "judgement": {
+        "band": [
+          1.8e-06,
+          2.2e-06
+        ],
+        "basis": "cited typical +/-10% at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            1.8e-06,
+            2.2e-06
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "WITHIN",
+          "value": 2e-06
+        },
+        "verdict": "PASS"
+      },
+      "l_ext_h": 2.5e-06,
+      "log_sha256": "5abd89c0decb9c90014dbe1caac8701c3b37b0209d18477070d1bc7a8134af81",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 0.749,
+      "max_step_s": 1e-06,
+      "measurement": {
+        "distinct_time_points": 8377,
+        "metrics": {
+          "en_at_mid_v": 3.299999952316284,
+          "method": "external Css * 0.1 V / crossing time near cited Vss=0.4 V",
+          "ss_cap_f": 1.5e-08,
+          "ss_crossing_times_s": [
+            0.0026257539743782627,
+            0.0033760549401297955
+          ],
+          "ss_voltage_interval_v": [
+            0.35,
+            0.45
+          ],
+          "vin_at_mid_v": 12.0
+        },
+        "raw_points": 8377,
+        "state": {
+          "checks": {
+            "en_high": true,
+            "vin_12v": true,
+            "window_near_cited_ss_point": true
+          },
+          "status": "READY"
+        },
+        "unit": "A",
+        "value": 1.9991977465969773e-06,
+        "window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ]
+      },
+      "mode": "AVG",
+      "model_sha256": "adce082491d0035c6514aaa9b3ada916f75bcd998da4731caebe58fa2294d0dc",
+      "op_raw_bytes": 1174,
+      "op_raw_sha256": "e40690ca508669c58b9554cc1dd084b4268511bb30582b2c638d8f7a891bf2e3",
+      "raw_bytes": 436780,
+      "raw_retained": true,
+      "raw_sha256": "38ee6e8c37116e414ca119936dd2b9d0f6086e9f4591c00a6e903b0cbee05d86",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:56:28.942615+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=0.75s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_SS_CHARGE",
+        "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+        "max_value": null,
+        "min_value": null,
+        "source_page": 5,
+        "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+        "typ_value": 2e-06,
+        "unit": "A"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_SS_CHARGE",
+          "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+          "max_value": null,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+          "typ_value": 2e-06,
+          "unit": "A"
+        },
+        {
+          "char_id": "B002_TPS54332DDA_VREF",
+          "excerpt": "Voltage reference 0.772 0.8 0.828 V",
+          "max_value": 0.828,
+          "min_value": 0.772,
+          "source_page": 5,
+          "statement": "Voltage reference: 0.772 V min, 0.8 V typical, 0.828 V max.",
+          "typ_value": 0.8,
+          "unit": "V"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "clean",
+      "verdict": "PASS",
+      "window_s": [
+        0.007709999999999998,
+        0.008209999999999999
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 PULSE(0 12 0 1u 1u 30m 60m)",
+        "Cin vin 0 1e-05",
+        "Ven en 0 3.3",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": null
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "ss_charge",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\ss_charge-avg-fault\\deck.cir",
+      "deck_sha256": "802e1d41b133b7cde18caf7fc28abe5e851e06353677180775ab914a105d96b5",
+      "elapsed_s": 0.748,
+      "exit_code": 0,
+      "fault_override": {
+        "ISS": 1e-06
+      },
+      "judgement": {
+        "band": [
+          1.8e-06,
+          2.2e-06
+        ],
+        "basis": "cited typical +/-10% at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            1.8e-06,
+            2.2e-06
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "OUTSIDE",
+          "value": 2e-06
+        },
+        "verdict": "FAIL"
+      },
+      "l_ext_h": 2.5e-06,
+      "log_sha256": "3a0bf05e062eea725d5853d569b50fb207aad2d7cddb82e370620f2e68c94184",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 0.745,
+      "max_step_s": 1e-06,
+      "measurement": {
+        "distinct_time_points": 8371,
+        "metrics": {
+          "en_at_mid_v": 3.299999952316284,
+          "method": "external Css * 0.1 V / crossing time near cited Vss=0.4 V",
+          "ss_cap_f": 1.5e-08,
+          "ss_crossing_times_s": [
+            0.005252136099223173,
+            0.006753339294541285
+          ],
+          "ss_voltage_interval_v": [
+            0.35,
+            0.45
+          ],
+          "vin_at_mid_v": 12.0
+        },
+        "raw_points": 8371,
+        "state": {
+          "checks": {
+            "en_high": true,
+            "vin_12v": true,
+            "window_near_cited_ss_point": true
+          },
+          "status": "READY"
+        },
+        "unit": "A",
+        "value": 9.991985126851152e-07,
+        "window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ]
+      },
+      "mode": "AVG",
+      "model_sha256": "adce082491d0035c6514aaa9b3ada916f75bcd998da4731caebe58fa2294d0dc",
+      "op_raw_bytes": 1174,
+      "op_raw_sha256": "c9c40aad7901bf5a38219cbb9aafaa8713c7346041017e3912287b0936cf69b3",
+      "raw_bytes": 436468,
+      "raw_retained": true,
+      "raw_sha256": "8c1b787aecdbcd62775d45c9d225b2daacba9b3fc549aa3fa38e4e8780e40814",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:56:29.714454+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=0.75s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_SS_CHARGE",
+        "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+        "max_value": null,
+        "min_value": null,
+        "source_page": 5,
+        "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+        "typ_value": 2e-06,
+        "unit": "A"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_SS_CHARGE",
+          "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+          "max_value": null,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+          "typ_value": 2e-06,
+          "unit": "A"
+        },
+        {
+          "char_id": "B002_TPS54332DDA_VREF",
+          "excerpt": "Voltage reference 0.772 0.8 0.828 V",
+          "max_value": 0.828,
+          "min_value": 0.772,
+          "source_page": 5,
+          "statement": "Voltage reference: 0.772 V min, 0.8 V typical, 0.828 V max.",
+          "typ_value": 0.8,
+          "unit": "V"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "fault",
+      "verdict": "FAIL",
+      "window_s": [
+        0.007709999999999998,
+        0.008209999999999999
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 12",
+        "Cin vin 0 1e-05",
+        "Ven en 0 0",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.0005,
+          0.001
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": null
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "shutdown_iq",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\shutdown_iq-sw-clean\\deck.cir",
+      "deck_sha256": "6935f3f52ca62d2deda7bc73e2556a404babff5cbcf042a675bd97a961ac6521",
+      "elapsed_s": 1.379,
+      "exit_code": 0,
+      "fault_override": null,
+      "judgement": {
+        "band": [
+          0.0,
+          4e-06
+        ],
+        "basis": "cited numeric min/max at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            9e-07,
+            1.1e-06
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "WITHIN",
+          "value": 1e-06
+        },
+        "verdict": "PASS"
+      },
+      "l_ext_h": null,
+      "log_sha256": "ee3d48affe270f9dff62b1b47ff36ef5295e803216b470a1de9c780628b45ee9",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 1.374,
+      "max_step_s": 5e-08,
+      "measurement": {
+        "distinct_time_points": 29767,
+        "metrics": {
+          "dut_vin_current_a": {
+            "early_mean": 1.0012120128521929e-06,
+            "late_mean": 1.0012120128521926e-06,
+            "max": 1.0012120128521929e-06,
+            "mean": 1.0012120128521926e-06,
+            "min": 1.0012120128521929e-06
+          },
+          "input_cap_excluded": true,
+          "input_draw_half_window_delta_a": 2.117582368135751e-22,
+          "source_current_sign": "positive I(Vdutvin) flows from source-side Cin into DUT VIN"
+        },
+        "raw_points": 29767,
+        "state": {
+          "checks": {
+            "en_low": true,
+            "inductor_quiet": true,
+            "input_draw_nonnegative": true,
+            "input_draw_stable": true,
+            "out_low": true,
+            "ph_quiet": true,
+            "ss_discharged": true,
+            "vin_12v": true
+          },
+          "measurements": {
+            "I(Lout)": {
+              "early_mean": 1.211999167693989e-09,
+              "late_mean": 1.211999167693989e-09,
+              "max": 1.211999167693989e-09,
+              "mean": 1.211999167693989e-09,
+              "min": 1.211999167693989e-09
+            },
+            "V(dut_vin)": {
+              "early_mean": 12.0,
+              "late_mean": 12.0,
+              "max": 12.0,
+              "mean": 12.0,
+              "min": 12.0
+            },
+            "V(en)": {
+              "early_mean": 0.0,
+              "late_mean": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "min": 0.0
+            },
+            "V(out)": {
+              "early_mean": 3.051172425827531e-09,
+              "late_mean": 3.051172425827531e-09,
+              "max": 3.0511724258275308e-09,
+              "mean": 3.051172425827531e-09,
+              "min": 3.0511724258275308e-09
+            },
+            "V(ph)": {
+              "early_mean": 3.0632925085427587e-09,
+              "late_mean": 3.0632925085427587e-09,
+              "max": 3.0632925085427587e-09,
+              "mean": 3.0632925085427583e-09,
+              "min": 3.0632925085427587e-09
+            },
+            "V(ss)": {
+              "early_mean": 0.0,
+              "late_mean": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "min": 0.0
+            },
+            "V(vsense)": {
+              "early_mean": 9.694046676500532e-10,
+              "late_mean": 9.694046676500532e-10,
+              "max": 9.694046676500534e-10,
+              "mean": 9.694046676500532e-10,
+              "min": 9.694046676500534e-10
+            }
+          },
+          "ph_rising_edges_above_1v": 0,
+          "reason": null,
+          "status": "READY"
+        },
+        "unit": "A",
+        "value": 1.0012120128521926e-06,
+        "window_s": [
+          0.0005,
+          0.001
+        ]
+      },
+      "mode": "SW",
+      "model_sha256": "21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2",
+      "op_raw_bytes": 1176,
+      "op_raw_sha256": "28fe101248cc7e49e1d49d857d86cd83a7bb387e97ad57a2867c6cc3f651e9f5",
+      "raw_bytes": 1549062,
+      "raw_retained": true,
+      "raw_sha256": "6f383f27cf9364e5fe376b35365550688a8455de32661e263d8ee2d6442b9637",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:56:30.484614+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=1.37s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_ISHDN",
+        "excerpt": "Shutdown supply current EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C 1 4 \u03bcA",
+        "max_value": 4e-06,
+        "min_value": null,
+        "source_page": 5,
+        "statement": "Shutdown supply current: 1 \u03bcA typical, 4 \u03bcA max at EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C.",
+        "typ_value": 1e-06,
+        "unit": "A"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_ISHDN",
+          "excerpt": "Shutdown supply current EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C 1 4 \u03bcA",
+          "max_value": 4e-06,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Shutdown supply current: 1 \u03bcA typical, 4 \u03bcA max at EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C.",
+          "typ_value": 1e-06,
+          "unit": "A"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "clean",
+      "verdict": "PASS",
+      "window_s": [
+        0.0005,
+        0.001
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 12",
+        "Cin vin 0 1e-05",
+        "Ven en 0 0",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.0005,
+          0.001
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": null
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "shutdown_iq",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\shutdown_iq-sw-fault\\deck.cir",
+      "deck_sha256": "ad6e9988129dda0fc7c9d91624a6d829546aeb5b3206ffdcf78e5705a03c7465",
+      "elapsed_s": 1.389,
+      "exit_code": 0,
+      "fault_override": {
+        "EN_PULLUP": 1e-05
+      },
+      "judgement": {
+        "band": [
+          0.0,
+          4e-06
+        ],
+        "basis": "cited numeric min/max at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            9e-07,
+            1.1e-06
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "OUTSIDE",
+          "value": 1e-06
+        },
+        "verdict": "FAIL"
+      },
+      "l_ext_h": null,
+      "log_sha256": "c3260c5be15293e5c6be41ad537e12283d396abaf94154f53bcc0e86caaa6093",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 1.385,
+      "max_step_s": 5e-08,
+      "measurement": {
+        "distinct_time_points": 29767,
+        "metrics": {
+          "dut_vin_current_a": {
+            "early_mean": 1.0001212103816215e-05,
+            "late_mean": 1.0001212103816213e-05,
+            "max": 1.0001212103816215e-05,
+            "mean": 1.0001212103816215e-05,
+            "min": 1.0001212103816215e-05
+          },
+          "input_cap_excluded": true,
+          "input_draw_half_window_delta_a": 1.6940658945086007e-21,
+          "source_current_sign": "positive I(Vdutvin) flows from source-side Cin into DUT VIN"
+        },
+        "raw_points": 29767,
+        "state": {
+          "checks": {
+            "en_low": true,
+            "inductor_quiet": true,
+            "input_draw_nonnegative": true,
+            "input_draw_stable": true,
+            "out_low": true,
+            "ph_quiet": true,
+            "ss_discharged": true,
+            "vin_12v": true
+          },
+          "measurements": {
+            "I(Lout)": {
+              "early_mean": 1.211999167693989e-09,
+              "late_mean": 1.211999167693989e-09,
+              "max": 1.211999167693989e-09,
+              "mean": 1.211999167693989e-09,
+              "min": 1.211999167693989e-09
+            },
+            "V(dut_vin)": {
+              "early_mean": 12.0,
+              "late_mean": 12.0,
+              "max": 12.0,
+              "mean": 12.0,
+              "min": 12.0
+            },
+            "V(en)": {
+              "early_mean": 0.0,
+              "late_mean": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "min": 0.0
+            },
+            "V(out)": {
+              "early_mean": 3.051172425827531e-09,
+              "late_mean": 3.051172425827531e-09,
+              "max": 3.0511724258275308e-09,
+              "mean": 3.051172425827531e-09,
+              "min": 3.0511724258275308e-09
+            },
+            "V(ph)": {
+              "early_mean": 3.0632925085427587e-09,
+              "late_mean": 3.0632925085427587e-09,
+              "max": 3.0632925085427587e-09,
+              "mean": 3.0632925085427583e-09,
+              "min": 3.0632925085427587e-09
+            },
+            "V(ss)": {
+              "early_mean": 0.0,
+              "late_mean": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "min": 0.0
+            },
+            "V(vsense)": {
+              "early_mean": 9.694046676500532e-10,
+              "late_mean": 9.694046676500532e-10,
+              "max": 9.694046676500534e-10,
+              "mean": 9.694046676500532e-10,
+              "min": 9.694046676500534e-10
+            }
+          },
+          "ph_rising_edges_above_1v": 0,
+          "reason": null,
+          "status": "READY"
+        },
+        "unit": "A",
+        "value": 1.0001212103816215e-05,
+        "window_s": [
+          0.0005,
+          0.001
+        ]
+      },
+      "mode": "SW",
+      "model_sha256": "21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2",
+      "op_raw_bytes": 1176,
+      "op_raw_sha256": "bcb7eae943ed9c2d53cea688a4e220352be35c06ee76b194e529f76edeee5c01",
+      "raw_bytes": 1549062,
+      "raw_retained": true,
+      "raw_sha256": "167e7fd6d11ef58de1f306a58fbe1f8c0ca1880fbfc9d790666ede5d38180af9",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:56:31.889723+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=1.38s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_ISHDN",
+        "excerpt": "Shutdown supply current EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C 1 4 \u03bcA",
+        "max_value": 4e-06,
+        "min_value": null,
+        "source_page": 5,
+        "statement": "Shutdown supply current: 1 \u03bcA typical, 4 \u03bcA max at EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C.",
+        "typ_value": 1e-06,
+        "unit": "A"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_ISHDN",
+          "excerpt": "Shutdown supply current EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C 1 4 \u03bcA",
+          "max_value": 4e-06,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Shutdown supply current: 1 \u03bcA typical, 4 \u03bcA max at EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C.",
+          "typ_value": 1e-06,
+          "unit": "A"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "fault",
+      "verdict": "FAIL",
+      "window_s": [
+        0.0005,
+        0.001
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 12",
+        "Cin vin 0 1e-05",
+        "Ven en 0 0",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.0005,
+          0.001
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": null
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "shutdown_iq",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\shutdown_iq-avg-clean\\deck.cir",
+      "deck_sha256": "4892abf83ac9e94c65eb69cbefbb8e4b81cbf6a84308dd114f9af9c6df937413",
+      "elapsed_s": 0.665,
+      "exit_code": 0,
+      "fault_override": null,
+      "judgement": {
+        "band": [
+          0.0,
+          4e-06
+        ],
+        "basis": "cited numeric min/max at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            9e-07,
+            1.1e-06
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "WITHIN",
+          "value": 1e-06
+        },
+        "verdict": "PASS"
+      },
+      "l_ext_h": 2.5e-06,
+      "log_sha256": "c6dd55fd0c92426e42d82fe2f0219825888eb1ec47f6ccecb43985d2da2c3f08",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 0.659,
+      "max_step_s": 1e-06,
+      "measurement": {
+        "distinct_time_points": 1018,
+        "metrics": {
+          "dut_vin_current_a": {
+            "early_mean": 1.0000002248489184e-06,
+            "late_mean": 1.0000002248489184e-06,
+            "max": 1.0000002248489182e-06,
+            "mean": 1.0000002248489184e-06,
+            "min": 1.0000002248489182e-06
+          },
+          "input_cap_excluded": true,
+          "input_draw_half_window_delta_a": 0.0,
+          "source_current_sign": "positive I(Vdutvin) flows from source-side Cin into DUT VIN"
+        },
+        "raw_points": 1018,
+        "state": {
+          "checks": {
+            "en_low": true,
+            "inductor_quiet": true,
+            "input_draw_nonnegative": true,
+            "input_draw_stable": true,
+            "out_low": true,
+            "ph_quiet": true,
+            "ss_discharged": true,
+            "vin_12v": true
+          },
+          "measurements": {
+            "I(Lout)": {
+              "early_mean": 1.5459574059407233e-11,
+              "late_mean": 1.5459574057993795e-11,
+              "max": 1.5459585001043052e-11,
+              "mean": 1.5459574058700514e-11,
+              "min": 1.5459562449637865e-11
+            },
+            "V(dut_vin)": {
+              "early_mean": 12.0,
+              "late_mean": 12.0,
+              "max": 12.0,
+              "mean": 12.0,
+              "min": 12.0
+            },
+            "V(en)": {
+              "early_mean": 0.0,
+              "late_mean": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "min": 0.0
+            },
+            "V(out)": {
+              "early_mean": 3.891902353432952e-11,
+              "late_mean": 3.89190242533477e-11,
+              "max": 3.89190242533477e-11,
+              "mean": 3.8919023893838605e-11,
+              "min": 3.891902078390075e-11
+            },
+            "V(ph)": {
+              "early_mean": 3.9073618540153226e-11,
+              "late_mean": 3.9073620034825606e-11,
+              "max": 3.9074635888036724e-11,
+              "mean": 3.907361928748942e-11,
+              "min": 3.907259932267593e-11
+            },
+            "V(ss)": {
+              "early_mean": 0.0,
+              "late_mean": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "min": 0.0
+            },
+            "V(vsense)": {
+              "early_mean": 1.2365175200386713e-11,
+              "late_mean": 1.2365175723616504e-11,
+              "max": 1.2365175723616506e-11,
+              "mean": 1.236517546200161e-11,
+              "min": 1.2365174856254768e-11
+            }
+          },
+          "ph_rising_edges_above_1v": 0,
+          "reason": null,
+          "status": "READY"
+        },
+        "unit": "A",
+        "value": 1.0000002248489184e-06,
+        "window_s": [
+          0.0005,
+          0.001
+        ]
+      },
+      "mode": "AVG",
+      "model_sha256": "adce082491d0035c6514aaa9b3ada916f75bcd998da4731caebe58fa2294d0dc",
+      "op_raw_bytes": 1178,
+      "op_raw_sha256": "f262baa50216a36ee50e9ec6a35de44fc288e04fd5b8880d3f73ebe4b76dd9cf",
+      "raw_bytes": 54116,
+      "raw_retained": true,
+      "raw_sha256": "bb351b5dc8be212c4b37a832f27d55f6a2c7650ddee4c98e61015d41dced9df5",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:56:33.308638+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=0.66s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_ISHDN",
+        "excerpt": "Shutdown supply current EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C 1 4 \u03bcA",
+        "max_value": 4e-06,
+        "min_value": null,
+        "source_page": 5,
+        "statement": "Shutdown supply current: 1 \u03bcA typical, 4 \u03bcA max at EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C.",
+        "typ_value": 1e-06,
+        "unit": "A"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_ISHDN",
+          "excerpt": "Shutdown supply current EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C 1 4 \u03bcA",
+          "max_value": 4e-06,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Shutdown supply current: 1 \u03bcA typical, 4 \u03bcA max at EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C.",
+          "typ_value": 1e-06,
+          "unit": "A"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "clean",
+      "verdict": "PASS",
+      "window_s": [
+        0.0005,
+        0.001
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 12",
+        "Cin vin 0 1e-05",
+        "Ven en 0 0",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.0005,
+          0.001
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": null
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "shutdown_iq",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\shutdown_iq-avg-fault\\deck.cir",
+      "deck_sha256": "b5b30624b0aef0f7913de114378195289361185a559b8e9292598de6419c945d",
+      "elapsed_s": 0.676,
+      "exit_code": 0,
+      "fault_override": {
+        "EN_PULLUP": 1e-05
+      },
+      "judgement": {
+        "band": [
+          0.0,
+          4e-06
+        ],
+        "basis": "cited numeric min/max at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            9e-07,
+            1.1e-06
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "OUTSIDE",
+          "value": 1e-06
+        },
+        "verdict": "FAIL"
+      },
+      "l_ext_h": 2.5e-06,
+      "log_sha256": "152679edfe68984938733cf127e266ea6e91dfd9f45af1c8264a41c1cf95b21d",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 0.672,
+      "max_step_s": 1e-06,
+      "measurement": {
+        "distinct_time_points": 1018,
+        "metrics": {
+          "dut_vin_current_a": {
+            "early_mean": 9.999999747378753e-06,
+            "late_mean": 9.999999747378753e-06,
+            "max": 9.999999747378752e-06,
+            "mean": 9.999999747378753e-06,
+            "min": 9.999999747378752e-06
+          },
+          "input_cap_excluded": true,
+          "input_draw_half_window_delta_a": 0.0,
+          "source_current_sign": "positive I(Vdutvin) flows from source-side Cin into DUT VIN"
+        },
+        "raw_points": 1018,
+        "state": {
+          "checks": {
+            "en_low": true,
+            "inductor_quiet": true,
+            "input_draw_nonnegative": true,
+            "input_draw_stable": true,
+            "out_low": true,
+            "ph_quiet": true,
+            "ss_discharged": true,
+            "vin_12v": true
+          },
+          "measurements": {
+            "I(Lout)": {
+              "early_mean": 1.5459574059407233e-11,
+              "late_mean": 1.5459574057993795e-11,
+              "max": 1.5459585001043052e-11,
+              "mean": 1.5459574058700514e-11,
+              "min": 1.5459562449637865e-11
+            },
+            "V(dut_vin)": {
+              "early_mean": 12.0,
+              "late_mean": 12.0,
+              "max": 12.0,
+              "mean": 12.0,
+              "min": 12.0
+            },
+            "V(en)": {
+              "early_mean": 0.0,
+              "late_mean": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "min": 0.0
+            },
+            "V(out)": {
+              "early_mean": 3.891902353432952e-11,
+              "late_mean": 3.89190242533477e-11,
+              "max": 3.89190242533477e-11,
+              "mean": 3.8919023893838605e-11,
+              "min": 3.891902078390075e-11
+            },
+            "V(ph)": {
+              "early_mean": 3.9073618540153226e-11,
+              "late_mean": 3.9073620034825606e-11,
+              "max": 3.9074635888036724e-11,
+              "mean": 3.907361928748942e-11,
+              "min": 3.907259932267593e-11
+            },
+            "V(ss)": {
+              "early_mean": 0.0,
+              "late_mean": 0.0,
+              "max": 0.0,
+              "mean": 0.0,
+              "min": 0.0
+            },
+            "V(vsense)": {
+              "early_mean": 1.2365175200386713e-11,
+              "late_mean": 1.2365175723616504e-11,
+              "max": 1.2365175723616506e-11,
+              "mean": 1.236517546200161e-11,
+              "min": 1.2365174856254768e-11
+            }
+          },
+          "ph_rising_edges_above_1v": 0,
+          "reason": null,
+          "status": "READY"
+        },
+        "unit": "A",
+        "value": 9.999999747378753e-06,
+        "window_s": [
+          0.0005,
+          0.001
+        ]
+      },
+      "mode": "AVG",
+      "model_sha256": "adce082491d0035c6514aaa9b3ada916f75bcd998da4731caebe58fa2294d0dc",
+      "op_raw_bytes": 1178,
+      "op_raw_sha256": "aaf7e924a56e628ce47db63aecf9c3db901ac0f4f45646da63308a21f62b1324",
+      "raw_bytes": 54116,
+      "raw_retained": true,
+      "raw_sha256": "18aa30ce635ee936b7a2475cedeb72eff18c6fdeb9c504e764b682aad0b53a56",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:56:34.002669+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=0.67s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_ISHDN",
+        "excerpt": "Shutdown supply current EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C 1 4 \u03bcA",
+        "max_value": 4e-06,
+        "min_value": null,
+        "source_page": 5,
+        "statement": "Shutdown supply current: 1 \u03bcA typical, 4 \u03bcA max at EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C.",
+        "typ_value": 1e-06,
+        "unit": "A"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_ISHDN",
+          "excerpt": "Shutdown supply current EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C 1 4 \u03bcA",
+          "max_value": 4e-06,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Shutdown supply current: 1 \u03bcA typical, 4 \u03bcA max at EN = 0 V, VIN = 12 V, \u201340\u00b0C to 85\u00b0C.",
+          "typ_value": 1e-06,
+          "unit": "A"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "fault",
+      "verdict": "FAIL",
+      "window_s": [
+        0.0005,
+        0.001
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 12",
+        "Cin vin 0 1e-05",
+        "Ven en 0 3.3",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0",
+        "Vvsense vsense 0 0.85"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": 0.85
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "operating_iq",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\operating_iq-sw-clean\\deck.cir",
+      "deck_sha256": "94b48e62aecb74eb45d8fda57d7bc8180345bd2c857aacc371f04808308cec40",
+      "elapsed_s": 6.269,
+      "exit_code": 0,
+      "fault_override": null,
+      "judgement": {
+        "band": [
+          0.0,
+          0.00011999999999999999
+        ],
+        "basis": "cited numeric min/max at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            7.38e-05,
+            9.020000000000001e-05
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "WITHIN",
+          "value": 8.2e-05
+        },
+        "verdict": "PASS"
+      },
+      "l_ext_h": null,
+      "log_sha256": "00f916eb5aa8d04658aab5e4cefde13840f2975286b2e345b1b46877cc56e95e",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 6.266,
+      "max_step_s": 5e-08,
+      "measurement": {
+        "distinct_time_points": 244262,
+        "metrics": {
+          "dut_vin_current_a": {
+            "early_mean": 8.30071294330992e-05,
+            "late_mean": 8.30071294330992e-05,
+            "max": 8.300712943309918e-05,
+            "mean": 8.30071294330992e-05,
+            "min": 8.300712943309918e-05
+          },
+          "input_cap_excluded": true,
+          "input_draw_half_window_delta_a": 0.0,
+          "source_current_sign": "positive I(Vdutvin) flows from source-side Cin into DUT VIN"
+        },
+        "raw_points": 244262,
+        "state": {
+          "checks": {
+            "en_high": true,
+            "inductor_quiet": true,
+            "input_draw_nonnegative": true,
+            "input_draw_stable": true,
+            "ph_quiet": true,
+            "ss_complete": true,
+            "vin_12v": true,
+            "vsense_forced": true
+          },
+          "measurements": {
+            "I(Lout)": {
+              "early_mean": 1.1560843393709774e-09,
+              "late_mean": 1.1560843393709774e-09,
+              "max": 1.1560843393709774e-09,
+              "mean": 1.1560843393709774e-09,
+              "min": 1.1560843393709774e-09
+            },
+            "V(dut_vin)": {
+              "early_mean": 12.0,
+              "late_mean": 12.0,
+              "max": 12.0,
+              "mean": 12.0,
+              "min": 12.0
+            },
+            "V(en)": {
+              "early_mean": 3.299999952316284,
+              "late_mean": 3.299999952316284,
+              "max": 3.299999952316284,
+              "mean": 3.299999952316284,
+              "min": 3.299999952316284
+            },
+            "V(out)": {
+              "early_mean": 0.00020977569511160257,
+              "late_mean": 0.00020977569511160254,
+              "max": 0.00020977569511160254,
+              "mean": 0.00020977569511160254,
+              "min": 0.00020977569511160254
+            },
+            "V(ph)": {
+              "early_mean": 0.00020977569511160257,
+              "late_mean": 0.00020977569511160254,
+              "max": 0.00020977569511160254,
+              "mean": 0.00020977569511160254,
+              "min": 0.00020977569511160254
+            },
+            "V(ss)": {
+              "early_mean": 2.9996998310089116,
+              "late_mean": 2.9996998310089116,
+              "max": 2.999699831008911,
+              "mean": 2.9996998310089116,
+              "min": 2.999699831008911
+            },
+            "V(vsense)": {
+              "early_mean": 0.8500000238418579,
+              "late_mean": 0.8500000238418579,
+              "max": 0.8500000238418579,
+              "mean": 0.8500000238418579,
+              "min": 0.8500000238418579
+            }
+          },
+          "ph_rising_edges_above_1v": 0,
+          "reason": null,
+          "status": "READY"
+        },
+        "unit": "A",
+        "value": 8.30071294330992e-05,
+        "window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ]
+      },
+      "mode": "SW",
+      "model_sha256": "21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2",
+      "op_raw_bytes": 1178,
+      "op_raw_sha256": "639de7c327dc44aa7099f4c2d9847473a87c7092866927b51d83e9e8b1161b0d",
+      "raw_bytes": 12702804,
+      "raw_retained": true,
+      "raw_sha256": "1edbe935137edb58650f0ab73410913de31201b1807eec8cd5831ea67c565c56",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:56:34.692488+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=6.27s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_IOP_NONSW",
+        "excerpt": "Operating \u2013 non switching supply current VSENSE = 0.85 V 82 120 \u03bcA",
+        "max_value": 0.00011999999999999999,
+        "min_value": null,
+        "source_page": 5,
+        "statement": "Operating non-switching supply current: 82 \u03bcA typical, 120 \u03bcA max with VSENSE = 0.85 V.",
+        "typ_value": 8.2e-05,
+        "unit": "A"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_IOP_NONSW",
+          "excerpt": "Operating \u2013 non switching supply current VSENSE = 0.85 V 82 120 \u03bcA",
+          "max_value": 0.00011999999999999999,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Operating non-switching supply current: 82 \u03bcA typical, 120 \u03bcA max with VSENSE = 0.85 V.",
+          "typ_value": 8.2e-05,
+          "unit": "A"
+        },
+        {
+          "char_id": "B002_TPS54332DDA_SS_CHARGE",
+          "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+          "max_value": null,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+          "typ_value": 2e-06,
+          "unit": "A"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "clean",
+      "verdict": "PASS",
+      "window_s": [
+        0.007709999999999998,
+        0.008209999999999999
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 12",
+        "Cin vin 0 1e-05",
+        "Ven en 0 3.3",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0",
+        "Vvsense vsense 0 0.85"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": 0.85
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "operating_iq",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\operating_iq-sw-fault\\deck.cir",
+      "deck_sha256": "626f4ef6ba6a00256c4340ccce131e48fb775494685c0d2f84377c4cb34a4106",
+      "elapsed_s": 5.174,
+      "exit_code": 0,
+      "fault_override": {
+        "IQOP": 0.0002
+      },
+      "judgement": {
+        "band": [
+          0.0,
+          0.00011999999999999999
+        ],
+        "basis": "cited numeric min/max at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            7.38e-05,
+            9.020000000000001e-05
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "OUTSIDE",
+          "value": 8.2e-05
+        },
+        "verdict": "FAIL"
+      },
+      "l_ext_h": null,
+      "log_sha256": "46b3a5110084024a1b4336ec61b3bcc879492c7f911d0bd5376485680c33ad96",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 5.169,
+      "max_step_s": 5e-08,
+      "measurement": {
+        "distinct_time_points": 244262,
+        "metrics": {
+          "dut_vin_current_a": {
+            "early_mean": 0.00020100701658520845,
+            "late_mean": 0.00020100701658520842,
+            "max": 0.00020100701658520848,
+            "mean": 0.00020100701658520845,
+            "min": 0.00020100701658520848
+          },
+          "input_cap_excluded": true,
+          "input_draw_half_window_delta_a": 2.710505431213761e-20,
+          "source_current_sign": "positive I(Vdutvin) flows from source-side Cin into DUT VIN"
+        },
+        "raw_points": 244262,
+        "state": {
+          "checks": {
+            "en_high": true,
+            "inductor_quiet": true,
+            "input_draw_nonnegative": true,
+            "input_draw_stable": true,
+            "ph_quiet": true,
+            "ss_complete": true,
+            "vin_12v": true,
+            "vsense_forced": true
+          },
+          "measurements": {
+            "I(Lout)": {
+              "early_mean": 1.1560843393709774e-09,
+              "late_mean": 1.1560843393709774e-09,
+              "max": 1.1560843393709774e-09,
+              "mean": 1.1560843393709774e-09,
+              "min": 1.1560843393709774e-09
+            },
+            "V(dut_vin)": {
+              "early_mean": 12.0,
+              "late_mean": 12.0,
+              "max": 12.0,
+              "mean": 12.0,
+              "min": 12.0
+            },
+            "V(en)": {
+              "early_mean": 3.299999952316284,
+              "late_mean": 3.299999952316284,
+              "max": 3.299999952316284,
+              "mean": 3.299999952316284,
+              "min": 3.299999952316284
+            },
+            "V(out)": {
+              "early_mean": 0.00020977569511160257,
+              "late_mean": 0.00020977569511160254,
+              "max": 0.00020977569511160254,
+              "mean": 0.00020977569511160254,
+              "min": 0.00020977569511160254
+            },
+            "V(ph)": {
+              "early_mean": 0.00020977569511160257,
+              "late_mean": 0.00020977569511160254,
+              "max": 0.00020977569511160254,
+              "mean": 0.00020977569511160254,
+              "min": 0.00020977569511160254
+            },
+            "V(ss)": {
+              "early_mean": 2.9996998310089116,
+              "late_mean": 2.9996998310089116,
+              "max": 2.999699831008911,
+              "mean": 2.9996998310089116,
+              "min": 2.999699831008911
+            },
+            "V(vsense)": {
+              "early_mean": 0.8500000238418579,
+              "late_mean": 0.8500000238418579,
+              "max": 0.8500000238418579,
+              "mean": 0.8500000238418579,
+              "min": 0.8500000238418579
+            }
+          },
+          "ph_rising_edges_above_1v": 0,
+          "reason": null,
+          "status": "READY"
+        },
+        "unit": "A",
+        "value": 0.00020100701658520845,
+        "window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ]
+      },
+      "mode": "SW",
+      "model_sha256": "21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2",
+      "op_raw_bytes": 1178,
+      "op_raw_sha256": "41f3909779dba93b5b51ad69a48402f5663fa1b3bad38b56dcbb61abde7e3a35",
+      "raw_bytes": 12702804,
+      "raw_retained": true,
+      "raw_sha256": "1e4ce7addb2cd0de924fd99eb9784d9d62dc4004a6ffdbee05e03ed5e56f4bf6",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:56:41.104607+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=5.17s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_IOP_NONSW",
+        "excerpt": "Operating \u2013 non switching supply current VSENSE = 0.85 V 82 120 \u03bcA",
+        "max_value": 0.00011999999999999999,
+        "min_value": null,
+        "source_page": 5,
+        "statement": "Operating non-switching supply current: 82 \u03bcA typical, 120 \u03bcA max with VSENSE = 0.85 V.",
+        "typ_value": 8.2e-05,
+        "unit": "A"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_IOP_NONSW",
+          "excerpt": "Operating \u2013 non switching supply current VSENSE = 0.85 V 82 120 \u03bcA",
+          "max_value": 0.00011999999999999999,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Operating non-switching supply current: 82 \u03bcA typical, 120 \u03bcA max with VSENSE = 0.85 V.",
+          "typ_value": 8.2e-05,
+          "unit": "A"
+        },
+        {
+          "char_id": "B002_TPS54332DDA_SS_CHARGE",
+          "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+          "max_value": null,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+          "typ_value": 2e-06,
+          "unit": "A"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "fault",
+      "verdict": "FAIL",
+      "window_s": [
+        0.007709999999999998,
+        0.008209999999999999
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 12",
+        "Cin vin 0 1e-05",
+        "Ven en 0 3.3",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0",
+        "Vvsense vsense 0 0.85"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": 0.85
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "operating_iq",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\operating_iq-avg-clean\\deck.cir",
+      "deck_sha256": "3ddc59f13f1115d03de70874198166af6f49347a824e2bedb986820063f15b68",
+      "elapsed_s": 0.78,
+      "exit_code": 0,
+      "fault_override": null,
+      "judgement": {
+        "band": [
+          0.0,
+          0.00011999999999999999
+        ],
+        "basis": "cited numeric min/max at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            7.38e-05,
+            9.020000000000001e-05
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "WITHIN",
+          "value": 8.2e-05
+        },
+        "verdict": "PASS"
+      },
+      "l_ext_h": 2.5e-06,
+      "log_sha256": "2aa655823648770c821bf83c796ca19579cc9843a1aca10e8de13ea91cef6671",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 0.777,
+      "max_step_s": 1e-06,
+      "measurement": {
+        "distinct_time_points": 8228,
+        "metrics": {
+          "dut_vin_current_a": {
+            "early_mean": 8.300592162413523e-05,
+            "late_mean": 8.300592162413523e-05,
+            "max": 8.300592162413523e-05,
+            "mean": 8.300592162413523e-05,
+            "min": 8.300592162413523e-05
+          },
+          "input_cap_excluded": true,
+          "input_draw_half_window_delta_a": 0.0,
+          "source_current_sign": "positive I(Vdutvin) flows from source-side Cin into DUT VIN"
+        },
+        "raw_points": 8228,
+        "state": {
+          "checks": {
+            "en_high": true,
+            "inductor_quiet": true,
+            "input_draw_nonnegative": true,
+            "input_draw_stable": true,
+            "ph_quiet": true,
+            "ss_complete": true,
+            "vin_12v": true,
+            "vsense_forced": true
+          },
+          "measurements": {
+            "I(Lout)": {
+              "early_mean": -5.591478322020116e-11,
+              "late_mean": -5.5914783220201165e-11,
+              "max": -5.591478322020116e-11,
+              "mean": -5.5914783220201165e-11,
+              "min": -5.591478322020116e-11
+            },
+            "V(dut_vin)": {
+              "early_mean": 12.0,
+              "late_mean": 12.0,
+              "max": 12.0,
+              "mean": 12.0,
+              "min": 12.0
+            },
+            "V(en)": {
+              "early_mean": 3.299999952316284,
+              "late_mean": 3.2999999523162846,
+              "max": 3.299999952316284,
+              "mean": 3.299999952316284,
+              "min": 3.299999952316284
+            },
+            "V(out)": {
+              "early_mean": 0.0002097726392094046,
+              "late_mean": 0.0002097726392094046,
+              "max": 0.0002097726392094046,
+              "mean": 0.0002097726392094046,
+              "min": 0.0002097726392094046
+            },
+            "V(ph)": {
+              "early_mean": 0.0002097726392094046,
+              "late_mean": 0.0002097726392094046,
+              "max": 0.0002097726392094046,
+              "mean": 0.0002097726392094046,
+              "min": 0.0002097726392094046
+            },
+            "V(ss)": {
+              "early_mean": 2.9996998310089107,
+              "late_mean": 2.9996998310089107,
+              "max": 2.999699831008911,
+              "mean": 2.9996998310089107,
+              "min": 2.999699831008911
+            },
+            "V(vsense)": {
+              "early_mean": 0.8500000238418579,
+              "late_mean": 0.8500000238418579,
+              "max": 0.8500000238418579,
+              "mean": 0.8500000238418579,
+              "min": 0.8500000238418579
+            }
+          },
+          "ph_rising_edges_above_1v": 0,
+          "reason": null,
+          "status": "READY"
+        },
+        "unit": "A",
+        "value": 8.300592162413523e-05,
+        "window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ]
+      },
+      "mode": "AVG",
+      "model_sha256": "adce082491d0035c6514aaa9b3ada916f75bcd998da4731caebe58fa2294d0dc",
+      "op_raw_bytes": 1180,
+      "op_raw_sha256": "4c727a93461ff5053d4a50ec8832939525c42187ebbcc270324ceaec3e540e85",
+      "raw_bytes": 429038,
+      "raw_retained": true,
+      "raw_sha256": "67695006144402bed548189785779cf5a284a0c4f1fc3950948ea5993baa4279",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:56:46.372716+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=0.78s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_IOP_NONSW",
+        "excerpt": "Operating \u2013 non switching supply current VSENSE = 0.85 V 82 120 \u03bcA",
+        "max_value": 0.00011999999999999999,
+        "min_value": null,
+        "source_page": 5,
+        "statement": "Operating non-switching supply current: 82 \u03bcA typical, 120 \u03bcA max with VSENSE = 0.85 V.",
+        "typ_value": 8.2e-05,
+        "unit": "A"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_IOP_NONSW",
+          "excerpt": "Operating \u2013 non switching supply current VSENSE = 0.85 V 82 120 \u03bcA",
+          "max_value": 0.00011999999999999999,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Operating non-switching supply current: 82 \u03bcA typical, 120 \u03bcA max with VSENSE = 0.85 V.",
+          "typ_value": 8.2e-05,
+          "unit": "A"
+        },
+        {
+          "char_id": "B002_TPS54332DDA_SS_CHARGE",
+          "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+          "max_value": null,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+          "typ_value": 2e-06,
+          "unit": "A"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "clean",
+      "verdict": "PASS",
+      "window_s": [
+        0.007709999999999998,
+        0.008209999999999999
+      ]
+    },
+    {
+      "bench_components": [
+        "Vin vin 0 12",
+        "Cin vin 0 1e-05",
+        "Ven en 0 3.3",
+        "Css ss 0 1.5e-08",
+        "Cboot boot ph 1e-07",
+        "Dcatch 0 ph BM_CATCH",
+        "Lout ph out 2.5e-06 Rser=0.01",
+        "Cout1 out 0 4.7e-05 Rser=0.003",
+        "Cout2 out 0 4.7e-05 Rser=0.003",
+        "Rload out 0 2.51789473684",
+        "Rfbhi out vsense 10200",
+        "Rfblo vsense 0 4750",
+        "Rcomp comp compmid 75000",
+        "Ccomp compmid 0 1.8e-10",
+        "Chf comp 0 1e-11",
+        "Vdutvin vin dut_vin 0",
+        "Vvsense vsense 0 0.85"
+      ],
+      "bench_metadata": {
+        "fb_high_ohm": 10200.0,
+        "fb_low_ohm": 4750.0,
+        "measurement_window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ],
+        "nominal_fsw_hz": 1000000.0,
+        "nominal_soft_start_s": 0.006209999999999999,
+        "ss_cap_f": 1.5e-08,
+        "vin_shunt": "Vdutvin vin dut_vin 0; Cin stays on vin",
+        "vout_target_v": 2.5178947368421056,
+        "vsense_forced_v": 0.85
+      },
+      "bindings_sha256": "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57",
+      "case": "operating_iq",
+      "deck": "C:\\Users\\basam\\src\\spice-maker-bob\\runs\\m4b1-bob-final\\operating_iq-avg-fault\\deck.cir",
+      "deck_sha256": "2df76b8113f8be9c974f44eac0c5bfd71f375b0e0e148146bd0a449f450f9e5f",
+      "elapsed_s": 0.794,
+      "exit_code": 0,
+      "fault_override": {
+        "IQOP": 0.0002
+      },
+      "judgement": {
+        "band": [
+          0.0,
+          0.00011999999999999999
+        ],
+        "basis": "cited numeric min/max at this fixture condition",
+        "reason": null,
+        "typical_comparison": {
+          "band": [
+            7.38e-05,
+            9.020000000000001e-05
+          ],
+          "scope": "nominal 25 C typical comparison; not a process-corner claim",
+          "status": "OUTSIDE",
+          "value": 8.2e-05
+        },
+        "verdict": "FAIL"
+      },
+      "l_ext_h": 2.5e-06,
+      "log_sha256": "6501fc035b6f7f28bae9b368db5e341e630326d6b74149229525a82fc26b9e92",
+      "ltspice_exe": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+      "ltspice_exe_sha256": "4ef4a32accc2eb51722916b9410e3eedb5eebfbf0b661523caee2ab67b854207",
+      "ltspice_wall_s": 0.788,
+      "max_step_s": 1e-06,
+      "measurement": {
+        "distinct_time_points": 8228,
+        "metrics": {
+          "dut_vin_current_a": {
+            "early_mean": 0.00020100580877624452,
+            "late_mean": 0.00020100580877624452,
+            "max": 0.00020100580877624452,
+            "mean": 0.00020100580877624455,
+            "min": 0.00020100580877624452
+          },
+          "input_cap_excluded": true,
+          "input_draw_half_window_delta_a": 0.0,
+          "source_current_sign": "positive I(Vdutvin) flows from source-side Cin into DUT VIN"
+        },
+        "raw_points": 8228,
+        "state": {
+          "checks": {
+            "en_high": true,
+            "inductor_quiet": true,
+            "input_draw_nonnegative": true,
+            "input_draw_stable": true,
+            "ph_quiet": true,
+            "ss_complete": true,
+            "vin_12v": true,
+            "vsense_forced": true
+          },
+          "measurements": {
+            "I(Lout)": {
+              "early_mean": -5.591478322020116e-11,
+              "late_mean": -5.5914783220201165e-11,
+              "max": -5.591478322020116e-11,
+              "mean": -5.5914783220201165e-11,
+              "min": -5.591478322020116e-11
+            },
+            "V(dut_vin)": {
+              "early_mean": 12.0,
+              "late_mean": 12.0,
+              "max": 12.0,
+              "mean": 12.0,
+              "min": 12.0
+            },
+            "V(en)": {
+              "early_mean": 3.299999952316284,
+              "late_mean": 3.2999999523162846,
+              "max": 3.299999952316284,
+              "mean": 3.299999952316284,
+              "min": 3.299999952316284
+            },
+            "V(out)": {
+              "early_mean": 0.0002097726392094046,
+              "late_mean": 0.0002097726392094046,
+              "max": 0.0002097726392094046,
+              "mean": 0.0002097726392094046,
+              "min": 0.0002097726392094046
+            },
+            "V(ph)": {
+              "early_mean": 0.0002097726392094046,
+              "late_mean": 0.0002097726392094046,
+              "max": 0.0002097726392094046,
+              "mean": 0.0002097726392094046,
+              "min": 0.0002097726392094046
+            },
+            "V(ss)": {
+              "early_mean": 2.9996998310089107,
+              "late_mean": 2.9996998310089107,
+              "max": 2.999699831008911,
+              "mean": 2.9996998310089107,
+              "min": 2.999699831008911
+            },
+            "V(vsense)": {
+              "early_mean": 0.8500000238418579,
+              "late_mean": 0.8500000238418579,
+              "max": 0.8500000238418579,
+              "mean": 0.8500000238418579,
+              "min": 0.8500000238418579
+            }
+          },
+          "ph_rising_edges_above_1v": 0,
+          "reason": null,
+          "status": "READY"
+        },
+        "unit": "A",
+        "value": 0.00020100580877624455,
+        "window_s": [
+          0.007709999999999998,
+          0.008209999999999999
+        ]
+      },
+      "mode": "AVG",
+      "model_sha256": "adce082491d0035c6514aaa9b3ada916f75bcd998da4731caebe58fa2294d0dc",
+      "op_raw_bytes": 1180,
+      "op_raw_sha256": "1647a96fda218d7cc1359b47aaf2791c281c3213064e801153d78d8ddf88d7cb",
+      "raw_bytes": 429038,
+      "raw_retained": true,
+      "raw_sha256": "0b44e2d84ab74449ced3f297ac316b84d32ab9c240bbb3f6874acedf41231503",
+      "reason": null,
+      "recorded_utc": "2026-09-26T04:56:47.172345+00:00",
+      "requirements_sha256": "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060",
+      "schema_version": 1,
+      "script_sha256": "4bc00c93201bdacab6b93670d9e50ee064a660ee99dbab1acd5f122ad5224b26",
+      "simulator_observed": "exit_code=0; wall=0.79s; raw=yes; log=yes",
+      "source_row": {
+        "char_id": "B002_TPS54332DDA_IOP_NONSW",
+        "excerpt": "Operating \u2013 non switching supply current VSENSE = 0.85 V 82 120 \u03bcA",
+        "max_value": 0.00011999999999999999,
+        "min_value": null,
+        "source_page": 5,
+        "statement": "Operating non-switching supply current: 82 \u03bcA typical, 120 \u03bcA max with VSENSE = 0.85 V.",
+        "typ_value": 8.2e-05,
+        "unit": "A"
+      },
+      "source_rows_in_deck": [
+        {
+          "char_id": "B002_TPS54332DDA_IOP_NONSW",
+          "excerpt": "Operating \u2013 non switching supply current VSENSE = 0.85 V 82 120 \u03bcA",
+          "max_value": 0.00011999999999999999,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Operating non-switching supply current: 82 \u03bcA typical, 120 \u03bcA max with VSENSE = 0.85 V.",
+          "typ_value": 8.2e-05,
+          "unit": "A"
+        },
+        {
+          "char_id": "B002_TPS54332DDA_SS_CHARGE",
+          "excerpt": "Charge current V(SS) = 0.4 V 2 \u03bcA",
+          "max_value": null,
+          "min_value": null,
+          "source_page": 5,
+          "statement": "Slow-start (SS) pin charge current: 2 \u03bcA typical with V(SS) = 0.4 V.",
+          "typ_value": 2e-06,
+          "unit": "A"
+        }
+      ],
+      "status": "MEASURED",
+      "timed_out": false,
+      "variant": "fault",
+      "verdict": "FAIL",
+      "window_s": [
+        0.007709999999999998,
+        0.008209999999999999
+      ]
+    }
+  ],
+  "schema_version": 1,
+  "unknown": 0
+}

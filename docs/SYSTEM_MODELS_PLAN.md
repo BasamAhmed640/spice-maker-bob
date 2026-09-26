@@ -139,6 +139,38 @@ whole remains TODO until all three parts satisfy their own acceptance evidence.
 
 ## Milestones
 
+### M4b1 complete; next run: M4b2 UVLO/EN and gain/limit corners
+
+M4b is split again because both-mode numeric qualification, SW waveform repair,
+and card behavior cannot be safely accepted from one smoke run. M4b1 is the
+first measured slice; M4b2 covers bidirectional UVLO/EN and gain/limit corners;
+M4b3 covers switching shapes, power behavior, and matched speed. Full M4b
+remains TODO until all parts are complete.
+
+1. Recheck both repository heads, frozen TPS and LM controls, M4a evidence,
+   and the verified raw rows for VREF, SS charge, shutdown IQ, and operating
+   IQ. Pin the exact requirement/binding/spec digests before making benches.
+2. Code-build matched external circuits for SW and AVG, with real feedback for
+   VREF/SS and a separate cited VSENSE=0.85 V condition for operating IQ.
+   Include an SS capacitor, EN/VIN stimulus, and declared windows. Measure
+   settled VSENSE/VOUT, SS slope-derived charge current near its cited test
+   point, and VIN pin current in shutdown and non-switching operation.
+   Verify the requested state from waveforms; a parameter declaration is not
+   electrical evidence. Isolate DUT VIN current from fixture input capacitor
+   using a zero-volt shunt, as M4a established.
+3. Compare measured values to cited min/max or ±10% of cited typical values.
+   Keep unsupported, ambiguous, or unmeasured cases UNKNOWN with reasons.
+   PG remains NOT_APPLICABLE; AVG FSW/ripple/edges remain UNKNOWN. Preserve
+   all existing TPS FAIL/UNKNOWN verdicts; no broad M4b PASS is inferred.
+4. Run one clean and one deliberate wrong-value/fault control for each new
+   evaluator without changing its acceptance band. Perform real LTspice runs
+   with the explicit executable, then focused and board suites, Ruff, parity,
+   and frozen regressions if any model or shared harness code changes.
+5. Mirror reviewed shared changes to Bob, run its own measurements and tests,
+   record deck/log/raw hashes while deleting raw files, update status and this
+   tracker, and push both only after checks are green. Give the next
+   substantive check-in in about one hour.
+
 `DONE` means its acceptance evidence exists. A partial milestone must be split
 into named parts such as M3a/M3b rather than silently marked done. The commit
 columns identify the substantive change in each repository; tracker follow-up
@@ -157,6 +189,9 @@ commits may record those IDs afterward.
 | M4 | Matching SW and AVG peak-current buck modes; both-mode key values; SW shapes; speed; release checkpoint | TODO | — | — | — | — |
 | M4a | Explicit AVG candidate with same ports/device parameters and measured smoke controls | DONE (candidate; full M4 checks open) | 2026-09-26 | `docs/evidence/2026-09-26-system-models-m4a/REPORT.md` (general) | `e7418a6142b8db4feae3027d71a7c0c5dafbd750` | `30609bdc710711b259d85ecef8c0f054b0d97c6a` |
 | M4b | Both-mode cited qualification, SW ballpark shapes, honest AVG UNKNOWNs, speed | TODO | — | — | — | — |
+| M4b1 | Both-mode cited VREF, SS charge, and state-checked supply current | DONE (8 clean PASS / 8 wrong-value FAIL per edition) | 2026-09-26 | `docs/evidence/2026-09-26-system-models-m4b1/REPORT.md` | pending | pending |
+| M4b2 | Bidirectional UVLO/EN and gain/limit corner checks | TODO | — | — | — | — |
+| M4b3 | SW shapes, power behavior, speed, and full M4b acceptance | TODO | — | — | — | — |
 | M4c | Versioned installer and ZIP release checkpoint after M4b acceptance | TODO | — | — | — | — |
 | M5 | Generic PinDefinition-based pin model and positive/negative tests for every alarm | TODO | — | — | — | — |
 | M6 | Pinout evidence and confirmation gate in CLI/GUI; no system-verified status without confirmation | TODO | — | — | — | — |
