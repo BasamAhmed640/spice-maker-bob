@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import replace
 
 import pytest
 
 from boardmodeler.authoring.spec import Characteristic, SpecSet
-from boardmodeler.models.buck_switching import TemplateSeedError, seed_from_spec
+from boardmodeler.models.buck_switching import _BODY, TemplateSeedError, seed_from_spec
 
 
 def _row(
@@ -107,6 +108,60 @@ def test_seed_preserves_physical_order_and_records_cited_and_default_values(tmp_
     assert payload["verdict"] == "UNJUDGED"
     assert payload["spec_digest"] == spec.digest()
     assert payload["contract_sha256"] == seed.contract_sha256
+
+
+def test_sw_is_the_stable_default_and_invalid_modes_are_refused():
+    # The switching topology is a frozen regression boundary while AVG is added.
+    assert hashlib.sha256(_BODY.encode()).hexdigest() == (
+        "25625b851f675f71ff153a1b15ae31eea7ade7b2d7bb0c1bfae8e7dcf03310e6"
+    )
+    spec = _spec(*_basis())
+    default = seed_from_spec(spec)
+    explicit = seed_from_spec(spec, mode="SW")
+    assert default is not None and explicit is not None
+    assert default.library_text == explicit.library_text
+    assert default.mode == explicit.mode == "SW"
+    assert "Vclk1 clk1 GND PULSE" in default.library_text
+    assert "Shs swin PH q GND SWHS" in default.library_text
+    assert "L_EXT" not in default.library_text
+    with pytest.raises(TemplateSeedError, match="invalid_mode"):
+        seed_from_spec(spec, mode="WRONG")
+
+
+def test_avg_uses_identical_physical_pins_and_cited_parameters_with_separate_bench_l():
+    spec = _spec(*_basis())
+    sw = seed_from_spec(spec, mode="SW")
+    avg = seed_from_spec(spec, mode="AVG")
+    assert sw is not None and avg is not None
+    assert avg.ports == sw.ports
+    assert avg.parameters == sw.parameters
+    assert avg.contract_sha256 == sw.contract_sha256
+    assert avg.spec_digest == sw.spec_digest
+    assert f".subckt {spec.subckt} {' '.join(sw.ports)}" in avg.library_text
+    assert "Bss VIN SS I={ISS}" in avg.library_text
+    assert "Bea GND COMP I=limit({EAGM}" in avg.library_text
+    assert "Bipk ipk GND V=limit({GMCS}" in avg.library_text
+    assert "Bavgph phsrc GND V=limit(" in avg.library_text
+    assert "Bavgin VIN GND I=V(duty,GND)*max(I(Vavgsns),0)" in avg.library_text
+    assert "Vavgsns phsense PH 0" in avg.library_text
+    assert "Bavgis GND isense I=I(Vavgsns)" in avg.library_text
+    assert "Bduty duty GND V=limit(V(di,GND)+0.08*" in avg.library_text
+    assert ".param L_EXT=2.5e-06" in avg.library_text
+    assert "Vclk1 clk1 GND PULSE" not in avg.library_text
+    assert "Aeco COMP GND" not in avg.library_text
+    assert "Shs swin PH q GND SWHS" not in avg.library_text
+    bench = avg.payload()["external_bench_parameters"]
+    assert bench == [
+        {
+            "name": "L_EXT",
+            "default": 2.5e-6,
+            "unit": "H",
+            "origin": "synthetic_bench_default",
+            "instance_override": True,
+        }
+    ]
+    assert avg.payload()["mode"] == "AVG"
+    assert avg.payload()["verdict"] == "UNJUDGED"
 
 
 def test_uncited_numeric_row_does_not_become_a_cited_parameter():

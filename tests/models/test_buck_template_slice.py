@@ -174,6 +174,22 @@ def test_the_rendered_model_keeps_the_pad_external_with_only_a_convergence_leak(
     assert not re.search(r"\b(?:PH|VSENSE|BOOT)\b", text.split("\n", 3)[3].split(".ends")[0])
 
 
+def test_avg_alias_pins_keep_external_pad_and_use_the_same_physical_order():
+    names = ("BST", "VIN", "EN", "SS_TR", "FB", "COMP", "AGND", "SW", "PGND")
+    spec = _spec(names)
+    sw = seed_from_spec(spec, mode="SW")
+    avg = seed_from_spec(spec, mode="AVG")
+    assert sw is not None and avg is not None
+    assert avg.ports == sw.ports == tuple(name.upper() for name in names)
+    assert avg.parameters == sw.parameters
+    assert ".subckt BUCKX BST VIN EN SS_TR FB COMP AGND SW PGND" in avg.library_text
+    assert "RPGND_leak PGND AGND 1G" in avg.library_text
+    assert "Bchk_pgnd chk_pgnd AGND V=if(abs(V(PGND,AGND))>0.1,1,0)" in avg.library_text
+    assert "Bavgph phsrc AGND V=limit(" in avg.library_text
+    assert "Vavgsns phsense SW 0" in avg.library_text
+    assert "RPGND PGND AGND 1m" not in avg.library_text
+
+
 def test_a_part_without_an_exposed_pad_keeps_all_eight_ports_and_needs_no_pad_leak():
     match = match_pins(ROLES)
     assert match.ok and match.required_ground_connections == ()

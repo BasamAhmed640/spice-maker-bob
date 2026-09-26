@@ -431,3 +431,17 @@ This slice does not complete the full Card A `GND-02` suite case. Frozen
 TPS54332 regressions check input hashes and spec digest as well as row IDs, so
 changed limits cannot appear to be an unchanged result. Evidence in the
 general edition: `docs/evidence/2026-09-25-system-models-m3/REPORT.md`.
+
+## D-051 — Keep the averaged buck an explicitly measured candidate (2026-09-26)
+
+The default peak-current buck renderer remains the frozen switching model.
+`AVG` is an explicit alternate renderer with the same external pins and cited
+device parameters. The external inductor value used to estimate average
+current is an instance-overridable application-bench parameter, not a
+datasheet property of the IC. A synthetic settling or controlled-current
+smoke check can reject an unstable candidate, but it does not establish a
+datasheet PASS or full M4 acceptance. AVG has no electrical switching ripple
+or PH edges to judge; those checks remain UNKNOWN. Input-power consistency,
+all cited both-mode limits, SW waveform shape, and Card A fault behavior need
+separate evidence before the release checkpoint. Evidence:
+`docs/evidence/2026-09-26-system-models-m4a/REPORT.md` in the general edition.

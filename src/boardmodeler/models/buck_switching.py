@@ -15,13 +15,14 @@ import re
 from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from boardmodeler.authoring.pin_roles import physical_terminals
 from boardmodeler.authoring.spec import Characteristic, SpecSet
 from boardmodeler.domain.hashing import sha256_file
 
 __all__ = [
+    "BuckMode",
     "BuckSeed",
     "ParameterOrigin",
     "PinMatch",
@@ -33,6 +34,8 @@ __all__ = [
 _CONTRACT = Path(__file__).with_name("peak_current_buck.json")
 _SUBCKT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 PAD_DIAGNOSTIC_THRESHOLD_V = 0.1  # Synthetic alarm threshold, not a device limit.
+BuckMode = Literal["SW", "AVG"]
+AVG_L_EXT_H = 2.5e-6  # Synthetic external bench inductor, never a cited IC parameter.
 _PARAMETER_NAMES = (
     "VREF",
     "FSW",
@@ -98,6 +101,7 @@ class BuckSeed:
     ports: tuple[str, ...]
     parameters: tuple[ParameterOrigin, ...]
     library_text: str
+    mode: BuckMode
 
     def payload(self) -> dict[str, Any]:
         """Evidence for a card or a neighbouring ``template-parameters.json``."""
@@ -111,6 +115,20 @@ class BuckSeed:
             "subckt": self.subckt,
             "ports": list(self.ports),
             "parameters": [parameter.payload() for parameter in self.parameters],
+            "mode": self.mode,
+            "external_bench_parameters": (
+                [
+                    {
+                        "name": "L_EXT",
+                        "default": AVG_L_EXT_H,
+                        "unit": "H",
+                        "origin": "synthetic_bench_default",
+                        "instance_override": True,
+                    }
+                ]
+                if self.mode == "AVG"
+                else []
+            ),
             "verdict": "UNJUDGED",
             "verdict_note": "Run the LTspice harness; parameter provenance is not electrical proof.",
         }
@@ -301,10 +319,12 @@ def _render(
     ports: tuple[str, ...],
     parameters: tuple[ParameterOrigin, ...],
     pins: PinMatch | None = None,
+    *,
+    mode: BuckMode = "SW",
 ) -> str:
     """The template in the part's own terminal names, with pads left external."""
     pins = pins or match_pins(ports)
-    body = _BODY
+    body = _BODY if mode == "SW" else _AVG_CONTROL_BODY + _AVG_STAGE
     for role, name in pins.roles.items():
         if name != role:
             body = re.sub(rf"\b{role}\b", name, body)
@@ -317,6 +337,11 @@ def _render(
     ]
     for start in range(0, len(declarations), 5):
         lines.append(".param " + " ".join(declarations[start : start + 5]))
+    if mode == "AVG":
+        lines.append(
+            "* L_EXT is a synthetic external-inductor bench value, override on X instance."
+        )
+        lines.append(f".param L_EXT={_spice(AVG_L_EXT_H)}")
     if pins.ground_ties:
         lines.append(
             "* Pad leak is for convergence only; the PCB tie needs separate cited verification."
@@ -402,6 +427,51 @@ Rboot BOOT PH 10Meg
 .model SSOFF SW(Ron=100 Roff=1G Vt=0.5 Vh=-0.1)
 .model DCL D(Is=1e-14 N=0.05)"""
 
+# The SW text above is deliberately unchanged: the frozen TPS library hash is
+# a regression boundary. AVG shares the SS/COMP/peak-command control equations,
+# then replaces Eco clock gating and the switched high side. No PH edge is claimed.
+_AVG_CONTROL_MARKER = "Aeco COMP GND GND GND GND nc_eco eco_ok GND SCHMITT"
+_AVG_CONTROL_BODY, _AVG_SEPARATOR, _ = _BODY.partition(_AVG_CONTROL_MARKER)
+if not _AVG_SEPARATOR:
+    raise RuntimeError("buck AVG control split marker is missing")
+
+_AVG_STAGE = """\
+* AVG: continuous peak-current command with an external-L ripple estimate.
+* L_EXT is a synthetic application-bench parameter, not an IC characteristic.
+* CCM approximation only; DCM, switching ripple and PH edges are not modelled.
+Bstartup startup GND V=limit(({VREF}/2-V(SS,GND))/10m,0,1)
+Bfoldscale fscale GND V=if(V(VSENSE,GND)>={FOLD6},1,if(V(VSENSE,GND)>={FOLD4},0.5,if(V(VSENSE,GND)>={FOLD2},0.25,0.125)))
+Bdelta delta_il GND V=V(duty,GND)*max(V(VIN,GND)-V(PH,GND),0)/(max({L_EXT},1n)*max({FSW}*V(fscale,GND),1))
+Bitarget itarget GND V=limit(max(V(ipk,GND)-0.5*V(delta_il,GND),{ECO_I}*V(startup,GND)),0,{ILIM})
+* Filter high-side branch current before a damped PI duty servo. The branch
+* is only an inductor-current proxy while the averaged high side conducts.
+Bavgis GND isense I=I(Vavgsns)
+Ravgis isense GND 1
+Cavgis isense GND 1u
+* Anti-windup prevents a long fault from storing unbounded duty.
+Cavgdi di GND 1u IC=0
+Bavgservo GND di I={FSW}*1u/(30*max({ILIM},1m))*(V(itarget,GND)-max(V(isense,GND),0))*V(run,GND)
+Bavgreset di GND I=(1-V(run,GND))*V(di,GND)/10
+Bavgwind di GND I=0.1*(max(V(di,GND)-{DMAX},0)+min(V(di,GND),0))
+Ravgdi di GND 1G
+Bduty duty GND V=limit(V(di,GND)+0.08*(V(itarget,GND)-max(V(isense,GND),0)),0,{DMAX})
+* The switch isolates a disabled or pulse-skipped PH pin. The series diode
+* prevents an ideal averaged source from sinking a prebiased output.
+Bavgdrive avgdrive GND V=V(run,GND)*limit(V(duty,GND)/1m,0,1)
+Bavgph phsrc GND V=limit(V(duty,GND)*V(VIN,GND)-{RON}*V(duty,GND)*max(I(Vavgsns),0),0,max(V(VIN,GND),0))
+Savg phsrc phblock avgdrive GND AVGHS
+Davg phblock phsense AVGBLOCK
+Vavgsns phsense PH 0
+* Positive I(Vavgsns) flows into the external inductor; this source draws the
+* matching average high-side input current instead of creating free energy.
+Bavgin VIN GND I=V(duty,GND)*max(I(Vavgsns),0)
+Anrun run GND GND GND GND nrun nc_nrun GND BUF Vhigh=1 Vlow=0
+Rboot BOOT PH 10Meg
+.model AVGHS SW(Ron=1m Roff=10G Vt=0.5 Vh=-0.1)
+.model AVGBLOCK D(Is=1n N=1 Rs=1m)
+.model SSOFF SW(Ron=100 Roff=1G Vt=0.5 Vh=-0.1)
+.model DCL D(Is=1e-14 N=0.05)"""
+
 
 @dataclass(frozen=True)
 class PinMatch:
@@ -461,7 +531,9 @@ def match_pins(ports: Collection[str], contract: dict[str, Any] | None = None) -
     return PinMatch(roles, tuple(ground_ties))
 
 
-def seed_from_spec(spec: SpecSet, *, unverified: Collection[str] = ()) -> BuckSeed | None:
+def seed_from_spec(
+    spec: SpecSet, *, unverified: Collection[str] = (), mode: BuckMode = "SW"
+) -> BuckSeed | None:
     """Return a template candidate for a matching physical buck pinout, else ``None``.
 
     Recognition is deliberately narrow.  A generic analogue part or a buck
@@ -469,6 +541,8 @@ def seed_from_spec(spec: SpecSet, *, unverified: Collection[str] = ()) -> BuckSe
     The spec's order is retained exactly, and a malformed recognised contract
     raises instead of quietly substituting a different topology.
     """
+    if mode not in ("SW", "AVG"):
+        raise TemplateSeedError(f"buck_template_invalid_mode: {mode!r}")
     if not spec.pin_map:
         return None
     try:
@@ -501,5 +575,6 @@ def seed_from_spec(spec: SpecSet, *, unverified: Collection[str] = ()) -> BuckSe
         subckt=spec.subckt,
         ports=ports,
         parameters=parameters,
-        library_text=_render(spec.subckt, ports, parameters, pins),
+        library_text=_render(spec.subckt, ports, parameters, pins, mode=mode),
+        mode=mode,
     )

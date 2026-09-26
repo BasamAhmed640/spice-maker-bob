@@ -98,6 +98,45 @@ TPS54332 regression. Neither subpart is DONE until its own proof is recorded.
    Update both status files and the M3 evidence report; push both branches only
    after tests pass. Send the next substantive check-in about one hour after M2.
 
+## This run: M4, matching switching and average buck modes
+
+M4 is split before implementation. **M4a** provides an explicit average-mode
+candidate and real smoke evidence; **M4b** performs cited both-mode electrical
+qualification and speed comparison; **M4c** is the release checkpoint. M4 as a
+whole remains TODO until all three parts satisfy their own acceptance evidence.
+
+1. Recheck both repository heads, the M3 TPS/LM evidence, the exact
+   `peak_current_buck` physical pin order and parameter provenance, and
+   `BM_REG_BUCK`'s existing average laws. Its eight-port VOUT-current-source
+   topology is a reference, not a drop-in nine-port TPS model.
+2. **M4a:** add an explicit `SW`/`AVG` selection to the same buck family, with
+   `SW` the unchanged default. Both renderers must use identical external pins
+   and cited device parameters. The AVG candidate must use the real COMP pin
+   and bounded error amplifier, charge the real SS pin, limit its current
+   command by `GMCS*(COMP-VECO)` and ILIM, and drive PH through an averaged
+   stage. Record any external inductor value as a bench/instance parameter,
+   never as an IC datasheet property. Reject unsupported modes. Unit tests
+   must prove pin/parameter parity, original SW output, and alias handling;
+   real LTspice smoke runs must measure AVG startup and one controlled-current
+   case. Deck generation alone is not an electrical PASS.
+3. **M4b:** reuse cited M2 passives and rows for matched SW and AVG fixtures.
+   Judge actual VREF/setpoint, UVLO/EN, SS, supply-current, gain and ILIM
+   waveforms in both modes. `PG` is NOT_APPLICABLE to this nine-pin TPS part;
+   AVG electrical switching frequency, ripple and PH edges are UNKNOWN with
+   reasons. FSW parameter identity may be checked separately, but not called
+   measured switching. Require SW ballpark ripple, edges, startup and load step
+   against M1 reference bands and preserve every FAIL/UNKNOWN until improved.
+   Measure wall time and raw point counts on matched horizons. Re-run the frozen
+   TPS 19-row and LM358 controls after model/harness edits.
+4. **M4c:** only after M4b acceptance, bump the edition versions and build the
+   documented installers with PowerShell, verify their release ZIP download
+   path and hashes, then push both repos. Keep vendor models, raw waveforms and
+   secrets out of Git, and use only an explicitly selected LTspice executable.
+5. Work in general first, then mirror reviewed shared files to Bob. Run
+   focused tests, Ruff, `git diff --check`, shared-core manifests and parity,
+   update evidence/status, and push completed subparts. Continue about-hourly
+   substantive check-ins; do not mark M4 DONE on an M4a smoke run.
+
 ## Milestones
 
 `DONE` means its acceptance evidence exists. A partial milestone must be split
@@ -116,6 +155,9 @@ commits may record those IDs afterward.
 | M3a | Separate pad pin and external-connection contract, with render and alias tests | DONE | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m3/REPORT.md` (general) | `b2036b5f7dbd4db8cd82171fe438baebb2fc9087` | `a619f8f5ad85a1c89ee6bc6c52e6cda150030866` |
 | M3b | Cited static/internal-alarm clean-fault controls, frozen 19-row TPS and LM358 regressions | DONE (synthetic slice; 12/4/3 TPS unchanged) | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m3/REPORT.md` (general) | `b2036b5f7dbd4db8cd82171fe438baebb2fc9087` | `a619f8f5ad85a1c89ee6bc6c52e6cda150030866` |
 | M4 | Matching SW and AVG peak-current buck modes; both-mode key values; SW shapes; speed; release checkpoint | TODO | — | — | — | — |
+| M4a | Explicit AVG candidate with same ports/device parameters and measured smoke controls | DONE (candidate; full M4 checks open) | 2026-09-26 | `docs/evidence/2026-09-26-system-models-m4a/REPORT.md` (general) | pending | pending |
+| M4b | Both-mode cited qualification, SW ballpark shapes, honest AVG UNKNOWNs, speed | TODO | — | — | — | — |
+| M4c | Versioned installer and ZIP release checkpoint after M4b acceptance | TODO | — | — | — | — |
 | M5 | Generic PinDefinition-based pin model and positive/negative tests for every alarm | TODO | — | — | — | — |
 | M6 | Pinout evidence and confirmation gate in CLI/GUI; no system-verified status without confirmation | TODO | — | — | — | — |
 | M7 | Default code-built system path; timed TPS54331/TPS54332/LM358 runs; release checkpoint | TODO | — | — | — | — |

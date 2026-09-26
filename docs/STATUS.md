@@ -1,3 +1,29 @@
+## 2026-09-26 — M4a measured average-mode candidate (Bob edition)
+
+M4a is complete as a **candidate** in Bob; M4b qualification and M4c
+release remain open. The [general-edition report](https://github.com/BasamAhmed640/spice-maker/blob/main/docs/evidence/2026-09-26-system-models-m4a/REPORT.md)
+includes Bob's separate real LTspice smoke and input-power diagnostic
+records. SW remains the unchanged default and AVG has the same nine
+TPS54332DDA physical pins and cited-device parameters, with `L_EXT`
+labeled as an external bench value. The simulator path was explicit; no AI
+or network call was made.
+
+Bob measured startup SW/AVG wall times of 17.133/0.707 s (24.2×) and
+controlled-COMP sweep times of 34.709/0.798 s (43.5×). Both AVG synthetic
+smoke guards passed. A separate VIN shunt measured steady DUT pin draw of
+0.25843 A / 3.1012 W against a 2.5176 W load; the ±1.44 kW ideal-source
+spikes were confined to its input capacitor branch. These are measured
+fixture results, not datasheet PASS or full card-power qualification.
+
+General frozen controls retained **12 PASS / 4 FAIL / 3 UNKNOWN** for
+TPS54332 and **19 passing cases / 32 passing rows** for LM358; Bob's own
+board suite passed **269 / 11 skips** and wider suite **625 / 7 skips**.
+General board/wider counts were **269 / 11 skips** and **756 passed**.
+Ruff, formatting, diff checks, changed-file byte parity, and the 44-file
+shared-core comparison passed. AVG ripple/edges remain UNKNOWN and M1's SW
+ripple FAIL remains. No raw waveforms, vendor libraries, generated models,
+or user credentials are committed. Next: M4b both-mode cited checks.
+
 ## 2026-09-25 — M3 cited PowerPAD connection (Bob edition)
 
 M3 is complete in the Bob edition with the same 44 provider-neutral core files
