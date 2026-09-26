@@ -1,3 +1,15 @@
+## 2026-09-26 — owner scope: SPICE models only (D-052)
+
+The product delivers LTspice `.lib`, `.asy`, a cited model card with alarm
+traces to plot, and verification tests. It has no board checker, board/CAD
+import, or user-facing findings report. Existing board-layer code remains
+dormant; earlier board-layer test counts below are internal regression results,
+not board-feature coverage. Model alarms run inside the user's own LTspice
+simulation. The 66 catalog cases are now 57 proposed small model-alarm
+circuits, three M6 pinout-gate checks, and six `NOT COVERED` wiring cases.
+M8 is `REMOVED`; M4b2/M4b3/M4c and M5/M6/M7/M9+ remain planned. Safety,
+citation, and honest-verdict gates are unchanged. See [D-052](DECISIONS.md).
+
 ## 2026-09-26 — M4b1 cited TPS values in both modes (Bob edition)
 
 The [M4b1 evidence](evidence/2026-09-26-system-models-m4b1/REPORT.md)

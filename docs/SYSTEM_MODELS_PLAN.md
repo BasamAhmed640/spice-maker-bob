@@ -1,9 +1,12 @@
-# System-level models: milestone plan
+# SPICE model milestone plan
 
-Status date: 2026-09-25 (America/New_York). The target is a system-level LTspice
-sanity model for I/O cards: exact external pins and required connections,
-datasheet-bounded key values, and plausible switching and transient shapes.
-`docs/TEMPLATE_CATALOG.md` defines the 22-family scope and build order.
+Status date: 2026-09-26 (America/New_York). The target is a pin-accurate SPICE
+model for each selected part, with cited key values and measured electrical
+behavior. The deliverables are model outputs (`.lib`, `.asy`, and model card)
+and tests. `docs/TEMPLATE_CATALOG.md` defines the 22-family scope and build
+order. The active scope excludes board checking, CAD/netlist import, board
+findings, and board reports. Earlier milestone descriptions retain the evidence
+recorded when they ran; the model-only scope below governs future work.
 
 ## This run: M1, TI TPS54332 side-by-side evidence
 
@@ -142,7 +145,7 @@ whole remains TODO until all three parts satisfy their own acceptance evidence.
 ### M4b1 complete; next run: M4b2 UVLO/EN and gain/limit corners
 
 M4b is split again because both-mode numeric qualification, SW waveform repair,
-and card behavior cannot be safely accepted from one smoke run. M4b1 is the
+and model behavior cannot be safely accepted from one smoke run. M4b1 is the
 first measured slice; M4b2 covers bidirectional UVLO/EN and gain/limit corners;
 M4b3 covers switching shapes, power behavior, and matched speed. Full M4b
 remains TODO until all parts are complete.
@@ -164,8 +167,8 @@ remains TODO until all parts are complete.
    all existing TPS FAIL/UNKNOWN verdicts; no broad M4b PASS is inferred.
 4. Run one clean and one deliberate wrong-value/fault control for each new
    evaluator without changing its acceptance band. Perform real LTspice runs
-   with the explicit executable, then focused and board suites, Ruff, parity,
-   and frozen regressions if any model or shared harness code changes.
+   with the explicit executable, then focused model and fixture suites, Ruff,
+   parity, and frozen regressions if any model or shared harness code changes.
 5. Mirror reviewed shared changes to Bob, run its own measurements and tests,
    record deck/log/raw hashes while deleting raw files, update status and this
    tracker, and push both only after checks are green. Give the next
@@ -193,29 +196,30 @@ commits may record those IDs afterward.
 | M4b2 | Bidirectional UVLO/EN and gain/limit corner checks | TODO | — | — | — | — |
 | M4b3 | SW shapes, power behavior, speed, and full M4b acceptance | TODO | — | — | — | — |
 | M4c | Versioned installer and ZIP release checkpoint after M4b acceptance | TODO | — | — | — | — |
-| M5 | Generic PinDefinition-based pin model and positive/negative tests for every alarm | TODO | — | — | — | — |
-| M6 | Pinout evidence and confirmation gate in CLI/GUI; no system-verified status without confirmation | TODO | — | — | — | — |
-| M7 | Default code-built system path; timed TPS54331/TPS54332/LM358 runs; release checkpoint | TODO | — | — | — | — |
-| M8 | Mini I/O card, power-up and fault matrix; both seeded mistakes caught, clean card quiet | TODO | — | — | — | — |
-| M9+ | One family per run in catalog order; contract, aliases, checklist, second-part evidence | TODO | — | — | — | — |
+| M5 | PinDefinition-based model alarms, exercised with clean/fault small synthetic circuits and measured LTspice evidence | TODO | — | — | — | — |
+| M6 | Package and symbol pinout evidence and confirmation gate for PIN-01/02/05 before model publication | TODO | — | — | — | — |
+| M7 | Default code-built SPICE model path, timed TPS54331/TPS54332/LM358 runs, and release checkpoint | TODO | — | — | — | — |
+| M8 | Reference-card board runs, board checker, and findings report | REMOVED (D-052; model-only scope) | 2026-09-26 | `docs/DECISIONS.md` D-052 | — | — |
+| M9+ | One SPICE model family per run in catalog order; contract, aliases, electrical checklist, second-part evidence | TODO | — | — | — | — |
 
-## Board-level system test suite
+## Model-only scope and reference catalog
 
-The owner's [system test suite](SYSTEM_TEST_SUITE.md) defines 66 fault cases on
-four explicitly synthetic I/O cards. For every active case, a clean card must
-produce no findings and a fault mutation must trigger the correct check at the
-right part, pin or net with applicable source evidence. The 12 numeric `(+/-)`
-cases also need inside/outside boundary pairs; corner runs use cited min/max
-values. UNKNOWN is never counted as detection. Activate only the categories
-assigned to each milestone in that document: M3/M5 static and pin checks,
-M4/M8 regulator and card-A power checks, then M9+ family checks. The owner's
-real board remains unavailable; no synthetic case is labeled a real-board test.
+The owner's [system test suite](SYSTEM_TEST_SUITE.md) remains a historical
+66-case reference catalog. Future acceptance concerns SPICE model outputs:
+`.lib`, `.asy`, model card, tests, and measured simulator evidence. Small,
+declared synthetic circuits may exercise model behavior with clean/fault
+controls and cited electrical limits. They do not establish board-level fault
+detection. The M8 mini-card milestone is removed; there is no board checker,
+CAD/netlist import, board findings, or board report in this scope.
+
+GND-03, PWR-04, CLK-03, DIG-05, BUS-02, and PIN-04 are `NOT COVERED`: they
+require board, protocol, or static design context beyond a SPICE model.
+PIN-01, PIN-02, and PIN-05 move to the M6 package/symbol pinout gate rather
+than board fault scoring. Other catalog cases are candidates for model-level
+small-circuit checks only where an electrical mechanism and cited criterion
+exist. The catalog itself is not an automatic model release gate.
 
 No electrical model row becomes `PASS` without a cited requirement and real
-LTspice measurement. A static suite check instead needs inspected netlist and
-pin data plus its clean and fault controls; it is labeled `S`, not a simulated
-electrical pass.
-Unknown or unsupported behaviors remain `UNKNOWN` or `NOT_APPLICABLE` with reasons.
-The vendor TPS54332 library remains local and is never committed. The real
-board's CAD source and two known defects are blocked pending owner input;
-synthetic M5/M8 fixtures must be labeled synthetic.
+LTspice measurement. Unmeasured or unsupported behavior remains `UNKNOWN` or
+`NOT_APPLICABLE` with reasons. The vendor TPS54332 library remains local and
+is never committed.

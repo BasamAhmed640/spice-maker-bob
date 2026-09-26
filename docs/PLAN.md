@@ -1,14 +1,15 @@
 # PLAN
 
-Mirror of the approved implementation plan with phase gates. The durable copy is
-kept alongside this file; this document records the gates that must hold before a
-phase is called done.
+Historical implementation plan and phase gates. D-052 in
+[`DECISIONS.md`](DECISIONS.md) supersedes every board checker, board import,
+board demonstration, and findings-report deliverable below. The active
+milestones are in [`SYSTEM_MODELS_PLAN.md`](SYSTEM_MODELS_PLAN.md).
 
 ## Product
 
-Datasheet-grounded LTspice model acquisition/generation plus schematic-level
-bring-up verification, delivered as a Python package with a CLI (test/automation
-surface) and a PySide6 desktop app.
+Datasheet-grounded LTspice model generation, delivered as a `.lib`, `.asy`,
+cited model card, and verification tests through the CLI and desktop app.
+Model alarms run in the user's own LTspice simulation.
 
 Honest statuses only: `PASS`, `FAIL`, `UNKNOWN`, `BLOCKED`, `NOT_APPLICABLE`.
 Never a fabricated run, citation, or approval.

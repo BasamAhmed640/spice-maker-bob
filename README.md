@@ -1,5 +1,10 @@
 # Spice Maker Bob
 
+Spice Maker Bob creates LTspice `.lib` models, `.asy` symbols, cited model
+cards, and verification tests. It has no board checker, board/CAD import, or
+user-facing board findings report. Existing board-layer helpers are internal
+test code only; see [D-052](docs/DECISIONS.md).
+
 Source and checked-in installer version: **1.6.0**. Check `SHA256SUMS.txt`
 against the installer in the ZIP you download.
 

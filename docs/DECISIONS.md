@@ -445,3 +445,30 @@ or PH edges to judge; those checks remain UNKNOWN. Input-power consistency,
 all cited both-mode limits, SW waveform shape, and Card A fault behavior need
 separate evidence before the release checkpoint. Evidence:
 `docs/evidence/2026-09-26-system-models-m4a/REPORT.md` in the general edition.
+
+## D-052 — Scope: SPICE models only; no board checker or findings report (2026-09-26)
+
+Spice Maker's product output is an LTspice `.lib`, `.asy` symbol, model card,
+and tests that establish what the model can and cannot represent. There is no
+board checker, board/CAD/netlist import feature, board findings report in HTML,
+Markdown or JSON, or board-report screen or window. Do not expose
+`check_circuit` or `reporting/html.py` for board use. Existing board-layer code
+stays dormant; internal tests may reuse its helpers, but this decision does
+not authorize extending it into a product feature. This supersedes the
+board-facing parts of D-048, D-050, D-051 and older plans; their measured
+model evidence remains historical evidence.
+
+Model alarms are generated into the model and fire in the user's own LTspice
+simulation. Each model card names the alarm trace to plot and its datasheet
+page. The 66-case `SYSTEM_TEST_SUITE.md` catalog is a developer test catalog:
+each eligible alarm uses a small code-built circuit with a quiet clean control
+and a firing fault control. PWR, SEQ, VAL, and PG-to-EN chains may need two or
+more modelled parts in those test circuits. GND-03, PWR-04, CLK-03, DIG-05,
+BUS-02, and PIN-04 are `NOT COVERED` because only a board-wide wiring check
+could catch them. PIN-01, PIN-02, and PIN-05 belong to the model-creation
+pinout gate in M6. `UNKNOWN` never counts as detection.
+
+M8 reference-card board runs are `REMOVED`. M4b1, M4b2, M4b3, M4c, M5, M6,
+M7, and M9+ continue as model-generation and model-verification milestones in
+both editions. The citation, honest verdict, explicit LTspice path, offline,
+credential, and self-contained environment rules remain in force.

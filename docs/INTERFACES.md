@@ -1,8 +1,11 @@
 # INTERFACES
 
-Frozen contracts between modules that are implemented in parallel. This file is
-the authority: if code disagrees with it, the code is wrong. Changes are
-deliberate and must be recorded here in the same commit.
+Historical contracts between modules implemented in parallel. D-052 in
+[`DECISIONS.md`](DECISIONS.md) supersedes board-facing contracts below:
+the board checker, board import, and findings report are not product
+interfaces or release gates. The retained code may support internal model
+test fixtures. Current model-only milestones are in
+[`SYSTEM_MODELS_PLAN.md`](SYSTEM_MODELS_PLAN.md).
 
 ## 1. Pipeline controller (`pipeline/controller.py`)
 
