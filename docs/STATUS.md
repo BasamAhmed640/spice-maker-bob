@@ -505,3 +505,23 @@ Maker's `docs/evidence/2026-09-25-buck-slice/REPORT.md`; next families in `docs/
 |---|---|
 | `pytest tests/authoring tests/models tests/pipeline tests/ltspice tests/test_shared_core.py` (`LTSPICE_EXE`) | 594 passed, 7 skipped (HTTP-only / general-catalog tests), 0 failed |
 | `tools/shared_core.py --compare ..\spice-maker` | identical: 42 files |
+
+## 2026-09-25 — system-level models M0: shared direction and catalog (Bob edition)
+
+M0 changes documentation only. Bob mirrors D-048, the 22-family
+[`TEMPLATE_CATALOG.md`](TEMPLATE_CATALOG.md), and the M0–M9+
+[`SYSTEM_MODELS_PLAN.md`](SYSTEM_MODELS_PLAN.md). Only the existing
+`peak_current_buck_v1` slice has reusable family behavior today; it is not
+system-verified. Bob Shell remains tool-free with no general-provider fallback.
+M1 is next, beginning in the general edition.
+
+| Check | Observed result |
+| --- | --- |
+| `.venv\Scripts\python.exe -m pytest -q tests\test_shared_core.py` | 2 passed in 1.12 s |
+| General `.venv\Scripts\python.exe tools\shared_core.py --compare ..\spice-maker-bob` | identical: 42 files |
+| D-048, catalog and plan comparison with general | Decision text equal; catalog and plan SHA-256 hashes equal |
+| `git diff --check` | No whitespace errors |
+
+The [M0 evidence report](https://github.com/BasamAhmed640/spice-maker/blob/main/docs/evidence/2026-09-25-system-models-m0/REPORT.md)
+is in the general repository. M0 did not run LTspice or a Bob inference turn;
+no new Bob electrical result is claimed. Older FAIL and UNKNOWN results remain.

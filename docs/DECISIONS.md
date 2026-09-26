@@ -336,3 +336,59 @@ pins and supported/unsupported behaviours. `authoring/buck_fixtures.py` builds t
 current-limit bench deterministically from the matched pins and cited rows; it must pass
 the same pre-freeze rules as an AI-planned bench. It is proven on TPS54332DDA and TPS54331
 but not yet used by `bind()` to skip planning.
+## D-048 — Model the card-level behavior the user needs to check (2026-09-25)
+
+Spice Maker's target is a system-level LTspice sanity check for an I/O card, not an attempt
+to reproduce every datasheet row. A useful model must expose wrong wiring, pin-rule
+violations and implausible board behavior. The previous AI-written, row-by-row path has
+not delivered a verified functional model; its results remain historical evidence and
+are not promoted by this decision. The board-level power-up and fault checks return as
+part of the system-model acceptance path, including an untied AGND/DGND pair and an
+oscillator overloaded by five clock inputs.
+
+For the exact package, every physical pin number and name must appear, and the `.subckt`
+port order must match the symbol's `SpiceOrder`. A pinout may be published only after the
+user confirms it or two independent sources agree. The explicit pinout-confirmation gate
+also applies before a model receives `system-verified` status. Internal pin-to-pin ties
+are forbidden unless a cited datasheet page states that the device makes that connection;
+an external PCB connection must stay visible as a required-connection rule. In particular,
+the TPS54332 POWERPAD must not be silently tied to GND inside its model.
+A high-value leakage resistor may aid numerical convergence, but it cannot act as
+a functional pin tie or make a missing PCB connection pass its required-connection check.
+
+The must-be-right measurements are VREF; UVLO rise and fall; EN thresholds; soft-start
+time; PG thresholds and delay; switching frequency; quiescent and shutdown current;
+current limit at both minimum and maximum corners; and current-sense gain in A/V. Gain
+is a measured slope over at least two COMP points above the pulse-skip threshold.
+These values must meet cited datasheet minimum/maximum bounds, or ±10% when the only
+cited value is typical. A failed or unmeasured requirement cannot become PASS by changing
+its limit or test circuit.
+
+Output ripple, switch-node and digital-output edges, load-step dip and recovery, and
+startup shape are ballpark checks. Measured magnitudes and times must be within 0.5–2×
+of the best available reference: first a vendor model, then a datasheet typical-application
+figure, then a textbook estimate using the actual test-circuit parts. Edges must not be
+ideal, switching ripple must not be zero, ringing must decay, and startup must rise
+steadily unless the reference overshoots. A reference or signal that cannot be measured
+leaves that check UNKNOWN rather than granting a pass.
+
+Switching-regulator templates must provide `SW` and `AVG` modes with identical pins and
+parameters. `SW` supplies ripple, edge and transient checks; `AVG` supports long
+power-up and fault sweeps. Must-be-right checks run in both modes. Ripple and edge
+checks on `AVG` return UNKNOWN, never a silent zero or an inferred PASS.
+
+The planned generic path must give every IC a pin model from `PinDefinition` records
+and existing primitives,
+even without a family template. Its alarms cover absolute maximum ratings, required
+connections, floating inputs, power through I/O while the supply is off, and overloaded
+outputs. Each alarm needs a fault-injection test that fires and a clean-circuit test
+that stays quiet. A generic pin model does not imply verified internal functional
+behavior.
+
+In the planned default path, code will build the model from templates or pin primitives
+and build its fixed test checklist. AI may read and extract datasheet evidence; it will
+not plan tests, write SPICE or repair candidates in that path. The earlier AI-authored
+path must remain available behind an explicit flag. `system-verified` will be a stricter
+status reached only after the pinout gate and real LTspice measurements support the
+applicable claims; otherwise preserve FAIL, UNKNOWN and their reasons. Per-model time
+is measured against a 5–10 minute goal without weakening these gates.
