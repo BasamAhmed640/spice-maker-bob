@@ -155,7 +155,7 @@ commits may record those IDs afterward.
 | M3a | Separate pad pin and external-connection contract, with render and alias tests | DONE | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m3/REPORT.md` (general) | `b2036b5f7dbd4db8cd82171fe438baebb2fc9087` | `a619f8f5ad85a1c89ee6bc6c52e6cda150030866` |
 | M3b | Cited static/internal-alarm clean-fault controls, frozen 19-row TPS and LM358 regressions | DONE (synthetic slice; 12/4/3 TPS unchanged) | 2026-09-25 | `docs/evidence/2026-09-25-system-models-m3/REPORT.md` (general) | `b2036b5f7dbd4db8cd82171fe438baebb2fc9087` | `a619f8f5ad85a1c89ee6bc6c52e6cda150030866` |
 | M4 | Matching SW and AVG peak-current buck modes; both-mode key values; SW shapes; speed; release checkpoint | TODO | — | — | — | — |
-| M4a | Explicit AVG candidate with same ports/device parameters and measured smoke controls | DONE (candidate; full M4 checks open) | 2026-09-26 | `docs/evidence/2026-09-26-system-models-m4a/REPORT.md` (general) | pending | pending |
+| M4a | Explicit AVG candidate with same ports/device parameters and measured smoke controls | DONE (candidate; full M4 checks open) | 2026-09-26 | `docs/evidence/2026-09-26-system-models-m4a/REPORT.md` (general) | `e7418a6142b8db4feae3027d71a7c0c5dafbd750` | `30609bdc710711b259d85ecef8c0f054b0d97c6a` |
 | M4b | Both-mode cited qualification, SW ballpark shapes, honest AVG UNKNOWNs, speed | TODO | — | — | — | — |
 | M4c | Versioned installer and ZIP release checkpoint after M4b acceptance | TODO | — | — | — | — |
 | M5 | Generic PinDefinition-based pin model and positive/negative tests for every alarm | TODO | — | — | — | — |
