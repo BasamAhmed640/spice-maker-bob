@@ -1,3 +1,23 @@
+## 2026-09-25 — M1 system-model check-in (Bob edition)
+
+The [general-edition M1 TPS54332DDA side-by-side report](https://github.com/BasamAhmed640/spice-maker/blob/main/docs/evidence/2026-09-25-system-models-m1/REPORT.md)
+records the fresh switching-model comparison with TI. Its original broad gain
+fit and output-ripple checks are **FAIL**; a separately labeled local gain fit
+passes. PH edge realism and full load-step recovery are **UNKNOWN**.
+Those are general-edition measurements, not a separate Bob simulation result.
+No live Bob model call was made, and the Bob application source was not changed.
+
+Both editions now include `docs/SYSTEM_TEST_SUITE.md`. The owner's supplied
+suite text remains a verbatim prefix; its tracker lists 66 unique cases as
+`NOT BUILT`, including 12 marked boundary pairs. No board-card fault result is
+claimed by this documentation.
+
+Local Bob focused tests, run with `-m 'not network'` and `LTSPICE_EXE` explicitly
+set to `C:\Users\basam\AppData\Local\Programs\ADI\LTspice\LTspice.exe`,
+reported **594 passed, 7 skipped in 168.30s**. `ruff check src tests tools`
+passed. The shared-core comparison found **42 identical files** in the two
+editions. M2 is the next milestone after M1 evidence is finalized.
+
 # 1.4.0 portable Bob safety update — 2026-09-24
 
 The Bob edition now uses a project-local Python `.venv` with pinned runtime
