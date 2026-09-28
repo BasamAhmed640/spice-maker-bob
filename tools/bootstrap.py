@@ -224,12 +224,58 @@ def _remove_shortcut(override: Path | None = None) -> None:
 def _write_shortcut(directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / SHORTCUT_NAME
-    script = (
-        "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:SPICE_SHORTCUT_PATH); "
-        "$s.TargetPath=$env:SPICE_START_PATH; "
-        "$s.WorkingDirectory=$env:SPICE_APP_ROOT; "
-        "$s.IconLocation=$env:SPICE_ICON_PATH; $s.Save()"
-    )
+    # WScript.Shell can convert characters outside the active ANSI code page when
+    # it saves .lnk properties (for example Ω becomes O). Use the Unicode COM
+    # interface directly, and pass all paths through environment variables.
+    script = r"""
+$source = @'
+using System;
+using System.Runtime.InteropServices;
+namespace SpiceMaker {
+    [ComImport, Guid("000214F9-0000-0000-C000-000000000046")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IShellLinkW {
+        void GetPath(IntPtr file, int maxPath, IntPtr findData, uint flags);
+        void GetIDList(out IntPtr idList);
+        void SetIDList(IntPtr idList);
+        void GetDescription(IntPtr name, int maxName);
+        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string name);
+        void GetWorkingDirectory(IntPtr directory, int maxPath);
+        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string directory);
+        void GetArguments(IntPtr args, int maxPath);
+        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string args);
+        void GetHotkey(out short hotkey);
+        void SetHotkey(short hotkey);
+        void GetShowCmd(out int showCmd);
+        void SetShowCmd(int showCmd);
+        void GetIconLocation(IntPtr iconPath, int maxPath, out int icon);
+        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string iconPath, int icon);
+        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string path, uint reserved);
+        void Resolve(IntPtr window, uint flags);
+        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string path);
+    }
+    public static class Shortcut {
+        public static void Save(string target, string workdir, string icon, string path) {
+            Type type = Type.GetTypeFromCLSID(
+                new Guid("00021401-0000-0000-C000-000000000046"), true);
+            object link = Activator.CreateInstance(type);
+            try {
+                IShellLinkW unicode = (IShellLinkW)link;
+                unicode.SetPath(target);
+                unicode.SetWorkingDirectory(workdir);
+                unicode.SetIconLocation(icon, 0);
+                ((System.Runtime.InteropServices.ComTypes.IPersistFile)link).Save(path, true);
+            } finally {
+                Marshal.FinalReleaseComObject(link);
+            }
+        }
+    }
+}
+'@
+Add-Type -TypeDefinition $source -ErrorAction Stop
+[SpiceMaker.Shortcut]::Save($env:SPICE_START_PATH, $env:SPICE_APP_ROOT,
+    $env:SPICE_ICON_PATH, $env:SPICE_SHORTCUT_PATH)
+"""
     _powershell(
         script,
         extra_env={
