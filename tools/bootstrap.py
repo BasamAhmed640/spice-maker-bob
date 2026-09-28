@@ -28,6 +28,14 @@ class SetupError(Exception):
     """A problem that the batch launcher can show without a Python traceback."""
 
 
+def _use_utf8() -> None:
+    """Keep pip and setup output usable from a Unicode extraction path."""
+    os.environ["PYTHONUTF8"] = "1"
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 def _run(command: list[str], *, env: dict[str, str] | None = None) -> None:
     result = subprocess.run(command, cwd=ROOT, env=env, check=False)
     if result.returncode:
@@ -251,6 +259,7 @@ def _want_shortcut(choice: str | None, *, yes: bool) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _use_utf8()
     parser = argparse.ArgumentParser(description="Set up the local Spice Maker environment")
     parser.add_argument("--yes", action="store_true")
     parser.add_argument("--no-install-python", action="store_true")
@@ -270,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         _check_folder()
         if not VENV_PYTHON.is_file():
             print("Creating .venv in the extracted folder...", flush=True)
-            venv.EnvBuilder(with_pip=True).create(ROOT / ".venv")
+            venv.EnvBuilder(with_pip=False).create(ROOT / ".venv")
         else:
             print("Using the existing .venv.", flush=True)
         _check_venv()
