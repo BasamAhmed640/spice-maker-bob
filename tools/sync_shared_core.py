@@ -1,4 +1,4 @@
-"""Copy shared source/tests/packaging between explicit checkouts, retaining flavor.
+"""Copy shared source, tests, assets and tools between explicit checkouts.
 
 Run without --apply in CI/development to detect drift; --apply updates tracked
 shared files without deleting destination files. Repository history and docs remain local.
@@ -32,22 +32,25 @@ def main(argv=None):
             "src/boardmodeler/authoring/api_backend.py",
             "src/boardmodeler/providers/http_inference.py",
             "src/boardmodeler/providers/bob.py",
-            "src/boardmodeler/ui/setup_dialog.py",
-            "src/boardmodeler/ui/model_maker.py",
+            "src/boardmodeler/cli.py",
+            "src/boardmodeler/config.py",
+            "src/boardmodeler/settings_summary.py",
             "tests/authoring/test_api_backend.py",
             "tests/authoring/test_api_backend_paths.py",
+            "tests/authoring/test_backends.py",
             "tests/test_desktop_retry_and_go.py",
             "tests/test_desktop_retry.py",
+            "tests/providers/test_bob.py",
+            "tests/providers/test_fixture_provider.py",
             "tests/providers/test_http_inference.py",
-            "tests/ui/test_provider_refusal.py",
+            "tests/security/test_key_verification.py",
+            "tests/test_edition_bob_absent.py",
             "tests/domain/test_records_roundtrip.py",
             "tests/pipeline/test_make_model.py",
             "tests/test_cli_model.py",
-            "tests/ui/test_setup_dialog.py",
-            "installer/assets/pepper-splash.gif",
         ):
             continue
-        if not name.startswith(("src/", "tests/", "installer/", ".github/", "tools/")):
+        if not name.startswith(("src/", "tests/", "assets/", ".github/", "tools/")):
             continue
         src, dst = source / name, target / name
         if not dst.resolve().is_relative_to(target):

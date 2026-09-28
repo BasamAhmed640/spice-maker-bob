@@ -92,13 +92,30 @@ Rules the controller must enforce (each must have a test):
 * Only `reporting/export.py` computes approval/qualification receipts — the model
   generation code never writes one.
 
-## 2. Model-making path
+## 2. Worker protocol (`pipeline/worker.py`)
 
-The public text menu and flag commands both call `pipeline/make_model.py`. Its
-progress callback reports stages while the same engine writes candidates and
-LTspice judges them. Results and row counts come from that engine. The old child
-process transport is archived in
-[`docs/evidence/2026-09-28-terminal/history/INTERFACES-before-terminal.md`](evidence/2026-09-28-terminal/history/INTERFACES-before-terminal.md).
+* Invocation: `python -m boardmodeler.pipeline.worker --request <request.json>
+  --project <dir>`.
+* stdout carries **one JSON object per line**, nothing else. Diagnostics go to
+  stderr.
+* Event shapes (`event` field is mandatory):
+
+```jsonc
+{"event": "stage",    "stage": "COMPILE_SIMULATE", "status": "PASS", "detail": "...", "elapsed_s": 1.2}
+{"event": "progress", "stage": "EVALUATE", "done": 3, "total": 9, "detail": "..."}
+{"event": "findings", "findings": [ /* Finding dicts */ ]}
+{"event": "review",   "items":    [ /* ReviewItem dicts */ ]}
+{"event": "waveform", "ref": "runs/<id>/probe.raw", "signals": ["V(VOUT)"], "violations": [{"req_id": "...", "t_s": 0.0012}]}
+{"event": "result",   "status": "FAIL", "summary": {"PASS": 4, "FAIL": 1}, "results": [ /* TestResult dicts */ ]}
+{"event": "error",    "code": "project_not_found", "detail": "..."}
+```
+
+* The worker exits 0 for any completed run (statuses are data) and non-zero only
+  when the request itself could not be served.
+* Cancellation: the parent terminates the child's **process tree**; the worker
+  also honours SIGINT/SIGTERM by writing `{"event":"error","code":"cancelled"}`
+  and exiting 130.
+* The GUI never computes a verdict; it renders what the worker emits.
 
 ## 3. Schematic layer (`schematic/`)
 
@@ -226,38 +243,51 @@ def mutate_project(project_dir: Path, fault_id: str, out_dir: Path) -> Mutation
 def fault_ids() -> tuple[str, ...]
 ```
 
-## 4. Text menu and setup
+## 4. GUI (`ui/`) and the model maker
 
-`boardmodeler` with no arguments opens `terminal_menu.run_menu()`. The menu builds a
-model from a part number and PDF, opens or re-tests a saved model, runs the setup
-wizard, checks setup with doctor, or quits. A build calls `make_model(request,
-progress=...)`; the engine and its result records are shared with flag commands.
+* `ui/app.py`: `def main(argv: Sequence[str] | None = None) -> int` — QApplication
+  entry point; `--installer` opens the setup page and `--board-ui` the dormant board
+  window instead of the model maker.
+* `ui/model_maker.py`: `class ModelMakerWindow(QMainWindow)` — the build surface:
+  `part_edit`, `datasheet_edit`, `out_edit`, `go_button`, `cancel_button`, a stage
+  table and a datasheet-row table, with `SETUP` and `CHECK ENVIRONMENT` buttons. Fixed
+  900×600; all control styling comes from `ui/theme.py`'s `RETRO_STYLESHEET`.
+* `ui/setup_dialog.py`: `class SetupDialog(QDialog)` — the one page of persistent
+  settings (LTspice path + smoke test, the agent provider and its API key, the model id when
+  the provider takes one, model folder, the read-only LTspice user library, web reinforcement),
+  sized to its content. `describe_settings(config)`
+  returns those settings as data for `boardmodeler setup --json`, and `main(argv)` is
+  the `boardmodeler setup` entry point. Reached from the SETUP button, `boardmodeler
+  setup`, or `boardmodeler ui --installer`.
+* `ui/theme.py`: `CGA` palette and `RETRO_STYLESHEET` (controls only); a window adds
+  window-scoped rules and must scope its background by object name.
+* `ui/main_window.py`, `ui/worker_client.py`, `ui/waveforms.py`, `ui/results_panel.py`,
+  `ui/review_panel.py`, `ui/settings.py` belong to the dormant earlier board spec.
+* Tests run with `QT_QPA_PLATFORM=offscreen` and are marked `gui`.
 
-`Setup.cmd` discovers CPython 3.14, then starts `tools/bootstrap.py`. The bootstrap
-creates `.venv`, installs the eight hash-pinned runtime wheels, calls
-`setup_wizard.main()`, runs doctor and optionally creates a Desktop shortcut.
-`Start.cmd` and `Boardmodeler.cmd` derive the root from their own folder and set
-`SPICE_MAKER_ROOT` and `PYTHONPATH`.
+## 5. CLI surface (final)
 
-## 5. Public flag commands
-
-```text
+```
 boardmodeler version [--json]
 boardmodeler doctor [--json] [--no-smoke] [--smoke-workdir DIR]
-boardmodeler setup [--json] [--ltspice EXE] [--model-dir DIR] [--provider ID]
-    [--internet on|off] [--key-env NAME] [--yes]
+boardmodeler setup [--json]                      # one page of persistent settings
+boardmodeler ui [--project DIR] [--installer]    # model maker (--installer: setup page)
 boardmodeler model build --part PN --out DIR [--datasheet PDF | --requirements F --bindings F]
-    [--subckt NAME] [--backend api|scripted|fixture] [--provider ID] [--model ID]
-    [--allow-remote] [--no-reinforce] [--iterations N] [--timeout S] [--json] [--strict]
-boardmodeler model open --out DIR [--verify] [--json]
+    [--subckt NAME] [--backend bob|scripted|fixture] [--provider ID] [--team-id ID]
+    [--allow-remote] [--no-reinforce] [--iterations N]
+    [--timeout S] [--json] [--strict]           # bob: the Bob CLI; scripted: the bundled template
 boardmodeler model test --out DIR [--timeout S] [--json] [--strict]
 boardmodeler model install --out DIR [--into DIR | --user-lib] [--apply] [--json]
-boardmodeler run tests --project DIR [--scope S] [--test ID] [--list-tests] [--json]
+boardmodeler run tests --project DIR [--scope S] [--test ID] [--list-tests] [--json] [--out F]
+                                     [--timeout S] [--ltspice EXE] [--ascii-raw] [--strict]
+boardmodeler demo build --out DIR [--json] [--no-probe]
+boardmodeler circuit check --project DIR [--circuit FILE] [--scope S] [--fault-matrix]
+                           [--json] [--out F] [--report F] [--strict]
+boardmodeler run mutations --project DIR --report F [--fault ID] [--json]
 boardmodeler export --project DIR --out DIR [--json] [--model ID]
 boardmodeler extract --project DIR [--doc FILE] [--provider NAME] [--allow-remote] [--json]
+boardmodeler --self-test [--json]
 ```
 
-The Bob edition retains its own accepted backend and provider. Use each edition's
-`--help` as the source of exact optional flags. Exit codes are `0` for success or
-a completed result, `1` when the request cannot be served or `--strict` sees a
-non-PASS, and `2` for usage errors.
+Exit codes: `0` success or a completed run whose results are data; `1` when the
+request could not be served or `--strict` saw a non-PASS; `2` usage error.

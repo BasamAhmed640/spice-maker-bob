@@ -1,6 +1,6 @@
 """Serializable records (D4).
 
-Every model here is the shared contract between the CLI, the GUI, the pipeline,
+Every model here is the shared contract between the CLI, text menu, pipeline,
 the export, and the tests. Rules that apply to all of them:
 
 * ``extra="forbid"`` — a typo in a fixture is an error, not silently dropped.

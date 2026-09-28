@@ -28,19 +28,17 @@ def test_model_generation_and_verification_commands_remain_available():
     assert (tests.command, tests.run_command) == ("run", "tests")
 
 
-def test_board_project_is_not_a_model_maker_argument(capsys):
+def test_legacy_ui_command_is_not_public(capsys):
     with pytest.raises(SystemExit) as error:
-        build_parser().parse_args(["ui", "--project", "old-board"])
+        build_parser().parse_args(["ui"])
     assert error.value.code == 2
-    assert "unrecognized arguments" in capsys.readouterr().err
+    assert "invalid choice" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("argv", [["--board-ui"], ["--project", "old-board"]])
-def test_legacy_board_window_is_not_public(argv, capsys):
-    pytest.importorskip("PySide6")
-    from boardmodeler.ui.app import main
-
+def test_legacy_window_flags_are_not_public(argv, capsys):
     with pytest.raises(SystemExit) as error:
-        main(argv, exec_app=False)
+        build_parser().parse_args(argv)
     assert error.value.code == 2
-    assert "unrecognized arguments" in capsys.readouterr().err
+    message = capsys.readouterr().err
+    assert "unrecognized arguments" in message or "invalid choice" in message

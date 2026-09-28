@@ -45,10 +45,11 @@ def build_parser() -> argparse.ArgumentParser:
             "model and real simulator runs judge it against the datasheet's own rows."
         ),
         epilog=(
-            "start here:  boardmodeler model build --part <PN> --datasheet <pdf> "
+            "start here:  boardmodeler                 (interactive menu)\n"
+            "             boardmodeler model build --part <PN> --datasheet <pdf> "
             "--out <dir>\n"
             "             boardmodeler model install --out <dir> --user-lib --apply\n"
-            "             boardmodeler ui      (the same thing as a window)"
+            "             boardmodeler setup  (saved settings)"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -75,19 +76,22 @@ def build_parser() -> argparse.ArgumentParser:
     version_cmd = sub.add_parser("version", help="print the version")
     version_cmd.add_argument("--json", action="store_true")
 
-    setup_cmd = sub.add_parser(
-        "setup", help="the one page of persistent settings (LTspice, API key, model folder)"
-    )
+    setup_cmd = sub.add_parser("setup", help="configure LTspice, provider, key and model folder")
     setup_cmd.add_argument(
         "--json",
         action="store_true",
-        help="print the resolved settings instead of a window",
+        help="print the resolved settings without starting the wizard",
     )
-
-    ui_cmd = sub.add_parser("ui", help="launch the model maker window (add --installer for setup)")
-    ui_cmd.add_argument(
-        "--installer", action="store_true", help="open the setup page instead of the model maker"
+    setup_cmd.add_argument("--ltspice", default=None, help="path to LTspice.exe")
+    setup_cmd.add_argument("--model-dir", default=None, help="folder for finished models")
+    setup_cmd.add_argument(
+        "--provider", default=None, help="provider id from this edition's catalog"
     )
+    setup_cmd.add_argument("--internet", choices=("on", "off"), default=None)
+    setup_cmd.add_argument(
+        "--key-env", default=None, metavar="NAME", help="name of a key environment variable"
+    )
+    setup_cmd.add_argument("--yes", action="store_true", help="accept wizard defaults")
 
     run = sub.add_parser("run", help="run model verification tests")
     run_sub = run.add_subparsers(dest="run_command", required=True)
@@ -248,6 +252,14 @@ def build_parser() -> argparse.ArgumentParser:
     model_test.add_argument("--timeout", type=float, default=120.0)
     model_test.add_argument("--json", action="store_true")
     model_test.add_argument("--strict", action="store_true")
+
+    model_open = model_sub.add_parser(
+        "open", help="reopen a saved model and report its recorded result"
+    )
+    model_open.add_argument("--out", type=Path, required=True, help="saved model directory")
+    model_open.add_argument("--verify", action="store_true", help="re-run the existing model test")
+    model_open.add_argument("--timeout", type=float, default=120.0)
+    model_open.add_argument("--json", action="store_true")
 
     model_install = model_sub.add_parser(
         "install", help="copy a built model where LTspice can find it"
@@ -777,9 +789,11 @@ def _cmd_model(args: argparse.Namespace) -> int:
         return _cmd_model_build(args)
     if action == "test":
         return _cmd_model_test(args)
+    if action == "open":
+        return _cmd_model_open(args)
     if action == "install":
         return _cmd_model_install(args)
-    print("error: specify a model subcommand: build, import, test or install")
+    print("error: specify a model subcommand: build, import, test, open or install")
     return 2
 
 
@@ -1102,56 +1116,62 @@ def _cmd_model_build_from_datasheet(args: argparse.Namespace, *, subckt: str, em
     return emit(payload, 1 if (args.strict and result.status != "PASS") else 0)
 
 
-def _cmd_model_test(args: argparse.Namespace) -> int:
+def _run_model_test(out_dir: Path, *, timeout_s: float) -> tuple[dict[str, Any], bool, str | None]:
+    """Run Bob's saved-model test path for both ``test`` and ``open --verify``."""
     from boardmodeler.authoring.card import write_deliverables
     from boardmodeler.authoring.harness import run_harness
     from boardmodeler.authoring.spec import SpecSet
     from boardmodeler.simulation.ltspice import locate
+    from boardmodeler.storage import local_path
 
-    out_dir: Path = args.out
+    def blocked(detail: str) -> tuple[dict[str, Any], bool, str | None]:
+        return (
+            {
+                "tool": "boardmodeler",
+                "command": "model test",
+                "status": "BLOCKED",
+                "detail": detail,
+            },
+            False,
+            None,
+        )
+
+    try:
+        out_dir = local_path(out_dir)
+    except (OSError, ValueError) as exc:
+        return blocked(str(exc))
     install = locate()
     if install is None:
-        payload = {
-            "tool": "boardmodeler",
-            "command": "model test",
-            "status": "BLOCKED",
-            "detail": "LTspice is not configured; choose its executable in SETUP",
-        }
-        print(json.dumps(payload, indent=2) if args.json else f"model test: {payload['detail']}")
-        return 1
+        return blocked("LTspice is not configured; choose its executable in SETUP")
 
     try:
         spec_json = _spec_json_in(out_dir)
         spec = SpecSet.from_json(spec_json.read_text(encoding="utf-8"))
         lib = _model_lib_in(out_dir, spec.subckt)
     except (OSError, ValueError) as exc:
-        payload = {
-            "tool": "boardmodeler",
-            "command": "model test",
-            "status": "BLOCKED",
-            "detail": str(exc),
-        }
-        print(json.dumps(payload, indent=2) if args.json else f"model test: {exc}")
-        return 1
+        return blocked(str(exc))
 
-    report = run_harness(
-        model_lib=lib,
-        subckt=spec.subckt,
-        spec=spec,
-        workdir=out_dir / "harness",
-        ltspice=install.path,
-        timeout_s=args.timeout,
-    )
-    report_path = out_dir / "harness-report.json"
-    report_path.write_text(report.to_json(), encoding="utf-8", newline="\n")
-    written = write_deliverables(
-        out_dir=out_dir,
-        part=spec.part,
-        subckt=spec.subckt,
-        spec=spec,
-        report=report,
-        document=spec.doc_id,
-    )
+    try:
+        report = run_harness(
+            model_lib=lib,
+            subckt=spec.subckt,
+            spec=spec,
+            workdir=out_dir / "harness",
+            ltspice=install.path,
+            timeout_s=timeout_s,
+        )
+        report_path = out_dir / "harness-report.json"
+        report_path.write_text(report.to_json(), encoding="utf-8", newline="\n")
+        written = write_deliverables(
+            out_dir=out_dir,
+            part=spec.part,
+            subckt=spec.subckt,
+            spec=spec,
+            report=report,
+            document=spec.doc_id,
+        )
+    except (OSError, ValueError) as exc:
+        return blocked(f"could not re-test this model: {exc}")
     status = "PASS" if report.passed() else "UNKNOWN"
     payload = {
         "tool": "boardmodeler",
@@ -1163,13 +1183,117 @@ def _cmd_model_test(args: argparse.Namespace) -> int:
         "probes": [outcome.to_json() for outcome in report.outcomes],
         "files": [str(report_path), *(str(path) for path in written)],
     }
+    return payload, True, report.model_sha256
+
+
+def _print_model_test(payload: dict[str, Any], model_sha256: str | None) -> None:
+    if payload["status"] == "BLOCKED":
+        print(f"model test: {payload['detail']}")
+        return
+    print(
+        f"model test: {payload['status']} {payload['counts']} (model {(model_sha256 or '')[:12]})"
+    )
+    for outcome in payload["probes"]:
+        print(f"  {outcome['status']:8} {outcome['probe_id']:20} {outcome['detail'][:80]}")
+
+
+def _cmd_model_test(args: argparse.Namespace) -> int:
+    payload, ran, model_sha256 = _run_model_test(args.out, timeout_s=args.timeout)
     if args.json:
         print(json.dumps(payload, indent=2))
     else:
-        print(f"model test: {status} {payload['counts']} (model {report.model_sha256[:12]})")
-        for outcome in report.outcomes:
-            print(f"  {outcome.status:8} {outcome.probe_id:20} {outcome.detail[:80]}")
-    return 1 if (args.strict and status != "PASS") else 0
+        _print_model_test(payload, model_sha256)
+    return 1 if not ran or (args.strict and payload["status"] != "PASS") else 0
+
+
+def _cmd_model_open(args: argparse.Namespace) -> int:
+    """Read a Bob build's saved result; optional verification uses ``model test``'s path."""
+    from boardmodeler.pipeline.make_model import MakeModelResult
+    from boardmodeler.storage import local_path
+
+    try:
+        out_dir = local_path(args.out)
+        results_path = out_dir / "results.json"
+        saved = MakeModelResult.from_json(results_path.read_text(encoding="utf-8"))
+        subckt = (
+            saved.request.subckt
+            if saved.request is not None
+            else saved.lib_path.stem
+            if saved.lib_path is not None
+            else _sanitize_subckt(saved.part)
+        )
+        lib_path = out_dir / f"{subckt}.lib"
+        asy_path = out_dir / f"{subckt}.asy"
+        card_path = out_dir / "MODEL_CARD.md"
+        payload: dict[str, Any] = {
+            "tool": "boardmodeler",
+            "command": "model open",
+            "out_dir": str(out_dir),
+            "ok": True,
+            "reason": None,
+            "part": saved.part,
+            "subckt": subckt,
+            "datasheet": str(saved.request.datasheet) if saved.request is not None else None,
+            "status": saved.status,
+            "detail": saved.detail,
+            "counts": saved.counts,
+            "rows": [
+                {
+                    "req_id": row.req_id,
+                    "statement": row.statement,
+                    "required": row.required,
+                    "measured": row.measured,
+                    "status": row.status,
+                    "page": row.page,
+                }
+                for row in saved.rows
+            ],
+            "card_path": str(card_path) if card_path.is_file() else None,
+            "lib_path": str(lib_path),
+            "asy_path": str(asy_path),
+            "lib_exists": lib_path.is_file(),
+            "asy_exists": asy_path.is_file(),
+            "results_path": str(results_path),
+        }
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        payload = {
+            "tool": "boardmodeler",
+            "command": "model open",
+            "out_dir": str(args.out),
+            "ok": False,
+            "reason": f"could not read the saved model: {exc}",
+            "verification": None,
+            "verified": False,
+        }
+        print(json.dumps(payload, indent=2) if args.json else f"model open: {payload['reason']}")
+        return 1
+
+    payload["verification"] = None
+    payload["verified"] = False
+    model_sha256 = None
+    if args.verify:
+        verification, ran, model_sha256 = _run_model_test(out_dir, timeout_s=args.timeout)
+        payload["verification"] = verification
+        payload["verified"] = ran
+    if args.json:
+        print(json.dumps(payload, indent=2))
+    else:
+        print(
+            f"model open: {saved.part} ({subckt}) — {saved.status}; "
+            f"{len(saved.rows)} recorded row(s) {saved.counts}"
+        )
+        print(f"  {out_dir}")
+        print(
+            f"  model .lib present: {'yes' if payload['lib_exists'] else 'NO'}; "
+            f"symbol .asy present: {'yes' if payload['asy_exists'] else 'NO'}"
+        )
+        if payload["card_path"]:
+            print(f"  card: {card_path}")
+        if saved.detail:
+            print(f"  recorded detail: {saved.detail[:160]}")
+        if args.verify:
+            _print_model_test(payload["verification"], model_sha256)
+    return 0 if not args.verify or payload["verified"] else 1
 
 
 def _cmd_model_install(args: argparse.Namespace) -> int:
@@ -1293,15 +1417,24 @@ def _cmd_extract(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     from boardmodeler.storage import initialize, install_write_guard
 
-    initialize()
-    # The contained venv runtime enters here (Boardmodeler.cmd sets SPICE_MAKER_ROOT
-    # and runs ``python -m boardmodeler.cli``); a repository checkout installs nothing.
-    install_write_guard()
+    try:
+        initialize()
+        # The contained venv runtime enters here (Boardmodeler.cmd sets SPICE_MAKER_ROOT
+        # and runs ``python -m boardmodeler.cli``); a repository checkout installs nothing.
+        install_write_guard()
+    except (OSError, ValueError) as exc:
+        print(f"Spice Maker cannot use this folder: {exc}", file=sys.stderr)
+        return 1
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.command in (None, "version"):
-        if args.command == "version" and getattr(args, "json", False):
+    if args.command is None:
+        from boardmodeler.terminal_menu import run_menu
+
+        return run_menu()
+
+    if args.command == "version":
+        if getattr(args, "json", False):
             print(json.dumps({"tool": "boardmodeler", "version": __version__}, indent=2))
         else:
             print(f"boardmodeler {__version__}")
@@ -1321,18 +1454,27 @@ def main(argv: list[str] | None = None) -> int:
             print(_render_doctor_human(payload))
         return 0
 
-    if args.command == "ui":
-        from boardmodeler.ui.app import main as ui_main
+    if args.command == "setup":
+        if getattr(args, "json", False):
+            from boardmodeler.settings_summary import describe_settings
+
+            print(json.dumps(describe_settings(load_config()), indent=2))
+            return 0
+        from boardmodeler.setup_wizard import main as setup_main
 
         forwarded: list[str] = []
-        if getattr(args, "installer", False):
-            forwarded.append("--installer")
-        return ui_main(forwarded)
-
-    if args.command == "setup":
-        from boardmodeler.ui.setup_dialog import main as setup_main
-
-        return setup_main(["--json"] if getattr(args, "json", False) else [])
+        for option, value in (
+            ("--ltspice", args.ltspice),
+            ("--model-dir", args.model_dir),
+            ("--provider", args.provider),
+            ("--internet", args.internet),
+            ("--key-env", args.key_env),
+        ):
+            if value is not None:
+                forwarded.extend((option, value))
+        if args.yes:
+            forwarded.append("--yes")
+        return setup_main(forwarded)
 
     if args.command == "run" and args.run_command == "tests":
         return _cmd_run_tests(args)

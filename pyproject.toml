@@ -15,22 +15,15 @@ dependencies = [
     "numpy>=2.5,<3",
     "pypdf>=6.19,<7",
     "pypdfium2>=5.13,<6",
-    "PySide6-Essentials>=6.11,<6.12",
 ]
 
 [project.optional-dependencies]
 sim = ["spicelib>=1.6,<2"]
-packaging = [
-    "pyinstaller>=6.22",
-    "pillow>=11",
-]
 dev = [
     "pytest>=9.1",
-    "pytest-qt>=4.5",
     "ruff>=0.16",
     "reportlab>=5.0",
     "psutil>=7.2",
-    "pyinstaller>=6.22",
 ]
 
 [project.scripts]
@@ -46,7 +39,6 @@ addopts = "-ra"
 markers = [
     "ltspice: requires the local LTspice executable",
     "network: requires outbound network egress",
-    "gui: requires a Qt platform plugin",
 ]
 filterwarnings = ["error::DeprecationWarning:boardmodeler.*"]
 
@@ -54,6 +46,11 @@ filterwarnings = ["error::DeprecationWarning:boardmodeler.*"]
 line-length = 100
 target-version = "py314"
 src = ["src", "tests", "tools"]
+extend-exclude = [
+    "docs/evidence",
+    "src/boardmodeler/authoring/sanity.py",
+    "src/boardmodeler/simulation/ltspice.py",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]

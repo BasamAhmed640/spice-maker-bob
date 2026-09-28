@@ -77,17 +77,13 @@ has established the requested channel behavior. No inferred eye/BER/protocol PAS
 
 ## Shared editions and downloads
 
-`build_flavor.py` selects the Bob-only catalog. Both repositories otherwise use the same
-source, tests and packaging. `python tools/sync_shared_core.py <other-checkout>` checks
-drift; `--apply` copies shared files while retaining that flavor. The backend and setup
-reject providers absent from the edition's catalog.
+`build_flavor.py` selects the Bob-only catalog. The reviewed core remains identical
+between repositories; `python tools/shared_core.py --compare <other-checkout>` checks
+it. The backend and setup reject providers absent from the edition's catalog.
 
-`installer/build.ps1 -Version 1.1.0` builds the animated Velopack installer and an easy
-download ZIP containing **Install.exe**, a short readme and SHA256SUMS.txt. Install.exe
-is byte-identical to the normal Setup.exe, so the existing pepper animation is preserved.
-Python is bundled; LTspice and Bob Shell remain separate prerequisites. The two editions
-use separate package IDs/install directories. GitHub's Windows download workflow can
-rebuild the ZIP from source. Builds are unsigned unless a signing step is configured.
+Each repository ships a source ZIP with `Setup.cmd`, one local `.venv`, and a text
+menu. Setup checks downloaded Python and package hashes. LTspice and, in the Bob
+edition, Bob Shell remain separate prerequisites.
 
 Several limits can share a simulation at the same operating point. Each row is judged
 individually from that measured value, and the model card and results.json totals count

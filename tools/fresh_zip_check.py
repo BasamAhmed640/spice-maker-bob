@@ -15,7 +15,7 @@ Steps, each recorded as PASS/FAIL/SKIP with its wall time in the verdict JSON:
 2. extract it into a new folder under ``--work``, refusing any member that would land
    outside that folder;
 3. ``py -3.14 -m venv .venv`` inside the extracted copy;
-4. ``pip install -r requirements.txt`` (the pinned list);
+4. ``pip install --require-hashes --only-binary=:all: -r requirements.txt``;
 5. ``doctor --json`` under the startup probe below: an audit hook plus stat-level
    wrappers record every file, directory, glob, registry or process access that names
    LTspice or starts under a known LTspice install root. It must record nothing, and
@@ -206,10 +206,9 @@ def _emit(result: dict[str, Any]) -> None:
 
 
 def startup_probe() -> int:
-    """Import the app, run ``doctor --json``, read settings, import the UI; report accesses."""
+    """Import the app, run ``doctor --json``, read settings and terminal modules."""
     import importlib
     import importlib.util
-    import pkgutil
 
     spec = importlib.util.find_spec("boardmodeler")
     own = tuple(spec.submodule_search_locations or ()) if spec else ()
@@ -231,32 +230,21 @@ def startup_probe() -> int:
     config = importlib.import_module("boardmodeler.config")
     loaded = config.load_config()
     result["config_ltspice_path"] = loaded.ltspice.path
-    for name in ("boardmodeler.settings_summary", "boardmodeler.ui.setup_dialog"):
-        with contextlib.suppress(ImportError):
-            describe = getattr(importlib.import_module(name), "describe_settings", None)
-            if describe is not None:
-                result["settings_ltspice_path"] = describe(loaded).get("ltspice_path")
-                break
+    describe = importlib.import_module("boardmodeler.settings_summary").describe_settings
+    result["settings_ltspice_path"] = describe(loaded).get("ltspice_path")
     ltspice = importlib.import_module("boardmodeler.simulation.ltspice")
     result["locate_reason"] = ltspice.locate_outcome().reason
 
-    ui = importlib.import_module("boardmodeler.ui")
     imported: list[str] = []
     errors: dict[str, str] = {}
-    for module in sorted(m.name for m in pkgutil.iter_modules(ui.__path__)):
+    for module in ("boardmodeler.setup_wizard", "boardmodeler.terminal_menu"):
         try:
-            importlib.import_module(f"boardmodeler.ui.{module}")
+            importlib.import_module(module)
             imported.append(module)
         except Exception as exc:
             errors[module] = f"{type(exc).__name__}: {exc}"
-    result["ui_imported"] = imported
-    result["ui_import_errors"] = errors
-    try:
-        from PySide6.QtWidgets import QApplication
-
-        result["qt_application_created"] = QApplication.instance() is not None
-    except ImportError:
-        result["qt_application_created"] = None
+    result["terminal_imported"] = imported
+    result["terminal_import_errors"] = errors
     result["events"] = list(recorder.events)
     _emit(result)
     return 0
@@ -273,7 +261,7 @@ def configured_run(exe: str) -> int:
     from boardmodeler.simulation.raw import read_raw
 
     config = load_config()
-    config.ltspice.path = exe  # ui/setup_dialog.py's Save: the field, then save_config()
+    config.ltspice.path = exe  # the setup wizard saves this same field
     saved = save_config(config)
     outcome = ltspice.locate_outcome()
     result: dict[str, Any] = {
@@ -323,8 +311,8 @@ def probe_verdict(result: dict[str, Any] | None) -> tuple[bool, str]:
         problems.append(f"doctor did not report 'not configured': {section}")
     if not section.get("setup_required"):
         problems.append("doctor did not ask for SETUP")
-    if result.get("qt_application_created"):
-        problems.append("importing the UI created a QApplication")
+    if result.get("terminal_import_errors"):
+        problems.append(f"terminal imports failed: {result['terminal_import_errors']}")
     return (not problems), "; ".join(problems) or "no LTspice access; doctor: not configured"
 
 
@@ -340,7 +328,6 @@ def child_environment(root: Path | None = None) -> dict[str, str]:
         if name.upper() not in _DROPPED_NAMES and not _SECRET_NAME.search(name)
     }
     env["PYTHONUTF8"] = "1"
-    env["QT_QPA_PLATFORM"] = "offscreen"
     if root is not None:
         env["SPICE_MAKER_ROOT"] = str(root)
     return env
@@ -499,6 +486,8 @@ def fresh_check(args: argparse.Namespace) -> int:
                 "install",
                 "--disable-pip-version-check",
                 "--no-input",
+                "--require-hashes",
+                "--only-binary=:all:",
                 "-r",
                 "requirements.txt",
             ],
@@ -511,7 +500,7 @@ def fresh_check(args: argparse.Namespace) -> int:
                 "pip_install",
                 "PASS",
                 time.perf_counter() - started,
-                "pip install -r requirements.txt",
+                "pip install --require-hashes --only-binary=:all: -r requirements.txt",
             )
         else:
             verdict.record("pip_install", "FAIL", time.perf_counter() - started, output[-2000:])
@@ -535,7 +524,7 @@ def fresh_check(args: argparse.Namespace) -> int:
             time.perf_counter() - started,
             detail,
             events=(probe or {}).get("events", []),
-            ui_import_errors=(probe or {}).get("ui_import_errors", {}),
+            terminal_import_errors=(probe or {}).get("terminal_import_errors", {}),
         )
 
         if args.ltspice:
