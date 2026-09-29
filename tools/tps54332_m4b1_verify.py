@@ -25,9 +25,6 @@ from typing import Any
 
 import numpy as np
 
-os.environ["BOARDMODELER_NO_NETWORK"] = "1"
-os.environ["HARNESS_WORKERS"] = "1"
-
 from boardmodeler.authoring.buck_system_fixtures import (
     BuckBench,
     BuckBenchParts,
@@ -582,7 +579,16 @@ def _run_one(
     return record
 
 
+def _pin_environment() -> None:
+    """Pin this run offline and serial. Only the script does this, never an import:
+    the test module imports this file, and a pin set at import would switch the
+    network off for every other test in the same session."""
+    os.environ["BOARDMODELER_NO_NETWORK"] = "1"
+    os.environ["HARNESS_WORKERS"] = "1"
+
+
 def main() -> int:
+    _pin_environment()
     args = _args()
     exe, requirements, bindings, out = _validate(args)
     spec = load_tps54320_spec(requirements, bindings, part=PART, subckt=PART)

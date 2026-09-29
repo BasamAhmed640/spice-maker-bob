@@ -1034,6 +1034,7 @@ def test_each_operating_point_keeps_its_own_row_status(
     result, _events, _wall = run(
         tmp_path,
         subckt="SYNTH_IO",
+        family="linear_regulator",  # nothing in the fixture names a family; the operator does
         requirements_json=requirements_path,
         bindings_json=bindings_path,
         max_iterations=1,
@@ -1144,6 +1145,7 @@ def test_rows_sharing_one_case_get_their_own_verdicts(
     result, _events, _wall = run(
         tmp_path,
         subckt="SYNTH_IO",
+        family="linear_regulator",  # nothing in the fixture names a family; the operator does
         requirements_json=requirements_path,
         bindings_json=bindings_path,
         max_iterations=1,

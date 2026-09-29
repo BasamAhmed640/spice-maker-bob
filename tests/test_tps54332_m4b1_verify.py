@@ -9,6 +9,11 @@ from boardmodeler.authoring.spec import load_tps54320_spec
 
 @pytest.fixture(scope="module")
 def rows():
+    if not (verify.FROZEN_REQUIREMENTS.is_file() and verify.FROZEN_BINDINGS.is_file()):
+        pytest.skip(
+            "the frozen TPS54332 spec is local-only (models/ is git-ignored) and is not "
+            "in this checkout"
+        )
     spec = load_tps54320_spec(
         verify.FROZEN_REQUIREMENTS,
         verify.FROZEN_BINDINGS,
