@@ -86,9 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if problems else 0
     other = args.compare.resolve()
     mine, theirs = current(), current(other)
-    drift = sorted(
-        name for name in set(mine) | set(theirs) if mine.get(name) != theirs.get(name)
-    )
+    drift = sorted(name for name in set(mine) | set(theirs) if mine.get(name) != theirs.get(name))
     print("\n".join(f"differs: {name}" for name in drift) or f"identical: {len(mine)} files")
     return 1 if drift else 0
 

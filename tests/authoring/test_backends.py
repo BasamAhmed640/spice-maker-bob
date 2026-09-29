@@ -191,8 +191,17 @@ def test_argv_matches_the_documented_bob_run_shape(
     assert recorder.calls[0]["env"]["BOB_API_KEY"] == SENTINEL_KEY
     assert SENTINEL_KEY not in " ".join(recorder.calls[0]["argv"])
     assert set(recorder.calls[0]["env"]) == {
-        "PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
-        "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "TEMP", "TMP", "TMPDIR", "BOB_API_KEY",
+        "PATH",
+        "HOME",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "BOB_API_KEY",
     }
 
 

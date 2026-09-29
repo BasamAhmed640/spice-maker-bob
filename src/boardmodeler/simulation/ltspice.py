@@ -172,6 +172,7 @@ BATCH_RESOLUTION_NOTES = (
     "-I is unsupported (GUI modal hang), .step is unsupported (concatenated raw)"
 )
 
+
 @dataclass(frozen=True)
 class LtspiceInstall:
     """A located LTspice executable and how it was found."""

@@ -367,11 +367,16 @@ def author_model(
         if problem:
             request_text += "\nRepair these structural errors: " + problem
             if previous_model:
-                request_text += "\nPrevious library to revise:\n```spice\n" + previous_model + "\n```"
+                request_text += (
+                    "\nPrevious library to revise:\n```spice\n" + previous_model + "\n```"
+                )
         (folder / "prompt.md").write_text(request_text, encoding="utf-8")
         progress(f"writing model, turn {attempt + 1}/{max_attempts}; no simulation test planning")
         result = backend.author(
-            AuthorRequest(request_text, folder, folder / "model", 1, subckt=spec.subckt, progress=progress), cancel
+            AuthorRequest(
+                request_text, folder, folder / "model", 1, subckt=spec.subckt, progress=progress
+            ),
+            cancel,
         )
         if cancel and cancel.is_set():
             raise ValueError("cancelled during sanity authoring")

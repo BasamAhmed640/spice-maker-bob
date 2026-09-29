@@ -64,9 +64,7 @@ class BobDirectProvider:
     def health(self, timeout_s: float) -> ProviderHealth:
         return ProviderHealth(ok=False, code=_DIRECT_CODE, detail=_DIRECT_DETAIL)
 
-    def extract(
-        self, request: ExtractionRequest, cancel: object = None
-    ) -> ExtractionResponse:
+    def extract(self, request: ExtractionRequest, cancel: object = None) -> ExtractionResponse:
         raise ProviderError(_DIRECT_CODE, _DIRECT_DETAIL)
 
 
@@ -103,7 +101,5 @@ class BobShellProvider:
     def health(self, timeout_s: float) -> ProviderHealth:
         return ProviderHealth(ok=False, code=_SHELL_CODE, detail=_SHELL_DETAIL)
 
-    def extract(
-        self, request: ExtractionRequest, cancel: object = None
-    ) -> ExtractionResponse:
+    def extract(self, request: ExtractionRequest, cancel: object = None) -> ExtractionResponse:
         raise ProviderError(_SHELL_CODE, _SHELL_DETAIL)

@@ -49,16 +49,22 @@ def package(repo: Path, edition: str) -> Path:
     )
     wheels = list((build / "env" / "wheels").glob(f"boardmodeler-{version}-*.whl"))
     if len(wheels) != 1:
-        raise RuntimeError("application wheel missing; run installer/vendor_env.py before packaging")
+        raise RuntimeError(
+            "application wheel missing; run installer/vendor_env.py before packaging"
+        )
     with zipfile.ZipFile(wheels[0]) as application_wheel:
         for source in (repo / "src" / "boardmodeler").rglob("*.py"):
             member = source.relative_to(repo / "src").as_posix()
             try:
                 packaged = application_wheel.read(member)
             except KeyError as error:
-                raise RuntimeError(f"application wheel lacks {member}; rebuild the environment") from error
+                raise RuntimeError(
+                    f"application wheel lacks {member}; rebuild the environment"
+                ) from error
             if packaged != source.read_bytes():
-                raise RuntimeError(f"application wheel is stale at {member}; rerun installer/vendor_env.py")
+                raise RuntimeError(
+                    f"application wheel is stale at {member}; rerun installer/vendor_env.py"
+                )
     payload = _zip_tree(
         repo / "dist" / "SpiceMaker", build / "payload.zip", {"data", "models", "library"}
     )

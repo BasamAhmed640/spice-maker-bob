@@ -68,8 +68,16 @@ def initialize() -> None:
 def bob_environment(env: dict[str, str]) -> dict[str, str]:
     """Give Bob an application-local profile for every invocation."""
     kept = (
-        "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "SYSTEMDRIVE",
-        "LANG", "LC_ALL", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
+        "PATH",
+        "PATHEXT",
+        "SYSTEMROOT",
+        "WINDIR",
+        "COMSPEC",
+        "SYSTEMDRIVE",
+        "LANG",
+        "LC_ALL",
+        "SSL_CERT_FILE",
+        "REQUESTS_CA_BUNDLE",
     )
     result = {name: env[name] for name in kept if name in env}
     profile = data_dir() / "bob-profile"
@@ -91,10 +99,24 @@ def bob_environment(env: dict[str, str]) -> dict[str, str]:
 def ltspice_environment() -> dict[str, str]:
     """Run the selected simulator with only OS and its established profile settings."""
     kept = (
-        "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "SYSTEMDRIVE",
-        "USERPROFILE", "HOME", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
-        "PROGRAMDATA", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE",
-        "PROCESSOR_IDENTIFIER", "PASTE_OMEGA", "CAPITAL_KILO",
+        "PATH",
+        "PATHEXT",
+        "SYSTEMROOT",
+        "WINDIR",
+        "COMSPEC",
+        "SYSTEMDRIVE",
+        "USERPROFILE",
+        "HOME",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "PROGRAMDATA",
+        "NUMBER_OF_PROCESSORS",
+        "PROCESSOR_ARCHITECTURE",
+        "PROCESSOR_IDENTIFIER",
+        "PASTE_OMEGA",
+        "CAPITAL_KILO",
     )
     result = {name: os.environ[name] for name in kept if name in os.environ}
     scratch = data_dir() / "temp"

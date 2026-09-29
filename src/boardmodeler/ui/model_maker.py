@@ -822,7 +822,9 @@ class ModelMakerWindow(QMainWindow):
 
     def _finish_stages(self, status: str, detail: str) -> None:
         """Reconcile the stage table with a terminal result or error."""
-        fallback = status == "UNKNOWN" and "template retained after bounded repair" in detail.lower()
+        fallback = (
+            status == "UNKNOWN" and "template retained after bounded repair" in detail.lower()
+        )
         for row in range(self.stages.rowCount()):
             stage = self._stage_item(row, 0).text()
             state = self._stage_item(row, 1)

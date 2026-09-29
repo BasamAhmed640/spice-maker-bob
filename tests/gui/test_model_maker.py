@@ -195,7 +195,8 @@ def test_unknown_template_fallback_finishes_author_and_judge_stages(qtbot, tmp_p
 
     stages = {
         window.stages.item(row, 0).text(): (
-            window.stages.item(row, 1).text(), window.stages.item(row, 2).text()
+            window.stages.item(row, 1).text(),
+            window.stages.item(row, 2).text(),
         )
         for row in range(window.stages.rowCount())
     }
