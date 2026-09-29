@@ -58,4 +58,4 @@ Bob build/test JSON key sets and exits for safe blocked inputs match its base. `
 
 ## Change size
 
-The initial Bob transition commit reported `120 files changed, 4075 insertions(+), 12967 deletions(-)` from `git show --shortstat`. Final branch diff statistics are recorded after the report is committed.
+The initial Bob transition commit reported `120 files changed, 4075 insertions(+), 12967 deletions(-)` from `git show --shortstat`. At the verified final source commit, `git diff --shortstat cf6b430..HEAD` reported `121 files changed, 4396 insertions(+), 12967 deletions(-)`.
