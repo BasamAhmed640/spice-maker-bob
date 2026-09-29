@@ -867,7 +867,7 @@ def _zero_coverage_inputs(tmp_path: Path) -> tuple[Path, Path]:
                 "class": "DOCUMENTED_LIMIT",
                 "criticality": "IMPORTANT",
                 "origin": "TEST_FIXTURE",
-                "statement": "The hysteresis is 100 mV.",
+                "statement": "The comparator hysteresis is 100 mV.",
                 "limits": {"max": 0.1, "unit": "V"},
                 "conditions": [],
                 "signal_refs": [],

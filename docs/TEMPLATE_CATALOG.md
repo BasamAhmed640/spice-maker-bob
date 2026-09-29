@@ -34,11 +34,12 @@ Each family, before it can be called built, needs:
    family-specific checks in the table are the minimum checklist to design, not
    already passing checks.
 
-The general pin model precedes family templates and applies to **any IC**. It checks
+The general pin model precedes family templates and is a foundation for ordinary components and never a substitute for a component's essential behavior. It checks
 absolute maximum ratings, required connections, floating inputs, back-power through
 I/O, and overloaded outputs using `PinDefinition` records and existing primitives.
-Processors and programmable logic are in scope at this pin/bank level, without
-emulating firmware or internal logic.
+Microcontrollers, FPGAs, CPLDs, processors and SoCs are out of scope (D-055): the engine
+cannot represent their required behavior, so they are blocked on every generation route,
+legacy AI and pin-only included. An unknown part is never treated as supported.
 
 ## The 22 families
 
@@ -56,7 +57,7 @@ emulating firmware or internal logic.
 | 10 | **Analog routing:** analog switches, muxes, crosspoints, digital pots | Template, including unpowered behavior and wiper position at power-up. | Check channel selection, on resistance, leakage, switching time, unpowered isolation, and initial wiper state. |
 | 11 | **Clocks and timing:** crystals, oscillators, PLLs, jitter cleaners, clock buffers/muxes/dividers, RTCs, timers | Passive crystal model; oscillator/buffer template with frequency, startup, output standard, drive and max load; PLLs as pin model plus lock time. | Check oscillator frequency/startup/edges and loaded output levels. Inject an excessive fanout fault, including five clock loads when beyond the cited drive rating. For PLLs, check supply/lock timing without claiming jitter or phase-noise fidelity. |
 | 12 | **Digital glue:** gates, buffers, Schmitt triggers, level translators, bus switches, GPIO expanders, latches, shift registers, debounce ICs | LTspice logic gates plus pin model, including power-up states and `Ioff`. | Check input thresholds, output levels/drive, delay, supply-domain behavior, power-up state, and powered-off isolation. |
-| 13 | **Processors and programmable logic:** MCUs, FPGAs, CPLDs, SoCs | Pin model per I/O bank, power-on/reset, strap pins, and sequencing rules. | Check bank supply compatibility, reset/strap levels, required connections, back-power and sequence alarms; do not assert firmware or FPGA logic behavior. |
+| 13 | **Processors and programmable logic:** MCUs, FPGAs, CPLDs, SoCs | **Blocked (D-055).** Not modeled on any route. | Refused with `unsupported_part_class`; nothing is authored. |
 | 14 | **Memory, ID and configuration:** EEPROM/FRAM, SPI flash, SRAM, ID ICs, config switches, JTAG routing | Pin model. | Check package pins, supply and I/O levels, power-up/default pins, required pull-ups/straps, and back-power alarms. |
 | 15 | **Wired interfaces:** RS-232/422/485, CAN, LIN, I2C/I3C, SPI, LVDS, USB/Ethernet PHYs | Transceiver template; PHYs as pin model. | Check transmit/receive levels and thresholds, failsafe/idle, enable timing, drive and powered-off behavior where specified. PHY protocol and signal-integrity claims need separate models. |
 | 16 | **Isolation:** digital isolators, optocouplers with current-transfer-ratio corners, isolated transceivers/amplifiers/modulators, isolated gate drivers | Template. | Check isolated supply domains, default outputs, propagation delay, drive or transfer ratio at cited corners, and prohibited cross-domain ties. |

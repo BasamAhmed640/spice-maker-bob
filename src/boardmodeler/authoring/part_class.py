@@ -139,6 +139,53 @@ _FAMILIES: Final[tuple[_Family, ...]] = (
     _family("Lattice ECP5", _FPGA, prefixes=("ecp5", "lfe5u")),
     _family("Lattice iCE40", _FPGA, prefixes=("ice40",)),
     _family("Lattice MachXO", _FPGA, prefixes=("machxo", "lcmxo")),
+    # Added with the support gate: more written families of parts the engine cannot represent.
+    _family("NXP LPC and i.MX", _MICROCONTROLLER, prefixes=("lpc[0-9]", "imx[0-9]", "kinetis")),
+    _family(
+        "Microchip PIC32, dsPIC and SAM",
+        _MICROCONTROLLER,
+        prefixes=(
+            "pic32",
+            "dspic",
+            "samd[0-9]",
+            "same[0-9]",
+            "samc[0-9]",
+            "sam[3-9][0-9]",
+            "atsam",
+        ),
+    ),
+    _family("Renesas RA and RL78", _MICROCONTROLLER, prefixes=("r7fa[0-9]", "r5f[0-9]", "rl78")),
+    _family(
+        "Texas Instruments MCUs and wireless MCUs",
+        _MICROCONTROLLER,
+        prefixes=(
+            "tms570",
+            "tm4c[0-9]",
+            "msp432",
+            "cc13[0-9][0-9]",
+            "cc26[0-9][0-9]",
+            "cc32[0-9][0-9]",
+        ),
+    ),
+    _family(
+        "Texas Instruments DSPs and Sitara processors",
+        _UNSUPPORTED,
+        prefixes=("tms320", "am335", "am437", "am57[0-9][0-9]"),
+    ),
+    _family("STMicroelectronics STM8", _MICROCONTROLLER, prefixes=("stm8",)),
+    _family("Nordic nRF51, nRF53 and nRF91", _MICROCONTROLLER, prefixes=("nrf5[13]", "nrf91")),
+    _family("Silicon Labs EFM32 and EFR32", _MICROCONTROLLER, prefixes=("efm32", "efr32", "ezr32")),
+    _family("Infineon XMC and PSoC", _MICROCONTROLLER, prefixes=("xmc[0-9]", "psoc", "cy8c")),
+    _family("Espressif ESP8266", _MICROCONTROLLER, prefixes=("esp8266", "esp8285")),
+    _family("GigaDevice GD32", _MICROCONTROLLER, prefixes=("gd32",)),
+    _family("Gowin FPGAs", _FPGA, prefixes=("gw1n", "gw2a", "gw5a")),
+    _family(
+        "Microchip and Microsemi FPGAs",
+        _FPGA,
+        prefixes=("polarfire", "igloo", "smartfusion", "proasic"),
+    ),
+    _family("Intel Stratix, Arria and Agilex", _FPGA, prefixes=("stratix", "arria", "agilex")),
+    _family("AMD Zynq", _UNSUPPORTED, prefixes=("zynq",)),
 )
 
 #: Digital-only words in the document's own text (its title/keywords). Each is a
@@ -159,6 +206,23 @@ _TEXT_RULES: Final[tuple[tuple[re.Pattern[str], PartKind, str], ...]] = (
         re.compile(r"(?<![a-z0-9])processor cores?(?![a-z0-9])"),
         _UNSUPPORTED,
         "a processor core",
+    ),
+    (
+        re.compile("(^|[^a-z0-9])system[- ]on[- ](chip|module)s?($|[^a-z0-9])"),
+        _UNSUPPORTED,
+        "a system-on-chip or system-on-module",
+    ),
+    (
+        re.compile(
+            "(^|[^a-z0-9])(application|media|network|graphics|digital signal) processors?($|[^a-z0-9])"
+        ),
+        _UNSUPPORTED,
+        "a processor",
+    ),
+    (
+        re.compile("(^|[^a-z0-9])single[- ]board computers?($|[^a-z0-9])"),
+        _UNSUPPORTED,
+        "a single-board computer",
     ),
 )
 

@@ -513,3 +513,34 @@ synthetic specs (SW and AVG) and for the real TPS54332 values, and a real build 
 frozen TPS54332 spec delivered library sha256 `21b3c7f1…`, the frozen SW library, with
 12 PASS, 4 FAIL, 41 UNKNOWN and 49 NOT_APPLICABLE unchanged in kind. Routing, equations,
 scoring, status names, providers and the interface are untouched.
+
+## D-055 — Support gate: blocked classes on every route, unknown never supported (2026-09-28)
+
+Implements the owner's scope statement recorded in D-054.
+
+1. `models/support.py::decide_support` is the one place that decides what may be claimed for a
+   part. Its states are `blocked_class`, `unclassified`, `unsupported_family` and `supported`,
+   and it says which of three routes may run: `behavioral`, `pin_only` and `legacy_ai`.
+2. Microcontrollers, FPGAs, CPLDs, processors and SoCs are blocked on every route, legacy AI
+   and pin-only included. `authoring/part_class.py` gained 15 written families and text rules
+   for system-on-chip, system-on-module, application, media, network, graphics and digital
+   signal processors, and single-board computers. The catalog no longer calls this class
+   in scope.
+3. A part is `supported` only when a registered behavioural implementation positively matches
+   it, every essential input of that implementation is cited rather than defaulted, and every
+   essential behaviour has an independent bound test. Registered so far: the peak-current
+   buck. Support is not a pass: the four failing TPS54332 rows stay FAIL.
+4. A part nothing identifies is `unclassified` and is refused on every route. A part read as
+   an ordinary family with no implementation is `unsupported_family`: closed to `behavioral`,
+   open only to the explicit limited routes. The family is read from the part number, the
+   datasheet title and the first cited rows, because metadata titles are often "untitled".
+5. `MakeModelRequest.engine` chooses the route. `legacy_ai` is the default and is today's
+   agent authoring, unchanged, and it never declares support. `behavioral` builds the code
+   candidate and judges it in LTspice with no backend and no agent turn, for supported parts
+   only. `pin_only` is reserved and refuses with `pin_only_unavailable` until the pin builder
+   and a confirmed pin table exist. No engine falls back to another.
+6. Every decision is saved as `support-decision.json`, including refusals.
+
+Limits: the vocabulary is keywords, not proof, so unclassified refusals will be common until
+it and the pin-signature rules grow; that is intended. The command line and the interface
+do not expose `--engine` yet and still use `legacy_ai`.

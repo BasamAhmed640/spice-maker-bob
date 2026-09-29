@@ -149,6 +149,8 @@ CHARACTERISTICS_NAME = "characteristics.json"
 HARNESS_REPORT_NAME = "harness-report.json"
 RESULTS_NAME = "results.json"
 TIMING_NAME = "run-timing.json"
+SUPPORT_RECORD_NAME = "support-decision.json"
+ENGINES = ("legacy_ai", "behavioral", "pin_only")
 DESIGN_RECORD_NAME = "model-design.json"
 EXAMPLE_NAME = "EXAMPLE.cir"
 
@@ -249,6 +251,12 @@ class MakeModelRequest:
     reinforce_timeout_s: float | None = 45.0
     #: Low-level API remains full by default; the GUI defaults to sanity mode.
     verification: str = "full"
+    #: Which generation route may run. legacy_ai is the agent authoring that has always
+    #: been the default; behavioral is code-built with no agent turn and runs only for a
+    #: part the support decision marks supported; pin_only is separately requested and
+    #: limited. Every route is refused for a blocked or unclassified part, and none is a
+    #: fallback for another.
+    engine: str = "legacy_ai"
 
 
 @dataclass(frozen=True)
@@ -1252,6 +1260,10 @@ def _checked(request: MakeModelRequest) -> MakeModelRequest:
         )
     if request.verification not in ("full", "sanity"):
         raise ValueError("verification must be full or sanity")
+    if request.engine not in ENGINES:
+        raise ValueError(f"engine must be one of {ENGINES}, got {request.engine!r}")
+    if request.engine == "behavioral" and request.verification != "full":
+        raise ValueError("the behavioral route judges with LTspice and needs verification=full")
     if request.max_iterations is not None and request.max_iterations < 1:
         raise ValueError(f"max_iterations must be >= 1 or None, got {request.max_iterations}")
     if request.stall_patience < 1:
@@ -1429,6 +1441,7 @@ class _Run:
         self.template_seed: dict[str, Any] | None = None
         self.template_seed_bytes: bytes | None = None
         self.template_design: Any = None
+        self.support: Any = None
         self.template_seed_judge_s: float | None = None
 
     # ------------------------------------------------------------------ stages
@@ -1906,7 +1919,103 @@ class _Run:
         self._on_report(report)
         return report
 
+    def support_gate(self) -> None:
+        """Refuse before any generation when the requested route may not run for this part.
+
+        The decision is saved whether or not it allows the route: a refusal, a limited route
+        and a supported claim are all facts the deliverables should carry.
+        """
+        from boardmodeler.models.support import decide_support
+
+        title = "" if self.record is None else self.record.title
+        decision = decide_support(
+            self.request.part, title=title, spec=self.spec, unverified=self.unverified
+        )
+        self.support = decision
+        route = self.request.engine
+        record = {
+            "schema_version": 1,
+            "record_kind": "support_decision",
+            "part": self.request.part,
+            "engine": route,
+            "state": decision.state,
+            "family": decision.family,
+            "implementation": decision.implementation,
+            "reason": decision.reason,
+            "missing": list(decision.missing),
+            "routes": {
+                name: {"allowed": verdict.allowed, "reason": verdict.reason}
+                for name, verdict in decision.routes.items()
+            },
+            "note": (
+                "Support means represented, cited and independently tested. It is not a pass: "
+                "verdicts come from the LTspice rows."
+            ),
+        }
+        with contextlib.suppress(OSError):
+            text = json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False)
+            self._write_text(self.out_dir / SUPPORT_RECORD_NAME, text + chr(10))
+        if not decision.allows(route):
+            raise _Stop("author", Status.BLOCKED.value, decision.refusal(route))
+
+    def _author_behavioral(self, cancel: threading.Event | None) -> None:
+        """Judge a code-built candidate with the LTspice harness: no agent turn, no fallback."""
+        install = locate()
+        if install is None:
+            self.log.emit("author", "failed", LTSPICE_MISSING)
+            self.status, self.detail = Status.BLOCKED.value, LTSPICE_MISSING
+            return
+        prepare_workdir(spec=self.spec, subckt=self.request.subckt, workdir=self.workdir)
+        request = BuildRequest(
+            part=self.request.part,
+            subckt=self.request.subckt,
+            spec=self.spec,
+            workdir=self.workdir,
+            ltspice=install.path,
+            backend=UnavailableBackend("behavioral", "no agent runs on the behavioral route"),
+            max_iterations=self.request.max_iterations,
+            stall_patience=self.request.stall_patience,
+            turn_timeout_s=self.request.turn_timeout_s,
+            timeout_s=self.request.timeout_s,
+        )
+        path = model_file(self.workdir, self.request.subckt)
+        path.unlink(missing_ok=True)  # a code-built route regenerates; it never reuses a model
+        seed_report = self._seed_buck_template(request, path, cancel)
+        if seed_report is None:
+            detail = (
+                "behavioral_route_no_candidate: the matched implementation produced no "
+                "candidate; nothing was authored"
+            )
+            self.log.emit("author", "failed", detail)
+            self.status, self.detail = Status.BLOCKED.value, detail
+            return
+        passed = seed_report.passed()
+        self.outcome = BuildOutcome(
+            status=Status.PASS.value if passed else Status.UNKNOWN.value,
+            iterations=0,
+            report=seed_report,
+            history=("code-built candidate judged by the LTspice harness; no agent turn",),
+            detail=(
+                "every bound simulator row passed; zero agent turns"
+                if passed
+                else "code-built candidate judged; failing and unknown rows remain open; "
+                "no agent repair on this route"
+            ),
+        )
+        self.report = seed_report
+        self.log.emit("author", "ok", "code-built candidate judged; zero agent turns", {"turns": 0})
+
     def author(self, cancel: threading.Event | None) -> None:
+        if self.request.engine == "pin_only":
+            raise _Stop(
+                "author",
+                Status.BLOCKED.value,
+                "pin_only_unavailable: the pin-only builder needs a confirmed pin table and "
+                "is not built yet; nothing was authored and the agent route was not used instead",
+            )
+        if self.request.engine == "behavioral":
+            self._author_behavioral(cancel)
+            return
         self.log.emit("author", "running", f"checking the {self.request.backend_name!r} backend")
         backend = self.backend or build_backend(self.request)
         self.backend = backend
@@ -2587,6 +2696,8 @@ def make_model(
             run.extract(cancel)
         with ledger.stage("bind"):
             run.bind(cancel)
+        with ledger.stage("gate"):
+            run.support_gate()
         with ledger.stage("author"):
             run.author(cancel)
         with ledger.stage("save"):

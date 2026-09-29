@@ -1,3 +1,41 @@
+## 2026-09-28 — engine step 2: the support gate, blocked classes on every route (D-055)
+
+Second step of the engine review the owner named the north star. One decision now sits in
+front of every generation route: may the engine claim to support this part? A microcontroller,
+FPGA, CPLD, processor or SoC is refused on every route, legacy AI included. A part nothing
+identifies is refused, not assumed fine. A part is called supported only when a behavioural
+implementation positively matches it, every essential input is cited and every essential
+behaviour has an independent bound test; today that is the peak-current buck alone. Support is
+not a pass: verdicts still come from the LTspice rows. This does not establish universal
+coverage.
+
+| Check | Result |
+| --- | --- |
+| New tests | 193 passed: 185 in `tests/models/test_support.py` (families, blocked classes, wording, the registry, refusals on every route) and 8 in `tests/pipeline/test_support_gate.py` |
+| Real build, frozen TPS54332 spec, `engine="behavioral"`, real LTspice 26, agent backend construction and socket connect both made to fail the test | passed in 122.1 s (the general edition took 117.2 s). Bob: read 2.1 s, extract 2.4 s (supplied spec), bind 0.06 s, gate 0.02 s, author 117.5 s (all LTspice judging), save 0.04 s; zero author turns; delivered library sha256 `21b3c7f1…` (the frozen SW library); 12 PASS, 4 FAIL, 41 UNKNOWN, 49 NOT_APPLICABLE; the four FAIL rows stay |
+| Fast suite, Bob | 1485 passed, 49 failed, 19 skipped, 260 deselected in one run; the 49 are the same test ids as the untouched baseline (internet access is off in the local config) |
+| Hygiene | `ruff check` and `ruff format --check` clean on every file this step changed; `git diff --check` clean; shared core 44 files intact and identical across editions. The repo-wide `ruff format --check` still lists nine unformatted files that were already on main (`installer/package_portable.py`, `authoring/sanity.py`, `providers/bob.py`, `simulation/ltspice.py`, `storage.py`, `ui/model_maker.py`, `tests/authoring/test_backends.py`, `tests/gui/test_model_maker.py`, `tools/shared_core.py`); `ruff check .` passes |
+
+What the gate does, in order. `read` still refuses a class the part number or the datasheet
+title names, before extraction. After `bind`, `models/support.py` decides with the cited
+rows as well, writes `support-decision.json` (also for a refusal), and refuses the route
+when it is closed: blocked class on all three routes, unclassified on all three, an ordinary
+family with no implementation on `behavioral` only. `legacy_ai` stays the default and is
+today's agent authoring, unchanged, and it never declares support. `pin_only` is reserved and
+refuses with `pin_only_unavailable`. No route falls back to another.
+
+Not done, stated plainly:
+
+- Only one implementation is registered (the peak-current buck). An op amp, an LDO or a
+  comparator has no behavioural implementation yet, so on `behavioral` each is refused as
+  `unsupported_family`; no breadth across families is demonstrated by this step.
+- The vocabulary that identifies a family is keywords, not proof. An ordinary part whose
+  number, title and first cited rows name no family is refused as unclassified on every route.
+- `--engine` is not exposed on the command line or in the window yet; both still use
+  `legacy_ai`.
+- Provider calls are not counted in the timing record, and no live provider call was made.
+- One Bob test fixture (a zero-coverage spec in tests/pipeline/test_make_model.py) now says comparator hysteresis: the gate refuses a part nothing identifies, so a fixture with no family wording was refused before the stage it exercises. The gate was not changed.
+
 ## 2026-09-28 — engine step 1: typed buck design and exact provenance (D-054)
 
 First step of the engine review the owner named the north star, and behaviour-preserving.
