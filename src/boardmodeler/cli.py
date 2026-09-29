@@ -1206,70 +1206,203 @@ def _cmd_model_test(args: argparse.Namespace) -> int:
     return 1 if not ran or (args.strict and payload["status"] != "PASS") else 0
 
 
-def _cmd_model_open(args: argparse.Namespace) -> int:
-    """Read a Bob build's saved result; optional verification uses ``model test``'s path."""
+def _model_open_payload(out_dir: Path) -> dict[str, Any]:
+    """Read only recorded Bob artifacts, with the same fields as the general edition."""
+    from datetime import UTC, datetime
+
+    from boardmodeler.authoring.spec import SpecSet
     from boardmodeler.pipeline.make_model import MakeModelResult
     from boardmodeler.storage import local_path
 
-    try:
-        out_dir = local_path(args.out)
-        results_path = out_dir / "results.json"
-        saved = MakeModelResult.from_json(results_path.read_text(encoding="utf-8"))
-        subckt = (
-            saved.request.subckt
-            if saved.request is not None
-            else saved.lib_path.stem
-            if saved.lib_path is not None
-            else _sanitize_subckt(saved.part)
+    def modified_at(path: Path) -> str | None:
+        try:
+            return datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).isoformat(
+                timespec="seconds"
+            )
+        except OSError:
+            return None
+
+    def manifest_at(path: Path) -> str | None:
+        try:
+            recorded = json.loads(path.read_text(encoding="utf-8"))
+        except OSError, ValueError:
+            return modified_at(path)
+        claimed = recorded.get("created_utc") if isinstance(recorded, dict) else None
+        return (
+            claimed.strip() if isinstance(claimed, str) and claimed.strip() else modified_at(path)
         )
-        lib_path = out_dir / f"{subckt}.lib"
-        asy_path = out_dir / f"{subckt}.asy"
-        card_path = out_dir / "MODEL_CARD.md"
-        payload: dict[str, Any] = {
-            "tool": "boardmodeler",
-            "command": "model open",
-            "out_dir": str(out_dir),
-            "ok": True,
-            "reason": None,
-            "part": saved.part,
-            "subckt": subckt,
-            "datasheet": str(saved.request.datasheet) if saved.request is not None else None,
-            "status": saved.status,
-            "detail": saved.detail,
-            "counts": saved.counts,
-            "rows": [
-                {
-                    "req_id": row.req_id,
-                    "statement": row.statement,
-                    "required": row.required,
-                    "measured": row.measured,
-                    "status": row.status,
-                    "page": row.page,
-                }
-                for row in saved.rows
-            ],
-            "card_path": str(card_path) if card_path.is_file() else None,
-            "lib_path": str(lib_path),
-            "asy_path": str(asy_path),
-            "lib_exists": lib_path.is_file(),
-            "asy_exists": asy_path.is_file(),
-            "results_path": str(results_path),
-        }
-    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
-        payload = {
-            "tool": "boardmodeler",
-            "command": "model open",
-            "out_dir": str(args.out),
-            "ok": False,
-            "reason": f"could not read the saved model: {exc}",
-            "verification": None,
-            "verified": False,
-        }
+
+    payload: dict[str, Any] = {
+        "out_dir": str(out_dir),
+        "ok": False,
+        "reason": None,
+        "part": None,
+        "subckt": None,
+        "datasheet": None,
+        "status": None,
+        "detail": "",
+        "counts": {},
+        "rows": [],
+        "card_path": None,
+        "lib_path": None,
+        "asy_path": None,
+        "lib_exists": False,
+        "asy_exists": False,
+        "results_path": None,
+        "results_problem": None,
+        "manifest_path": None,
+        "manifest_at": None,
+        "verification_path": None,
+        "verification_at": None,
+    }
+    try:
+        directory = local_path(out_dir)
+    except (OSError, ValueError) as exc:
+        payload["reason"] = str(exc)
+        return payload
+    payload["out_dir"] = str(directory)
+    if not directory.is_dir():
+        payload["reason"] = f"not_a_directory: {directory} does not exist"
+        return payload
+
+    results = directory / "results.json"
+    card = directory / "MODEL_CARD.md"
+    report = directory / "harness-report.json"
+    spec = next(
+        (
+            path
+            for path in (
+                directory / "spec" / "characteristics.json",
+                directory / "build" / "spec" / "characteristics.json",
+            )
+            if path.is_file()
+        ),
+        None,
+    )
+    if not any(path.is_file() for path in (results, card, report)) and spec is None:
+        payload["reason"] = f"not_a_model_directory: {directory} has no saved model record"
+        return payload
+    payload["ok"] = True
+    payload["results_path"] = str(results) if results.is_file() else None
+    payload["card_path"] = str(card) if card.is_file() else None
+
+    saved = None
+    if results.is_file():
+        try:
+            saved = MakeModelResult.from_json(results.read_text(encoding="utf-8"))
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            payload["results_problem"] = (
+                f"results.json could not be read: {type(exc).__name__}: {exc}"
+            )
+    if saved is not None:
+        payload["part"] = saved.part or None
+        payload["status"] = saved.status
+        payload["detail"] = saved.detail
+        payload["counts"] = dict(saved.counts)
+        payload["rows"] = [
+            {
+                "req_id": row.req_id,
+                "statement": row.statement,
+                "required": row.required,
+                "measured": row.measured,
+                "status": row.status,
+                "page": row.page,
+            }
+            for row in saved.rows
+        ]
+        if saved.request is not None:
+            payload["subckt"] = saved.request.subckt or None
+            payload["datasheet"] = str(saved.request.datasheet)
+        if payload["card_path"] is None and saved.card_path is not None:
+            payload["card_path"] = str(saved.card_path) if saved.card_path.is_file() else None
+    if spec is not None and (payload["part"] is None or payload["subckt"] is None):
+        try:
+            frozen = SpecSet.from_json(spec.read_text(encoding="utf-8"))
+            payload["part"] = payload["part"] or frozen.part or None
+            payload["subckt"] = payload["subckt"] or frozen.subckt or None
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            payload["results_problem"] = payload["results_problem"] or (
+                f"spec could not be read: {type(exc).__name__}: {exc}"
+            )
+    if payload["subckt"] is None and saved is not None and saved.lib_path is not None:
+        payload["subckt"] = saved.lib_path.stem
+
+    if payload["subckt"]:
+        subckt = payload["subckt"]
+        lib = next(
+            (
+                path
+                for path in (
+                    directory / f"{subckt}.lib",
+                    directory / "model" / f"{subckt}.lib",
+                    directory / "build" / "model" / f"{subckt}.lib",
+                )
+                if path.is_file()
+            ),
+            None,
+        )
+        asy = directory / f"{subckt}.asy"
+        if saved is not None and saved.lib_path is not None and saved.lib_path.is_file():
+            lib = saved.lib_path
+        if saved is not None and saved.asy_path is not None and saved.asy_path.is_file():
+            asy = saved.asy_path
+        payload["lib_path"] = str(lib) if lib is not None else None
+        payload["asy_path"] = str(asy) if asy.is_file() else None
+        payload["lib_exists"] = lib is not None
+        payload["asy_exists"] = asy.is_file()
+
+    manifest = directory / "build" / "project.json"
+    payload["manifest_path"] = str(manifest) if manifest.is_file() else None
+    payload["manifest_at"] = manifest_at(manifest) if manifest.is_file() else None
+    payload["verification_path"] = str(report) if report.is_file() else None
+    payload["verification_at"] = modified_at(report) if report.is_file() else None
+    if saved is None:
+        payload["detail"] = payload["results_problem"] or ""
+    return payload
+
+
+def _print_model_open(payload: dict[str, Any]) -> None:
+    """Show the saved verdict and files without implying a new verification."""
+    if not payload["ok"]:
+        print(f"model open: {payload['reason']}")
+        return
+    print(
+        f"model open: {payload['part']} ({payload['subckt']}) — "
+        f"{payload['status'] or 'no recorded status'}; "
+        f"{len(payload['rows'])} recorded row(s)"
+        f"{' ' + str(payload['counts']) if payload['counts'] else ''}"
+    )
+    print(f"  {payload['out_dir']}")
+    print(
+        f"  model .lib present: {'yes' if payload['lib_exists'] else 'NO'}; "
+        f"symbol .asy present: {'yes' if payload['asy_exists'] else 'NO'}"
+    )
+    if payload["card_path"]:
+        print(f"  card: {payload['card_path']}")
+    if payload["results_problem"]:
+        print(f"  {payload['results_problem']}")
+    if payload["manifest_at"]:
+        print(f"  manifest written: {payload['manifest_at']}")
+    if payload["verification_at"]:
+        print(f"  last verification evidence: {payload['verification_at']}")
+    if payload["detail"]:
+        print(f"  recorded detail: {payload['detail'][:160]}")
+
+
+def _cmd_model_open(args: argparse.Namespace) -> int:
+    """Read a saved Bob model; ``--verify`` runs the same path as ``model test``."""
+    out_dir: Path = args.out
+    payload: dict[str, Any] = {
+        "tool": "boardmodeler",
+        "command": "model open",
+        **_model_open_payload(out_dir),
+    }
+    payload["verification"] = None
+    payload["verified"] = False
+    if not payload["ok"]:
         print(json.dumps(payload, indent=2) if args.json else f"model open: {payload['reason']}")
         return 1
 
-    payload["verification"] = None
-    payload["verified"] = False
     model_sha256 = None
     if args.verify:
         verification, ran, model_sha256 = _run_model_test(out_dir, timeout_s=args.timeout)
@@ -1278,21 +1411,11 @@ def _cmd_model_open(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(payload, indent=2))
     else:
-        print(
-            f"model open: {saved.part} ({subckt}) — {saved.status}; "
-            f"{len(saved.rows)} recorded row(s) {saved.counts}"
-        )
-        print(f"  {out_dir}")
-        print(
-            f"  model .lib present: {'yes' if payload['lib_exists'] else 'NO'}; "
-            f"symbol .asy present: {'yes' if payload['asy_exists'] else 'NO'}"
-        )
-        if payload["card_path"]:
-            print(f"  card: {card_path}")
-        if saved.detail:
-            print(f"  recorded detail: {saved.detail[:160]}")
+        _print_model_open(payload)
         if args.verify:
             _print_model_test(payload["verification"], model_sha256)
+            if not payload["verified"]:
+                print("  the verification did not run; nothing was claimed about this model")
     return 0 if not args.verify or payload["verified"] else 1
 
 

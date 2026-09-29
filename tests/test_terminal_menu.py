@@ -199,8 +199,18 @@ def test_bob_model_open_reads_saved_result_without_running_the_engine(
     (out / "MODEL_CARD.md").write_text("# LM358", encoding="utf-8")
     (out / "LM358.lib").write_text(".subckt LM358 IN OUT\n.ends", encoding="utf-8")
     (out / "LM358.asy").write_text("Version 4", encoding="utf-8")
+    (out / "build").mkdir()
+    (out / "build" / "project.json").write_text(
+        '{"created_utc": "2026-01-02T03:04:05+00:00"}', encoding="utf-8"
+    )
+    (out / "harness-report.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr("boardmodeler.storage.initialize", lambda: None)
     monkeypatch.setattr("boardmodeler.storage.install_write_guard", lambda: None)
+    monkeypatch.setattr(
+        cli,
+        "_run_model_test",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected test")),
+    )
 
     assert cli.main(["model", "open", "--out", str(out), "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
@@ -211,6 +221,39 @@ def test_bob_model_open_reads_saved_result_without_running_the_engine(
     assert payload["asy_exists"] is True
     assert payload["rows"][0]["req_id"] == "VOS"
     assert payload["lib_path"] == str(out / "LM358.lib")
+    assert payload["manifest_path"] == str(out / "build" / "project.json")
+    assert payload["manifest_at"] == "2026-01-02T03:04:05+00:00"
+    assert payload["verification_path"] == str(out / "harness-report.json")
+    assert payload["verification_at"] is not None
+    assert payload["verification"] is None
+    assert payload["verified"] is False
+    assert set(payload) == {
+        "tool",
+        "command",
+        "out_dir",
+        "ok",
+        "reason",
+        "part",
+        "subckt",
+        "datasheet",
+        "status",
+        "detail",
+        "counts",
+        "rows",
+        "card_path",
+        "lib_path",
+        "asy_path",
+        "lib_exists",
+        "asy_exists",
+        "results_path",
+        "results_problem",
+        "manifest_path",
+        "manifest_at",
+        "verification_path",
+        "verification_at",
+        "verification",
+        "verified",
+    }
 
 
 def test_bob_model_open_verify_uses_model_test_path(monkeypatch, tmp_path, capsys):
@@ -253,7 +296,28 @@ def test_bob_model_open_reports_damaged_results_plainly(monkeypatch, tmp_path, c
     monkeypatch.setattr("boardmodeler.storage.initialize", lambda: None)
     monkeypatch.setattr("boardmodeler.storage.install_write_guard", lambda: None)
 
-    assert cli.main(["model", "open", "--out", str(out)]) == 1
+    assert cli.main(["model", "open", "--out", str(out)]) == 0
     output = capsys.readouterr().out
-    assert "could not read the saved model" in output
+    assert "results.json could not be read" in output
+    assert "no recorded status" in output
     assert "Traceback" not in output
+
+
+def test_bob_model_open_rejects_an_empty_directory_with_the_full_schema(
+    monkeypatch, tmp_path, capsys
+):
+    out = tmp_path / "empty"
+    out.mkdir()
+    monkeypatch.setattr("boardmodeler.storage.initialize", lambda: None)
+    monkeypatch.setattr("boardmodeler.storage.install_write_guard", lambda: None)
+
+    assert cli.main(["model", "open", "--out", str(out), "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["reason"].startswith("not_a_model_directory:")
+    assert payload["part"] is None
+    assert payload["results_path"] is None
+    assert payload["manifest_path"] is None
+    assert payload["verification_path"] is None
+    assert payload["verification"] is None
+    assert payload["verified"] is False
