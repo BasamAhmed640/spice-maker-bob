@@ -671,3 +671,21 @@ stays outside `behavioral` until the probes take their ports from the pin roles.
 Limits: pin-only models one rail and one ground and uses shell defaults for drive, quiescent current
 and leakage (labelled on the card). Two parts (TPS54332, LM358) are built by behaviour; every other
 family reaches at most the limited routes until its rows are extracted and an implementation exists.
+
+Addendum (2026-09-29, after the live runs).
+
+6. The local routes are not stopped by the agent network pre-flight. `behavioral` and `pin_only`
+   never call the agent, so the INTERNET ACCESS switch governs them only where they read a datasheet
+   through the extraction provider. The LM358 datasheet alone builds by behaviour with the switch off
+   (25.4 s, no provider call).
+7. AI test planning belongs to the legacy route. A local route binds rows with the reviewed keyword
+   table and makes no planning call; `--plan-tests` asks for the planner explicitly. Reason: the
+   first live attempt on TPS54331 ran past 11 minutes, which is not a default anyone should pay.
+8. A test session may not be pinned by an import. A tool that pins `BOARDMODELER_NO_NETWORK` does it
+   in its entry point, and `tests/conftest.py` refuses a run in which importing a test module changes
+   it. This was the whole cause of the red automated checks (105 and 49 failures).
+
+Live results that bound the claims above: a charge pump (XD7660) reaches a limited pin-only model in
+about 158 s, most of it the extraction call; a 21-pin controller (LM5116) is withheld by the gate
+after a 348 s run; a second buck (TPS54331) is refused for missing cited limits and independent tests,
+not accepted on the strength of the buck template.

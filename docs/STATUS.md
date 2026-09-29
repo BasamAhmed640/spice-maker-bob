@@ -1,3 +1,45 @@
+## 2026-09-29 — engine step 3, second half: pin-only mode, live datasheet runs, automated checks green (D-057)
+
+Pin-only is a real route, the block list is wider, real datasheets have been run through the local
+routes with a live extraction, and the automated checks on `main` are green for the first time since
+2026-09-26. Support is still not a pass. Two families are built by code, one part each.
+
+| Check | Result |
+| --- | --- |
+| Live extraction, XD7660 charge pump, `--engine pin_only` (opencode_go, deepseek-v4.1-flash, one key) | UNKNOWN by design in 157.9 s: extract 154.5 s (4 tasks, 0 cache hits, 17 pages, 43 rows, 8 pins), gate 5 benches 2.9 s, other stages under 0.3 s; 12 checks pass, 1 unknown (no short-circuit rating cited), 0 fail; no agent turns |
+| Live extraction, LM5116 controller, `--engine pin_only` | BLOCKED, and correctly: the gate failed the current-conservation and quiet-when-clean checks on the 21-pin shell, so nothing was delivered and no other route ran. 347.9 s: extract 342.4 s (8 batches, 240 rows, 21 pins), gate stage 0.07 s, benches 4.2 s |
+| TPS54331 second buck, `--engine behavioral`, cached extraction, deterministic bind | refused as `unsupported_family` in 9 s: the buck implementation matches, but the rows do not cite the current limit or the enable threshold and no independent row covers switching frequency, current limit, soft start or enable/UVLO (6 of 112 rows bind deterministically) |
+| Pin-only on parts that already have behaviour | LM358 12 pass, 1 unknown, 0 fail; TPS54332 13 pass, 1 unknown, 0 fail |
+| LM358 from the datasheet PDF alone, internet switch off | built by the behavioural route in 25.4 s with no provider call; from the reviewed rows 29.0 s |
+| Automated checks on the pushed tips (`aed2bb0`) | ruff check, ruff format and the full pytest step all pass on this edition |
+
+The live runs in the table were made with the general edition build; the engine code is the same in this edition (mirrored, shared core identical).
+
+What changed.
+
+- `--engine pin_only`, the open-drain fix in the gate, and the wider block list (D-057). The local routes
+  are no longer stopped by the agent network pre-flight, because they never call the agent.
+- AI test planning is only on the legacy route. `--plan-tests` asks for it explicitly on a local
+  route; the first live attempt on TPS54331 ran past 11 minutes with nothing to show.
+- The red automated checks had one cause: `tools/tps54332_m4b1_verify.py` set
+  `BOARDMODELER_NO_NETWORK` when imported, and a test imports it, so every test collected in the same
+  session saw the network pinned off (49 failures in this edition, 105 in the general edition, plus 8 setup errors
+  because the frozen spec is git-ignored). The pin moved into the script entry point, the conftest now
+  refuses a run in which an import changes it, the test skips when the frozen spec is absent, and five
+  fixtures now declare the family the gate asks for. No product code changed for this.
+
+Not done, stated plainly.
+
+- One part per family, and TPS54331 is not a second supported buck. The explicit planning run is the
+  next thing to look at (the hand-off says where its output is).
+- The pin-only shell has one rail and one ground and clamps outputs to 0 V to the rail, so it cannot
+  represent the negative output of a voltage inverter such as XD7660; its card asks for the pin table
+  to be confirmed. LM5116 shows a multi-rail controller is withheld by the gate; the failing gate
+  report is not saved on a block, so the exact cause is not inspectable yet.
+- The op-amp probes fix the eight-pin dual pinout. The window exposes neither `--engine` nor
+  `--family`. Provider calls are not counted in the timing record.
+- The terminal-app refactor is a separate, later job.
+
 ## 2026-09-28 — engine step 3: a second family built by code, the pin shell merged, family read by points (D-056)
 
 The pin-shell work (viability gate, pin shell, in-model alarms, datasheet digest) is merged into the
