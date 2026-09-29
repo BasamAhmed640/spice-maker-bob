@@ -9,6 +9,7 @@ normal LTspice harness remains the sole electrical authority.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -22,12 +23,18 @@ from boardmodeler.authoring.spec import Characteristic, SpecSet
 from boardmodeler.domain.hashing import sha256_file
 
 __all__ = [
+    "DESIGN_SCHEMA_VERSION",
+    "RENDERER_VERSION",
+    "BuckDesign",
     "BuckMode",
     "BuckSeed",
     "ParameterOrigin",
     "PinMatch",
     "TemplateSeedError",
+    "design_from_spec",
+    "design_record_payload",
     "match_pins",
+    "render_library",
     "seed_from_spec",
 ]
 
@@ -91,6 +98,147 @@ class ParameterOrigin:
         }
 
 
+RENDERER_VERSION = "peak_current_buck_render_v1"
+DESIGN_SCHEMA_VERSION = 1
+_ORIGINS = ("cited_row", "derived_from_bounds", "template_default")
+_CITED_ORIGINS = ("cited_row", "derived_from_bounds")
+
+
+def _external_bench(mode: str) -> list[dict[str, Any]]:
+    """Bench parameters that belong to the fixture, never to the IC's datasheet."""
+    if mode != "AVG":
+        return []
+    return [
+        {
+            "name": "L_EXT",
+            "default": AVG_L_EXT_H,
+            "unit": "H",
+            "origin": "synthetic_bench_default",
+            "instance_override": True,
+        }
+    ]
+
+
+@dataclass(frozen=True)
+class BuckDesign:
+    """What to build, as data: physical pins, mode and every parameter with its origin.
+
+    A design holds no bench limit and no verdict. :func:`render_library` is a pure function
+    of it and of the renderer version, so one design always renders the same library bytes.
+    """
+
+    contract_id: str
+    contract_sha256: str
+    renderer_version: str
+    spec_digest: str
+    part: str
+    subckt: str
+    ports: tuple[str, ...]
+    parameters: tuple[ParameterOrigin, ...]
+    mode: BuckMode
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("SW", "AVG"):
+            raise TemplateSeedError(f"buck_template_invalid_mode: {self.mode!r}")
+        if not isinstance(self.subckt, str) or not _SUBCKT_NAME.fullmatch(self.subckt):
+            raise TemplateSeedError("buck_template_invalid_subckt")
+        if not self.ports or any(not isinstance(port, str) or not port for port in self.ports):
+            raise TemplateSeedError("buck_design_invalid_ports")
+        if len({port.upper() for port in self.ports}) != len(self.ports):
+            raise TemplateSeedError("buck_design_duplicate_ports")
+        pins = match_pins(self.ports)
+        if not pins.ok:
+            raise TemplateSeedError(f"buck_design_pins: {pins.reason}")
+        if tuple(item.name for item in self.parameters) != _PARAMETER_NAMES:
+            raise TemplateSeedError("buck_design_parameter_set")
+        for item in self.parameters:
+            if isinstance(item.value, bool) or not isinstance(item.value, int | float):
+                raise TemplateSeedError(f"buck_design_value_type: {item.name}")
+            if not math.isfinite(item.value):
+                raise TemplateSeedError(f"buck_design_nonfinite: {item.name}")
+            if item.origin not in _ORIGINS:
+                raise TemplateSeedError(f"buck_design_origin: {item.name}: {item.origin!r}")
+            sourced = item.row_id is not None and item.page is not None and bool(item.excerpt)
+            if (item.origin in _CITED_ORIGINS) != sourced:
+                raise TemplateSeedError(f"buck_design_provenance: {item.name}")
+        _check_values({item.name: item.value for item in self.parameters})
+
+    @property
+    def pins(self) -> PinMatch:
+        return match_pins(self.ports)
+
+    def payload(self) -> dict[str, Any]:
+        pins = self.pins
+        return {
+            "schema_version": DESIGN_SCHEMA_VERSION,
+            "record_kind": "buck_design",
+            "family": "peak_current_buck",
+            "contract_id": self.contract_id,
+            "contract_sha256": self.contract_sha256,
+            "renderer_version": self.renderer_version,
+            "spec_digest": self.spec_digest,
+            "part": self.part,
+            "subckt": self.subckt,
+            "mode": self.mode,
+            "ports": list(self.ports),
+            "pin_roles": dict(pins.roles),
+            "external_connections": [
+                {"id": "exposed_pad_to_gnd", "pin": pad, "to_role": "GND", "location": "PCB"}
+                for pad in pins.ground_ties
+            ],
+            "parameters": [item.payload() for item in self.parameters],
+            "external_bench_parameters": _external_bench(self.mode),
+        }
+
+    def to_json(self) -> str:
+        """Canonical text: sorted keys, fixed indent, one trailing newline."""
+        return json.dumps(self.payload(), indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+    @property
+    def sha256(self) -> str:
+        return hashlib.sha256(self.to_json().encode("utf-8")).hexdigest()
+
+    @classmethod
+    def from_payload(cls, data: Any) -> BuckDesign:
+        """Read a saved design back; anything altered, incomplete or inconsistent is refused."""
+        if (
+            not isinstance(data, dict)
+            or data.get("record_kind") != "buck_design"
+            or data.get("schema_version") != DESIGN_SCHEMA_VERSION
+        ):
+            raise TemplateSeedError("buck_design_record_kind")
+        try:
+            parameters = tuple(
+                ParameterOrigin(
+                    name=item["name"],
+                    value=item["value"],
+                    unit=item["unit"],
+                    origin=item["origin"],
+                    row_id=item.get("row_id"),
+                    page=item.get("page"),
+                    excerpt=item.get("excerpt"),
+                    transform=item.get("transform"),
+                )
+                for item in data["parameters"]
+            )
+            design = cls(
+                contract_id=data["contract_id"],
+                contract_sha256=data["contract_sha256"],
+                renderer_version=data["renderer_version"],
+                spec_digest=data["spec_digest"],
+                part=data["part"],
+                subckt=data["subckt"],
+                ports=tuple(data["ports"]),
+                parameters=parameters,
+                mode=data["mode"],
+            )
+        except (KeyError, TypeError) as exc:
+            raise TemplateSeedError(f"buck_design_record_incomplete: {exc}") from exc
+        if design.payload() != data:
+            raise TemplateSeedError("buck_design_record_altered")
+        return design
+
+
 @dataclass(frozen=True)
 class BuckSeed:
     contract_id: str
@@ -102,6 +250,7 @@ class BuckSeed:
     parameters: tuple[ParameterOrigin, ...]
     library_text: str
     mode: BuckMode
+    design: BuckDesign | None = None
 
     def payload(self) -> dict[str, Any]:
         """Evidence for a card or a neighbouring ``template-parameters.json``."""
@@ -116,19 +265,7 @@ class BuckSeed:
             "ports": list(self.ports),
             "parameters": [parameter.payload() for parameter in self.parameters],
             "mode": self.mode,
-            "external_bench_parameters": (
-                [
-                    {
-                        "name": "L_EXT",
-                        "default": AVG_L_EXT_H,
-                        "unit": "H",
-                        "origin": "synthetic_bench_default",
-                        "instance_override": True,
-                    }
-                ]
-                if self.mode == "AVG"
-                else []
-            ),
+            "external_bench_parameters": _external_bench(self.mode),
             "verdict": "UNJUDGED",
             "verdict_note": "Run the LTspice harness; parameter provenance is not electrical proof.",
         }
@@ -268,6 +405,21 @@ def _source_for(
     return None
 
 
+def _check_values(values: dict[str, float]) -> None:
+    """Relations between parameters that every renderable design must satisfy."""
+    if not (0 < values["DMAX"] <= 1):
+        raise TemplateSeedError("buck_template_invalid_duty")
+    if not (0 < values["FOLD2"] < values["FOLD4"] < values["FOLD6"] < values["VREF"]):
+        raise TemplateSeedError("buck_template_invalid_foldback")
+    if values["FSW"] == 0:
+        raise TemplateSeedError("buck_template_invalid_parameter: FSW")
+    if not (values["TONMIN"] < values["DMAX"] / values["FSW"]):
+        raise TemplateSeedError("buck_template_invalid_minimum_on_time")
+    for name in ("VREF", "FSW", "ILIM", "GMCS", "VECO", "EAGM", "EAI", "ISS", "UVTH", "RON"):
+        if values[name] <= 0:
+            raise TemplateSeedError(f"buck_template_invalid_parameter: {name}")
+
+
 def _parameters(
     spec: SpecSet, contract: dict[str, Any], unverified: Collection[str]
 ) -> tuple[ParameterOrigin, ...]:
@@ -297,16 +449,7 @@ def _parameters(
                 transform=transform,
             )
         )
-    values = {item.name: item.value for item in chosen}
-    if not (0 < values["DMAX"] <= 1):
-        raise TemplateSeedError("buck_template_invalid_duty")
-    if not (0 < values["FOLD2"] < values["FOLD4"] < values["FOLD6"] < values["VREF"]):
-        raise TemplateSeedError("buck_template_invalid_foldback")
-    if not (values["TONMIN"] < values["DMAX"] / values["FSW"]):
-        raise TemplateSeedError("buck_template_invalid_minimum_on_time")
-    for name in ("VREF", "FSW", "ILIM", "GMCS", "VECO", "EAGM", "EAI", "ISS", "UVTH", "RON"):
-        if values[name] <= 0:
-            raise TemplateSeedError(f"buck_template_invalid_parameter: {name}")
+    _check_values({item.name: item.value for item in chosen})
     return tuple(chosen)
 
 
@@ -531,10 +674,10 @@ def match_pins(ports: Collection[str], contract: dict[str, Any] | None = None) -
     return PinMatch(roles, tuple(ground_ties))
 
 
-def seed_from_spec(
+def design_from_spec(
     spec: SpecSet, *, unverified: Collection[str] = (), mode: BuckMode = "SW"
-) -> BuckSeed | None:
-    """Return a template candidate for a matching physical buck pinout, else ``None``.
+) -> BuckDesign | None:
+    """Return the design for a matching physical buck pinout, else ``None``.
 
     Recognition is deliberately narrow.  A generic analogue part or a buck
     without the exposed compensation/PH/SS pins follows the existing author path.
@@ -567,14 +710,90 @@ def seed_from_spec(
         return None
     contract = _load_contract()
     parameters = _parameters(spec, contract, unverified)
-    return BuckSeed(
+    return BuckDesign(
         contract_id=contract["id"],
         contract_sha256=sha256_file(_CONTRACT),
+        renderer_version=RENDERER_VERSION,
         spec_digest=spec.digest(),
         part=spec.part,
         subckt=spec.subckt,
         ports=ports,
         parameters=parameters,
-        library_text=_render(spec.subckt, ports, parameters, pins, mode=mode),
         mode=mode,
+    )
+
+
+def render_library(design: BuckDesign) -> str:
+    """The library text for ``design``: a pure function of the design and the renderer."""
+    if design.renderer_version != RENDERER_VERSION:
+        raise TemplateSeedError(
+            f"buck_renderer_version: design {design.renderer_version!r}, "
+            f"renderer {RENDERER_VERSION!r}"
+        )
+    if design.contract_id != "peak_current_buck_v1" or design.contract_sha256 != sha256_file(
+        _CONTRACT
+    ):
+        raise TemplateSeedError("buck_contract_changed")
+    return _render(design.subckt, design.ports, design.parameters, design.pins, mode=design.mode)
+
+
+def design_record_payload(design: BuckDesign, delivered: bytes | None) -> dict[str, Any]:
+    """The record that ties a design to the library bytes actually delivered.
+
+    The association is ``exact`` only when the delivered bytes are the design's own
+    rendering. After any other change (a legacy AI repair, a hand edit) the design still
+    describes the starting seed, the association is ``invalid_after_change``, and nothing
+    here tries to reconstruct final parameters from SPICE text.
+    """
+    rendered = render_library(design).encode("utf-8")
+    if delivered is None:
+        association, note = "not_delivered", "No library was delivered for this design."
+    elif delivered == rendered:
+        association = "exact"
+        note = "The delivered library is byte-for-byte the rendering of this design."
+    else:
+        association = "invalid_after_change"
+        note = (
+            "The delivered library differs from the rendering of this design (for example "
+            "after a legacy repair). The design describes the starting seed only; final "
+            "parameters are not reconstructed from SPICE text."
+        )
+    return {
+        "schema_version": DESIGN_SCHEMA_VERSION,
+        "record_kind": "model_design_record",
+        "design_sha256": design.sha256,
+        "design": design.payload(),
+        "rendered_library_sha256": hashlib.sha256(rendered).hexdigest(),
+        "delivered_library_sha256": (
+            None if delivered is None else hashlib.sha256(delivered).hexdigest()
+        ),
+        "association": association,
+        "association_note": note,
+        "verdict": "UNJUDGED",
+        "verdict_note": "Design provenance is not electrical proof; the LTspice harness decides.",
+    }
+
+
+def seed_from_spec(
+    spec: SpecSet, *, unverified: Collection[str] = (), mode: BuckMode = "SW"
+) -> BuckSeed | None:
+    """Return a template candidate for a matching physical buck pinout, else ``None``.
+
+    A compatibility adapter: the design is chosen by :func:`design_from_spec` and the
+    library text is :func:`render_library` of it, so the seed and its design never differ.
+    """
+    design = design_from_spec(spec, unverified=unverified, mode=mode)
+    if design is None:
+        return None
+    return BuckSeed(
+        contract_id=design.contract_id,
+        contract_sha256=design.contract_sha256,
+        spec_digest=design.spec_digest,
+        part=design.part,
+        subckt=design.subckt,
+        ports=design.ports,
+        parameters=design.parameters,
+        library_text=render_library(design),
+        mode=design.mode,
+        design=design,
     )

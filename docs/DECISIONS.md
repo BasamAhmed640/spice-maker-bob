@@ -472,3 +472,44 @@ M8 reference-card board runs are `REMOVED`. M4b1, M4b2, M4b3, M4c, M5, M6,
 M7, and M9+ continue as model-generation and model-verification milestones in
 both editions. The citation, honest verdict, explicit LTspice path, offline,
 credential, and self-contained environment rules remain in force.
+
+## D-054 — Typed model design, exact delivered-byte provenance and stage timing (2026-09-28)
+
+The owner named the outside engine review "Spice Maker — the model engine refactor"
+(an evidence-to-model compiler) as the north star for the background engine. This is its
+first step and it changes no behaviour. The owner's scope statement of the same day is
+recorded for the steps that follow: broad functional coverage of ordinary PCB components
+through one reusable engine and shared electrical building blocks; the universal pin model
+is a foundation and never a substitute for a component's essential behaviour; MCUs, FPGAs,
+CPLDs, processors, SoCs and any device whose required behaviour the engine cannot
+represent are blocked on every generation route, legacy AI included; an unknown
+classification never defaults to supported; a part is supported only with a positively
+matched behavioural implementation, adequate cited inputs and independent functional
+tests; pin-only output is a separately requested, clearly limited mode; every FAIL and
+UNKNOWN is preserved. This step establishes none of that coverage.
+
+Decision:
+
+1. What to build for a recognised peak-current buck is a strict, versioned `BuckDesign`
+   (`models/buck_switching.py`): contract id and hash, renderer version, spec digest, part,
+   subcircuit, physical ports, mode and every parameter with its origin (`cited_row`,
+   `derived_from_bounds` or `template_default`). A cited value must carry its row, page and
+   excerpt; a default must carry none. It holds no bench limit and no verdict.
+2. `render_library(design)` is a pure function of the design and `RENDERER_VERSION`; a
+   design from another renderer or contract version is refused, not rendered.
+   `seed_from_spec` stays as a compatibility adapter and its public payload is unchanged.
+3. Each build that used the buck seed also writes `model-design.json` beside
+   `template-parameters.json`: the canonical design, its digest, and the hashes of the
+   rendered and the delivered library. The association is `exact` only when the delivered
+   bytes are the design's own rendering; after a legacy repair it is `invalid_after_change`
+   and the design is kept as seed provenance. Final parameters are never reconstructed from
+   SPICE text, and free-form libraries get no invented structured record.
+4. Every build writes `run-timing.json`: seconds for read, extract, bind, author and save,
+   the seed's own judging time, author turns and total. `author` includes the agent turns
+   and the LTspice checks inside them; provider calls are not counted yet.
+
+Evidence: the rendered library is byte-identical to the baseline `b1ced1c` for eight
+synthetic specs (SW and AVG) and for the real TPS54332 values, and a real build on the
+frozen TPS54332 spec delivered library sha256 `21b3c7f1…`, the frozen SW library, with
+12 PASS, 4 FAIL, 41 UNKNOWN and 49 NOT_APPLICABLE unchanged in kind. Routing, equations,
+scoring, status names, providers and the interface are untouched.

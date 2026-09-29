@@ -76,7 +76,8 @@ import hashlib
 import json
 import re
 import threading
-from collections.abc import Callable, Mapping, Sequence
+import time
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -147,6 +148,8 @@ BINDINGS_NAME = "bindings.json"
 CHARACTERISTICS_NAME = "characteristics.json"
 HARNESS_REPORT_NAME = "harness-report.json"
 RESULTS_NAME = "results.json"
+TIMING_NAME = "run-timing.json"
+DESIGN_RECORD_NAME = "model-design.json"
 EXAMPLE_NAME = "EXAMPLE.cir"
 
 LTSPICE_MISSING = (
@@ -1206,6 +1209,37 @@ class _StageLog:
         return event
 
 
+class _Ledger:
+    """Wall-clock seconds per stage, from an injectable monotonic clock.
+
+    The record answers "where did the time go" for one build. ``author`` includes the
+    model-writing agent turns and every LTspice check made inside them; provider calls are
+    not counted here.
+    """
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        self._started = clock()
+        self.seconds: dict[str, float] = {}
+
+    @contextlib.contextmanager
+    def stage(self, name: str) -> Iterator[None]:
+        began = self._clock()
+        try:
+            yield
+        finally:
+            self.seconds[name] = self.seconds.get(name, 0.0) + (self._clock() - began)
+
+    def payload(self, **fields: Any) -> dict[str, Any]:
+        return {
+            "schema_version": 1,
+            "record_kind": "run_timing",
+            **fields,
+            "stage_seconds": {name: round(value, 3) for name, value in self.seconds.items()},
+            "total_seconds": round(self._clock() - self._started, 3),
+        }
+
+
 def _checked(request: MakeModelRequest) -> MakeModelRequest:
     if not isinstance(request, MakeModelRequest):
         raise TypeError(f"request must be a MakeModelRequest, got {type(request).__name__}")
@@ -1394,6 +1428,8 @@ class _Run:
         self.files: list[Path] = []
         self.template_seed: dict[str, Any] | None = None
         self.template_seed_bytes: bytes | None = None
+        self.template_design: Any = None
+        self.template_seed_judge_s: float | None = None
 
     # ------------------------------------------------------------------ stages
 
@@ -1842,12 +1878,14 @@ class _Run:
         seed.write(path)
         self.template_seed = seed.payload()
         self.template_seed_bytes = path.read_bytes()
+        self.template_design = seed.design
         self.log.emit("author", "running", "judging a cited buck template before Bob repair")
         cache_root = self.workdir / "validation-cache"
         key = validation_key(path, self.spec, request.ltspice, request.timeout_s)
         run_dir = (
             cache_root / key if key is not None else self.workdir / "harness" / "template-seed"
         )
+        judge_started = time.monotonic()
         try:
             report = run_harness(
                 model_lib=path,
@@ -1863,6 +1901,7 @@ class _Run:
                 "judge", "failed", f"buck template simulation failed: {type(exc).__name__}: {exc}"
             )
             return None
+        self.template_seed_judge_s = time.monotonic() - judge_started
         write_report(cache_root, key, report)
         self._on_report(report)
         return report
@@ -2255,6 +2294,15 @@ class _Run:
                 self.out_dir / "template-parameters.json",
                 json.dumps(metadata, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
             )
+            if self.template_design is not None:
+                from boardmodeler.models.buck_switching import design_record_payload
+
+                record = design_record_payload(self.template_design, text.encode("utf-8"))
+                self._write_text(
+                    self.out_dir / DESIGN_RECORD_NAME,
+                    json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+                )
+                notes.append("saved model design record")
             defaults = [
                 parameter
                 for parameter in metadata["parameters"]
@@ -2531,16 +2579,23 @@ def make_model(
         detail = f"output_dir_unusable: {type(exc).__name__}: {exc}"
         log.emit("read", "failed", detail)
         return _empty_result(request, log, detail)
+    ledger = _Ledger()
     try:
-        run.read()
-        run.extract(cancel)
-        run.bind(cancel)
-        run.author(cancel)
-        run.save()
+        with ledger.stage("read"):
+            run.read()
+        with ledger.stage("extract"):
+            run.extract(cancel)
+        with ledger.stage("bind"):
+            run.bind(cancel)
+        with ledger.stage("author"):
+            run.author(cancel)
+        with ledger.stage("save"):
+            run.save()
     except _Stop as stop:
         log.emit(stop.stage, "failed", stop.detail)
         run.status, run.detail = stop.status, stop.detail
-        run.save()
+        with ledger.stage("save"):
+            run.save()
     rows = run.rows()
     status, detail = run.decide(rows)
     result = MakeModelResult(
@@ -2563,6 +2618,20 @@ def make_model(
         log.emit("save", "failed", note, {"files": 0})
         result = dataclasses.replace(
             result, detail=f"{result.detail}; {note}", stages=tuple(log.events)
+        )
+    with contextlib.suppress(OSError):  # a courtesy record: it never changes the verdict
+        timing = ledger.payload(
+            part=request.part,
+            status=status,
+            route="buck_template_seed" if run.template_seed is not None else "agent_authoring",
+            template_seed_judge_seconds=(
+                None if run.template_seed_judge_s is None else round(run.template_seed_judge_s, 3)
+            ),
+            author_turns=None if run.outcome is None else int(run.outcome.iterations),
+        )
+        run._write_text(
+            run.out_dir / TIMING_NAME,
+            json.dumps(timing, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
         )
     return result
 

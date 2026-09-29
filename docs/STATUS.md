@@ -1,3 +1,34 @@
+## 2026-09-28 — engine step 1: typed buck design and exact provenance (D-054)
+
+First step of the engine review the owner named the north star, and behaviour-preserving.
+The buck template's what-to-build is now a strict, versioned `BuckDesign`; the library is
+`render_library(design)`, a pure function of it; a build that used the buck seed saves
+`model-design.json` tying the design to the delivered bytes, and every build saves
+`run-timing.json`. Routing, equations, scoring, status names, providers and the interface
+are unchanged. This does not establish universal coverage and does not change which parts
+are supported.
+
+| Check | Result |
+| --- | --- |
+| Rendered bytes against baseline `b1ced1c` | identical for 8 synthetic specs (SW and AVG) and for the real TPS54332 values; the frozen TPS54332 spec still renders sha256 `21b3c7f1…` |
+| New tests, `tests/models/test_buck_design.py` | 33 passed: golden bytes, canonical serialization, 12 rejected-input cases, cited against default, SW/AVG parity, topology rejection, delivered-byte association, stage ledger |
+| Buck tests against real LTspice 26 | 57 passed in the general edition (31 s) and 57 in Bob (36 s) |
+| Fast suite, Bob | 1293 passed, 49 failed, 19 skipped, 259 deselected in 72 s. The 49 are the same test ids as the untouched baseline (1260 passed there); the difference is the 33 new tests |
+| Hygiene | `ruff check` clean, changed files formatted, `git diff --check` clean, credential scan 0 findings, shared core 44 files intact and identical across editions |
+
+Real build on the frozen TPS54332 spec (scripted author, no AI provider, real LTspice):
+239.1 s in total. read 2.3 s, extract 2.8 s (supplied), bind 0.06 s, author 233.9 s, save
+0.03 s. The author stage held the template's first judging (117.4 s) and one scripted turn
+that re-ran the same 19 rows (about 116 s) without improving them, so a route with no repair
+turn would spend about half of that. Result 12 PASS, 4 FAIL, 41 UNKNOWN, 49 NOT_APPLICABLE:
+the 4 FAIL and the UNKNOWN rows are unchanged and stay open. `model-design.json` reported
+association `exact`; 20 parameters are cited or derived from cited bounds and 3 are template
+defaults.
+
+Not done: provider calls are not counted in the timing record yet; nothing here matches,
+blocks or supports a part class, which is the next step. The Bob edition's `make_model.py`
+differs from the general one; the three small edits were ported by anchor.
+
 ## 2026-09-26 — owner scope: SPICE models only (D-052)
 
 The product delivers LTspice `.lib`, `.asy`, a cited model card with alarm
