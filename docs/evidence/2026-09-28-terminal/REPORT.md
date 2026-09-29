@@ -14,7 +14,7 @@ This work used a fresh clone; the original source folder with uncommitted buck w
 
 `Get-FileHash tools\python-install-pins.txt -Algorithm SHA256` returned `DA0DA1A9670AE49E219C83647D8D84D6EA8CFD9457B5A2D1BE0F627F3775E8E2`.
 
-Both 3.14.7 Python installers were downloaded but not run locally. Their size, SHA-256, and Authenticode signature were checked against the pins, which match `winget show Python.Python.3.14`: x64 `9d9eb2709ef81bf5cd30db3c2096bdbc4ea10087c22e62f27d356b36f6ae9649`; ARM64 `9a3fe120cc81bc2cb099550f794d8356811f96a86c7f438519243c3485db928d`. The GitHub Actions workflow runs each installer on a fresh runner after push; results must be checked separately.
+Both 3.14.7 Python installers were downloaded but not run locally. Their size, SHA-256, and Authenticode signature were checked against the pins, which match `winget show Python.Python.3.14`: x64 `9d9eb2709ef81bf5cd30db3c2096bdbc4ea10087c22e62f27d356b36f6ae9649`; ARM64 `9a3fe120cc81bc2cb099550f794d8356811f96a86c7f438519243c3485db928d`. After push, [GitHub Actions run 36501631540](https://github.com/BasamAhmed640/spice-maker-bob/actions/runs/36501631540) passed both jobs: the exact pinned installers ran per-user on fresh x64 and ARM64 Windows runners and registered CPython 3.14 with the expected platform.
 
 ## Test commands and observed output
 
@@ -51,11 +51,11 @@ Bob build/test JSON key sets and exits for safe blocked inputs match its base. `
 
 ## Remaining verification
 
-- The real Python install step has not run on a clean PC in this local test. The x64 and ARM64 GitHub Actions runner results must be checked after push.
+- The real Python install step passed on fresh GitHub Actions x64 and ARM64 runners. The complete Setup.cmd path from no Python to app-ready has not been tested on a clean PC; local setup used already-registered Python.
 - Windows 10, ARM64, and a clean machine without Python/LTspice/developer tools have not been tested end to end locally.
 - A live Bob Shell key check and a completed LM358 build were not run; both would make external requests. There is no bundled or cached LM358 author.
 - `pyproject.toml` still declares `Proprietary`; publication license terms are a question for the owner. No license was chosen here.
 
 ## Change size
 
-The initial Bob transition commit reported `120 files changed, 4075 insertions(+), 12967 deletions(-)` from `git show --shortstat`. At the verified final source commit, `git diff --shortstat cf6b430..HEAD` reported `121 files changed, 4396 insertions(+), 12967 deletions(-)`.
+The initial Bob transition commit reported `120 files changed, 4075 insertions(+), 12967 deletions(-)` from `git show --shortstat`. At the verified final source commit, `git diff --shortstat cf6b430..HEAD` reported `121 files changed, 4394 insertions(+), 12967 deletions(-)`.
