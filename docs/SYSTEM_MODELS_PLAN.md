@@ -196,7 +196,11 @@ commits may record those IDs afterward.
 | M4b2 | Bidirectional UVLO/EN and gain/limit corner checks | TODO | — | — | — | — |
 | M4b3 | SW shapes, power behavior, speed, and full M4b acceptance | TODO | — | — | — | — |
 | M4c | Versioned installer and ZIP release checkpoint after M4b acceptance | TODO | — | — | — | — |
-| M5 | PinDefinition-based model alarms, exercised with clean/fault small synthetic circuits and measured LTspice evidence | TODO | — | — | — | — |
+| M5 | PinDefinition-based model alarms, exercised with clean/fault small synthetic circuits and measured LTspice evidence | IN PROGRESS (M5a-M5d DONE; buck/LDO families and pipeline routing open) | 2026-09-28 | `docs/evidence/2026-09-28-pin-model-h1/REPORT.md` (general) | see M5a-M5d | `9ae8cf2` (mirror, branch `pin-model`) |
+| M5a | Viability gate (`authoring/viability.py`): static and LTspice checks from ports + a pin table; must fail the committed LM358 and every mutant | DONE (branch `pin-model`) | 2026-09-28 | same | `903b735` | `9ae8cf2` |
+| M5b | Pin shell (`models/pin_shell.py`): every package pin by kind; LM358 rebuilt on it keeps all 32 frozen rows; pin-only MCU8 passes the gate | DONE (branch `pin-model`) | 2026-09-28 | same | `7c83a4b` | `9ae8cf2` |
+| M5c | Alarms inside the model (abs, overload, undefined level, required tie), each proven by a clean and a fault bench | DONE (branch `pin-model`) | 2026-09-28 | same | `85fa9d5` | `9ae8cf2` |
+| M5d | Datasheet digest (`documents/digest.py`): table columns from character positions; TPS54332 golden rows | DONE (branch `pin-model`) | 2026-09-28 | same | `bb4dbdc` | `9ae8cf2` |
 | M6 | Package and symbol pinout evidence and confirmation gate for PIN-01/02/05 before model publication | TODO | — | — | — | — |
 | M7 | Default code-built SPICE model path, timed TPS54331/TPS54332/LM358 runs, and release checkpoint | TODO | — | — | — | — |
 | M8 | Reference-card board runs, board checker, and findings report | REMOVED (D-052; model-only scope) | 2026-09-26 | `docs/DECISIONS.md` D-052 | — | — |
@@ -223,3 +227,24 @@ No electrical model row becomes `PASS` without a cited requirement and real
 LTspice measurement. Unmeasured or unsupported behavior remains `UNKNOWN` or
 `NOT_APPLICABLE` with reasons. The vendor TPS54332 library remains local and
 is never committed.
+
+## This run: M5, the pin model (hour 1, 2026-09-28, branch `pin-model`)
+
+The owner's purpose is models a user drops into their own system-level simulation, so the
+first thing built is the judge of that, then the one mechanism that gives every pin of any IC
+the same ready-to-go behavior, then the alarms, then the way tables reach the AI. See
+[D-053](DECISIONS.md) and the [evidence report](evidence/2026-09-28-pin-model-h1/REPORT.md).
+
+* **M5a gate.** It fails the committed LM358 on five checks (no return through node 0 and no
+  unlimited output are the two that matter) and every mutant; a static-only report is never PASS.
+* **M5b shell.** The LM358 rebuilt as shell + a 6-line op-amp core passes the gate and the frozen
+  32 rows unchanged; a pin-only MCU8 passes the gate.
+* **M5c alarms.** `chk_abs_*`, `chk_ovl_*`, `chk_flt_*`, `chk_tie_*` and `chk_any` are in the
+  model; the gate proves each claimed alarm quiet when clean and firing on its fault.
+* **M5d digest.** Reads MIN/TYP/MAX from positions; fixes the UVLO, enable and current-limit misreads.
+
+Frozen, not extended: the buck template and M4b2/M4b3/M4c (M4b2 is parked on `wip/m4b2`; it was
+fitted to the misread limits). Informational gate results for the buck are in the report.
+Next: M6 (pin table from the digest, confirmed by the owner or a second source), the default
+build path (M7) that routes any part, microcontrollers included, to the shell, and function cores
+for regulators.

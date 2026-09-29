@@ -1,0 +1,28 @@
+* LM358 behavioral macromodel
+.subckt LM358 VCC OUT1 IN1M IN1P VEE IN2P IN2M OUT2
+* Channel 1
+Bib1p VCC IN1P I=21n
+Bib1m VCC IN1M I=19n
+Rin1p IN1P VEE 1G
+Rin1m IN1M VEE 1G
+Bgm1 VEE vc1 I=90n*tanh((V(IN1P,GND)-V(IN1M,GND)-3m)/68.2m)
+Cc1 vc1 VEE 30p
+Rc1 vc1 VEE 758Meg
+Dclamp1a vc1 VCC Dclamp
+Dclamp1b VEE vc1 Dclamp
+Bout1 OUT1 0 V=V(VEE,GND)+limit(100*V(vc1,VEE),0.005,max(V(VCC,VEE)-2+0.5*limit((30-V(VCC,VEE))/25,0,1),0.005))*limit((V(VCC,VEE)-1.5)/0.5,0,1)
+Riq1 VCC VEE 14.2857k
+* Channel 2
+Bib2p VCC IN2P I=21n
+Bib2m VCC IN2M I=19n
+Rin2p IN2P VEE 1G
+Rin2m IN2M VEE 1G
+Bgm2 VEE vc2 I=90n*tanh((V(IN2P,GND)-V(IN2M,GND)-3m)/68.2m)
+Cc2 vc2 VEE 30p
+Rc2 vc2 VEE 758Meg
+Dclamp2a vc2 VCC Dclamp
+Dclamp2b VEE vc2 Dclamp
+Bout2 OUT2 0 V=V(VEE,GND)+limit(100*V(vc2,VEE),0.005,max(V(VCC,VEE)-2+0.5*limit((30-V(VCC,VEE))/25,0,1),0.005))*limit((V(VCC,VEE)-1.5)/0.5,0,1)
+Riq2 VCC VEE 14.2857k
+.model Dclamp D(Is=1e-14 N=1)
+.ends LM358

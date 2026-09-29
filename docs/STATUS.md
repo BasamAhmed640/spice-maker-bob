@@ -67,6 +67,28 @@ Not done: provider calls are not counted in the timing record yet; nothing here 
 blocks or supports a part class, which is the next step. The Bob edition's `make_model.py`
 differs from the general one; the three small edits were ported by anchor.
 
+## 2026-09-28 — pin model, hour 1: viability gate, pin shell, alarms, digest (D-053)
+
+Branch `pin-model` in both editions; the M4b2 work was parked on `wip/m4b2` first and nothing was
+pushed. The [evidence report](evidence/2026-09-28-pin-model-h1/REPORT.md) records the LTspice
+runs, hashes and limits. Observed results:
+
+| Check | Observed result |
+| --- | --- |
+| Gate on the committed LM358 (`fixtures/models/lm358_committed_2026-09-24.lib`) | FAIL: 5 checks (node-0 return, 998.8 A residual, 499.4 A short vs 60 mA rating, supply carries 0.7 mA of 998.8 A, inputs 19-21 V above ground pin) |
+| LM358 on the pin shell, gate | PASS, 28 benches, 21 s, 7 alarms proven |
+| LM358 on the pin shell, frozen 19-case / 32-row spec | 32 PASS, 0 changed, 16.3 s |
+| Pin-only MCU8, gate | PASS, 9 benches, 6.6 s, 4 alarm kinds proven |
+| Mutants (7 static, 6 dynamic, 5 alarm) | each fails the check that names it |
+| Existing buck template, gate (informational) | SW: FAIL `output_short_limited` (PH 28.86 A vs 6.5 A); AVG: FAIL `supply_carries_output_current`, 1 bench UNKNOWN |
+| TPS54332 p.6 digest | UVLO 3.5 V = MAX; EN 1.25/1.35 = TYP/MAX; current limit 4.2/6.5 A = MIN/TYP |
+| Gate and shell tests, both editions | 41 passed each (LTspice benches included); digest 6 passed each |
+| `tools/shared_core.py --compare ..\spice-maker-bob` | identical: 46 files |
+| Fast subset, general edition | baseline 1483 passed / 105 failed (machine state: INTERNET ACCESS off in the local config); final 1514 passed / 105 failed, the same 105 tests, no new failure |
+
+Not done: no regulator (buck, LDO) is rebuilt on the shell; `part_class.py` still refuses
+microcontrollers and FPGAs; the pin table is hand-written for the proof parts.
+
 ## 2026-09-26 — owner scope: SPICE models only (D-052)
 
 The product delivers LTspice `.lib`, `.asy`, a cited model card with alarm

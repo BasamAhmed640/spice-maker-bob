@@ -1,0 +1,39 @@
+* MCU8: pin shell only
+* pin shell: every current returns through a pin
+.subckt MCU8 VDD GND RESET PA0 PB0 NC1 EP params: LEVEL_PA0=-1 LEVEL_PB0=-1
+* supply VDD
+Bq_VDD VDD GND I=0.002*limit(V(VDD,GND)/1,0,1)
+* input RESET
+Rdef_RESET RESET VDD 100000
+Rin_RESET RESET GND 1e+09
+Dh_RESET RESET VDD Dpin
+Dl_RESET GND RESET Dpin
+* io PA0
+Rin_hi_PA0 PA0 VDD 2e+09
+Rin_lo_PA0 PA0 GND 2e+09
+Dh_PA0 PA0 VDD Dpin
+Dl_PA0 GND PA0 Dpin
+Bdrv_PA0 drv_PA0 GND V=limit(LEVEL_PA0*V(VDD,GND),0,max(V(VDD,GND),0))
+Bso_PA0 VDD PA0 I=limit((V(drv_PA0,GND)-V(PA0,GND))/40,0,0.008)*u(LEVEL_PA0+0.5)
+Bsk_PA0 PA0 GND I=limit((V(PA0,GND)-V(drv_PA0,GND))/40,0,0.008)*u(LEVEL_PA0+0.5)
+* output PB0 (push_pull)
+Rlk_PB0 PB0 GND 1G
+Bdrv_PB0 drv_PB0 GND V=limit(LEVEL_PB0*V(VDD,GND),0,max(V(VDD,GND),0))
+Bso_PB0 VDD PB0 I=limit((V(drv_PB0,GND)-V(PB0,GND))/40,0,0.008)*u(LEVEL_PB0+0.5)
+Bsk_PB0 PB0 GND I=limit((V(PB0,GND)-V(drv_PB0,GND))/40,0,0.008)*u(LEVEL_PB0+0.5)
+* exposed pad EP: its own pin, convergence leak only
+Rpad_EP EP GND 1G
+* alarms: 1 when a datasheet condition is violated, else 0 (plot V(x1:<node>))
+Bchk_abs_VDD chk_abs_VDD GND V=limit(u(V(VDD,GND)-4),0,1)
+Bchk_abs_RESET chk_abs_RESET GND V=limit(u(V(RESET,GND)-V(VDD,GND)-0.3),0,1)
+Bchk_abs_PA0 chk_abs_PA0 GND V=limit(u(V(PA0,GND)-V(VDD,GND)-0.3),0,1)
+Bchk_ovl_PA0 chk_ovl_PA0 GND V=limit(u((V(drv_PA0,GND)-V(PA0,GND))/40-0.008)+u((V(PA0,GND)-V(drv_PA0,GND))/40-0.008),0,1)*u(LEVEL_PA0+0.5)
+Bchk_flt_PA0_raw chk_flt_PA0_raw GND V=u(V(PA0,GND)-0.8)*u(2-V(PA0,GND))
+Rchk_flt_PA0 chk_flt_PA0_raw chk_flt_PA0 1k
+Cchk_flt_PA0 chk_flt_PA0 GND 10n
+Bchk_ovl_PB0 chk_ovl_PB0 GND V=limit(u((V(drv_PB0,GND)-V(PB0,GND))/40-0.008)+u((V(PB0,GND)-V(drv_PB0,GND))/40-0.008),0,1)*u(LEVEL_PB0+0.5)
+Binj_EP GND EP I=1n
+Bchk_tie_EP chk_tie_EP GND V=u(V(EP,GND)-0.1)
+Bchk_any chk_any GND V=limit(V(chk_abs_VDD,GND)+V(chk_abs_RESET,GND)+V(chk_abs_PA0,GND)+V(chk_ovl_PA0,GND)+V(chk_flt_PA0,GND)+V(chk_ovl_PB0,GND)+V(chk_tie_EP,GND),0,1)
+.model Dpin D(Is=1e-14 N=1 Rs=10)
+.ends MCU8

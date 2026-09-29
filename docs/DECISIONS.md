@@ -473,6 +473,49 @@ M7, and M9+ continue as model-generation and model-verification milestones in
 both editions. The citation, honest verdict, explicit LTspice path, offline,
 credential, and self-contained environment rules remain in force.
 
+## D-053 — Judge a model by how it sits in a circuit; build every pin the same way (2026-09-28)
+
+Passing datasheet rows is not viability. The committed LM358 passes 32 rows and still
+returns its output current through ground instead of the supply pins, has no output current
+limit (a 10 mOhm short carries about 500 A against a 60 mA datasheet maximum), and lets a
+floating input rise 19-21 V above the ground pin on a 5 V supply. The fixes are three
+mechanisms, none of them per-family:
+
+* **The viability gate** (`authoring/viability.py`) judges any model from its ports and a
+  pin table alone. Static: ports match the pin table, symbol `SpiceOrder` matches the port
+  position, no use of the simulator's node 0/`GND`, no internal pin-to-pin tie without a
+  cited datasheet statement, no structural DC-path error. Dynamic (LTspice, the ground pin
+  held 2.5 V above node 0): every pin state converges, the currents into the pins sum to
+  zero, outputs are current limited against the cited short-circuit rating, the supply and
+  ground pins carry the output current, floating inputs stay inside the rails, supply pins
+  draw a quiescent current, NC pins stay inert. A report whose dynamic benches did not run
+  is never PASS. A model is graded on its function only after it passes the gate.
+* **The pin shell** (`models/pin_shell.py`) renders every package pin as a port, by kind,
+  from a confirmed pin table; a function, where the part has one, is a short plain-SPICE
+  core inside it. It is one mechanism for any IC, including parts with no function
+  (a microcontroller: pins only). An output no core drives is inert until the instance
+  parameter `LEVEL_<pin>` commands it, so the gate and the user can exercise it. The buck
+  template is frozen: it is not extended, and M4b2/M4b3/M4c are parked on `wip/m4b2`.
+* **Alarms are part of the model** (`chk_abs_*`, `chk_ovl_*`, `chk_flt_*`, `chk_tie_*`,
+  `chk_any`; plot `V(x1:<node>)` in the user's own run). Absolute maximum, absolute or
+  relative to the supply pin (which also covers a chip back-powered through an I/O); output
+  overload (demand beyond the cited current limit); undefined digital level (a floating CMOS
+  input drifts to mid-rail, the worst case); a required connection missing (an open exposed
+  pad, seen through a 1 nA probe current). This supersedes D-050's "the ordinary model
+  injects no diagnostic current" for pins the pin table marks `required`: D-052 puts the
+  alarm in the model, and an open pin is only visible if something probes it. Each claim on
+  a pin table is proven by the gate: present in the model, quiet in clean use, firing on its
+  own fault bench.
+
+Tables reach the AI through the **datasheet digest** (`documents/digest.py`): MIN/TYP/MAX
+columns are measured from character positions, never guessed from the text layer.
+
+Limits, stated once: the gate and shell are proven on an op amp (LM358, with the frozen
+32-row spec unchanged) and a pin-only microcontroller-class part; no buck, LDO or
+family with a switching stage has been rebuilt on the shell yet. Nothing here relaxes a
+datasheet limit or turns UNKNOWN into PASS. Evidence:
+`docs/evidence/2026-09-28-pin-model-h1/REPORT.md`.
+
 ## D-054 — Typed model design, exact delivered-byte provenance and stage timing (2026-09-28)
 
 The owner named the outside engine review "Spice Maker — the model engine refactor"

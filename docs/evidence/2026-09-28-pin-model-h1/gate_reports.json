@@ -1,0 +1,336 @@
+{
+  "lm358_committed": {
+    "model_sha256": "f823eb6cd80f505bbe36b466d6053da2c531e21d98fa8c240fabad473e75192a",
+    "part": "LM358",
+    "status": "FAIL",
+    "runs": 23,
+    "wall_s": 15.48,
+    "checks": [
+      {
+        "id": "ports_match_pin_table",
+        "status": "PASS",
+        "detail": "8 ports, exactly the 8 pins of the pin table",
+        "measured": {
+          "ports": 8.0
+        }
+      },
+      {
+        "id": "no_global_ground",
+        "status": "FAIL",
+        "detail": "4 element(s) use the simulator's node 0 / GND instead of a port, so the current they carry never passes through the package pins (first: line 8 `Bgm1` reads V(IN1P,GND))",
+        "measured": {
+          "elements": 4.0
+        }
+      },
+      {
+        "id": "no_internal_pin_ties",
+        "status": "PASS",
+        "detail": "no pin is tied to another pin inside the model",
+        "measured": {
+          "ties": 0.0
+        }
+      },
+      {
+        "id": "dc_paths",
+        "status": "PASS",
+        "detail": "no structural convergence errors found by the netlist linter",
+        "measured": {
+          "errors": 0.0
+        }
+      },
+      {
+        "id": "converges_in_every_pin_state",
+        "status": "PASS",
+        "detail": "all 23 benches converged (floating, grounded and tied-high inputs; outputs open and shorted to ground and to supply)",
+        "measured": {
+          "runs": 23.0,
+          "fallbacks": 0.0
+        }
+      },
+      {
+        "id": "current_conservation",
+        "status": "FAIL",
+        "detail": "the currents into the package pins do not sum to zero, so some current returns through the simulator's ground instead of a pin (short_vcc_cold_IN1P: sum of port currents 998.8 A)",
+        "measured": {
+          "worst_residual_a": 998.7992331309766
+        }
+      },
+      {
+        "id": "output_short_limited",
+        "status": "FAIL",
+        "detail": "an output has no realistic current limit: OUT1 carried 499.4 A in short_vcc_hot_IN2P (rating 0.06 A); OUT2 carried 499.4 A in short_vcc_cold_IN1M (rating 0.06 A)",
+        "measured": {
+          "peak_a_OUT1": 499.43505859375,
+          "peak_a_OUT2": 499.43505859375
+        }
+      },
+      {
+        "id": "supply_carries_output_current",
+        "status": "FAIL",
+        "detail": "output current is not drawn through the supply/ground pins: short_vcc_low: outputs sank 998.8 A but the ground pins returned 0.0007 A",
+        "measured": {
+          "worst_gap_a": 898.9195077395027
+        }
+      },
+      {
+        "id": "floating_inputs_in_rails",
+        "status": "FAIL",
+        "detail": "a floating input rises outside the supply rails (no clamp or default): IN1M floats at 19 V above the ground pin; IN1P floats at 21 V above the ground pin; IN2P floats at 21 V above the ground pin; IN2M floats at 19 V above the ground pin",
+        "measured": {
+          "rail_v": 5.0
+        }
+      },
+      {
+        "id": "supply_draws_current",
+        "status": "PASS",
+        "detail": "supply pins draw 0.0007001 A with the inputs grounded",
+        "measured": {
+          "supply_a": 0.000700080709066242
+        }
+      }
+    ]
+  },
+  "lm358_shell": {
+    "model_sha256": "3c60f025b634a2909042f39f05c7940a20bde1b0f3b41acb7d6544ebff5bd09b",
+    "part": "LM358",
+    "status": "PASS",
+    "runs": 28,
+    "wall_s": 21.1,
+    "checks": [
+      {
+        "id": "ports_match_pin_table",
+        "status": "PASS",
+        "detail": "8 ports, exactly the 8 pins of the pin table",
+        "measured": {
+          "ports": 8.0
+        }
+      },
+      {
+        "id": "symbol_order_matches_ports",
+        "status": "PASS",
+        "detail": "every symbol pin sits at its port position",
+        "measured": {}
+      },
+      {
+        "id": "no_global_ground",
+        "status": "PASS",
+        "detail": "every element and expression refers only to ports and internal nodes",
+        "measured": {
+          "elements": 0.0
+        }
+      },
+      {
+        "id": "no_internal_pin_ties",
+        "status": "PASS",
+        "detail": "no pin is tied to another pin inside the model",
+        "measured": {
+          "ties": 0.0
+        }
+      },
+      {
+        "id": "dc_paths",
+        "status": "PASS",
+        "detail": "no structural convergence errors found by the netlist linter",
+        "measured": {
+          "errors": 0.0
+        }
+      },
+      {
+        "id": "converges_in_every_pin_state",
+        "status": "PASS",
+        "detail": "all 28 benches converged (floating, grounded and tied-high inputs; outputs open and shorted to ground and to supply)",
+        "measured": {
+          "runs": 28.0,
+          "fallbacks": 0.0
+        }
+      },
+      {
+        "id": "current_conservation",
+        "status": "PASS",
+        "detail": "currents into the pins sum to zero in all 28 benches (ground pin held 2.5 V above node 0)",
+        "measured": {}
+      },
+      {
+        "id": "output_short_limited",
+        "status": "PASS",
+        "detail": "every output stayed within 2x its cited short-circuit rating",
+        "measured": {
+          "peak_a_OUT1": 0.040000006556510925,
+          "peak_a_OUT2": 0.040000006556510925
+        }
+      },
+      {
+        "id": "supply_carries_output_current",
+        "status": "PASS",
+        "detail": "whenever an output delivered current, the supply and ground pins carried it",
+        "measured": {}
+      },
+      {
+        "id": "floating_inputs_in_rails",
+        "status": "PASS",
+        "detail": "every floating input settles inside the rails",
+        "measured": {
+          "rail_v": 5.0
+        }
+      },
+      {
+        "id": "supply_draws_current",
+        "status": "PASS",
+        "detail": "supply pins draw 0.0007 A with the inputs grounded",
+        "measured": {
+          "supply_a": 0.0007000000332482159
+        }
+      },
+      {
+        "id": "alarms_quiet_when_clean",
+        "status": "PASS",
+        "detail": "all 7 alarms stay quiet with valid inputs, every required pin tied and nothing shorted",
+        "measured": {
+          "alarms": 7.0
+        }
+      },
+      {
+        "id": "alarm_abs_fires_on_fault",
+        "status": "PASS",
+        "detail": "5 alarm(s) fire when their fault is applied",
+        "measured": {}
+      },
+      {
+        "id": "alarm_ovl_fires_on_fault",
+        "status": "PASS",
+        "detail": "2 alarm(s) fire when their fault is applied",
+        "measured": {}
+      }
+    ]
+  },
+  "mcu8_shell": {
+    "model_sha256": "9a4b6d82255bd596b81f18e5e276332c732c2bd4b27b106e6c51bf973c17e40d",
+    "part": "MCU8",
+    "status": "PASS",
+    "runs": 9,
+    "wall_s": 6.21,
+    "checks": [
+      {
+        "id": "ports_match_pin_table",
+        "status": "PASS",
+        "detail": "7 ports, exactly the 7 pins of the pin table",
+        "measured": {
+          "ports": 7.0
+        }
+      },
+      {
+        "id": "symbol_order_matches_ports",
+        "status": "PASS",
+        "detail": "every symbol pin sits at its port position",
+        "measured": {}
+      },
+      {
+        "id": "no_global_ground",
+        "status": "PASS",
+        "detail": "every element and expression refers only to ports and internal nodes",
+        "measured": {
+          "elements": 0.0
+        }
+      },
+      {
+        "id": "no_internal_pin_ties",
+        "status": "PASS",
+        "detail": "no pin is tied to another pin inside the model",
+        "measured": {
+          "ties": 0.0
+        }
+      },
+      {
+        "id": "dc_paths",
+        "status": "PASS",
+        "detail": "no structural convergence errors found by the netlist linter",
+        "measured": {
+          "errors": 0.0
+        }
+      },
+      {
+        "id": "converges_in_every_pin_state",
+        "status": "PASS",
+        "detail": "all 9 benches converged (floating, grounded and tied-high inputs; outputs open and shorted to ground and to supply); 7 needed a solver fallback",
+        "measured": {
+          "runs": 9.0,
+          "fallbacks": 7.0
+        }
+      },
+      {
+        "id": "current_conservation",
+        "status": "PASS",
+        "detail": "currents into the pins sum to zero in all 9 benches (ground pin held 2.5 V above node 0)",
+        "measured": {}
+      },
+      {
+        "id": "output_short_limited",
+        "status": "PASS",
+        "detail": "every output stayed within 2x its cited short-circuit rating",
+        "measured": {
+          "peak_a_PB0": 0.008000003173947334
+        }
+      },
+      {
+        "id": "supply_carries_output_current",
+        "status": "PASS",
+        "detail": "whenever an output delivered current, the supply and ground pins carried it",
+        "measured": {}
+      },
+      {
+        "id": "floating_inputs_in_rails",
+        "status": "PASS",
+        "detail": "every floating input settles inside the rails",
+        "measured": {
+          "rail_v": 3.3000001907348633
+        }
+      },
+      {
+        "id": "supply_draws_current",
+        "status": "PASS",
+        "detail": "supply pins draw 0.002033 A with the inputs grounded",
+        "measured": {
+          "supply_a": 0.0020330017432570457
+        }
+      },
+      {
+        "id": "nc_pins_inert",
+        "status": "PASS",
+        "detail": "no-connect pins carry no current",
+        "measured": {}
+      },
+      {
+        "id": "alarms_quiet_when_clean",
+        "status": "PASS",
+        "detail": "all 7 alarms stay quiet with valid inputs, every required pin tied and nothing shorted",
+        "measured": {
+          "alarms": 7.0
+        }
+      },
+      {
+        "id": "alarm_abs_fires_on_fault",
+        "status": "PASS",
+        "detail": "3 alarm(s) fire when their fault is applied",
+        "measured": {}
+      },
+      {
+        "id": "alarm_ovl_fires_on_fault",
+        "status": "PASS",
+        "detail": "2 alarm(s) fire when their fault is applied",
+        "measured": {}
+      },
+      {
+        "id": "alarm_flt_fires_on_fault",
+        "status": "PASS",
+        "detail": "1 alarm(s) fire when their fault is applied",
+        "measured": {}
+      },
+      {
+        "id": "alarm_tie_fires_on_fault",
+        "status": "PASS",
+        "detail": "1 alarm(s) fire when their fault is applied",
+        "measured": {}
+      }
+    ]
+  }
+}

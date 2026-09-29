@@ -1,0 +1,55 @@
+* LM358 dual op amp: pin shell + op-amp core
+* pin shell: every current returns through a pin
+.subckt LM358 VCC OUT1 IN1M IN1P VEE IN2P IN2M OUT2
+* supply VCC
+Bq_VCC VCC VEE I=0.0007*limit(V(VCC,VEE)/1,0,1)
+* output OUT1 (push_pull)
+Rlk_OUT1 OUT1 VEE 1G
+Bdrv_OUT1 drv_OUT1 VEE V=limit(limit(V(n1,VEE),5m,max(V(VCC,VEE)-2,5m)),0,max(V(VCC,VEE),0))
+Bso_OUT1 VCC OUT1 I=limit((V(drv_OUT1,VEE)-V(OUT1,VEE))/10,0,0.04)
+Bsk_OUT1 OUT1 VEE I=limit((V(OUT1,VEE)-V(drv_OUT1,VEE))/10,0,0.04)
+* input IN1M
+Rin_IN1M IN1M VEE 1e+09
+Dl_IN1M VEE IN1M Dpin
+Bib_IN1M VEE IN1M I=2.1e-08*limit((V(VCC,VEE)-1-V(IN1M,VEE))/0.2,0,1)
+* input IN1P
+Rin_IN1P IN1P VEE 1e+09
+Dl_IN1P VEE IN1P Dpin
+Bib_IN1P VEE IN1P I=1.9e-08*limit((V(VCC,VEE)-1-V(IN1P,VEE))/0.2,0,1)
+* input IN2P
+Rin_IN2P IN2P VEE 1e+09
+Dl_IN2P VEE IN2P Dpin
+Bib_IN2P VEE IN2P I=1.9e-08*limit((V(VCC,VEE)-1-V(IN2P,VEE))/0.2,0,1)
+* input IN2M
+Rin_IN2M IN2M VEE 1e+09
+Dl_IN2M VEE IN2M Dpin
+Bib_IN2M VEE IN2M I=2.1e-08*limit((V(VCC,VEE)-1-V(IN2M,VEE))/0.2,0,1)
+* output OUT2 (push_pull)
+Rlk_OUT2 OUT2 VEE 1G
+Bdrv_OUT2 drv_OUT2 VEE V=limit(limit(V(n2,VEE),5m,max(V(VCC,VEE)-2,5m)),0,max(V(VCC,VEE),0))
+Bso_OUT2 VCC OUT2 I=limit((V(drv_OUT2,VEE)-V(OUT2,VEE))/10,0,0.04)
+Bsk_OUT2 OUT2 VEE I=limit((V(OUT2,VEE)-V(drv_OUT2,VEE))/10,0,0.04)
+* function core
+Bvos1 d1 VEE V = V(IN1P,VEE) - V(IN1M,VEE) - 3m
+Bgm1 VEE n1 I = 68u*tanh(1m*V(d1,VEE)/68u)
+R1 n1 VEE 100Meg
+C1 n1 VEE 227p
+Dclp1a n1 VCC Dpin
+Dclp1b VEE n1 Dpin
+Bvos2 d2 VEE V = V(IN2P,VEE) - V(IN2M,VEE) - 3m
+Bgm2 VEE n2 I = 68u*tanh(1m*V(d2,VEE)/68u)
+R2 n2 VEE 100Meg
+C2 n2 VEE 227p
+Dclp2a n2 VCC Dpin
+Dclp2b VEE n2 Dpin
+* alarms: 1 when a datasheet condition is violated, else 0 (plot V(x1:<node>))
+Bchk_abs_VCC chk_abs_VCC VEE V=limit(u(V(VCC,VEE)-32),0,1)
+Bchk_ovl_OUT1 chk_ovl_OUT1 VEE V=limit(u((V(drv_OUT1,VEE)-V(OUT1,VEE))/10-0.04)+u((V(OUT1,VEE)-V(drv_OUT1,VEE))/10-0.04),0,1)
+Bchk_abs_IN1M chk_abs_IN1M VEE V=limit(u(V(IN1M,VEE)-32)+u(-0.3-V(IN1M,VEE)),0,1)
+Bchk_abs_IN1P chk_abs_IN1P VEE V=limit(u(V(IN1P,VEE)-32)+u(-0.3-V(IN1P,VEE)),0,1)
+Bchk_abs_IN2P chk_abs_IN2P VEE V=limit(u(V(IN2P,VEE)-32)+u(-0.3-V(IN2P,VEE)),0,1)
+Bchk_abs_IN2M chk_abs_IN2M VEE V=limit(u(V(IN2M,VEE)-32)+u(-0.3-V(IN2M,VEE)),0,1)
+Bchk_ovl_OUT2 chk_ovl_OUT2 VEE V=limit(u((V(drv_OUT2,VEE)-V(OUT2,VEE))/10-0.04)+u((V(OUT2,VEE)-V(drv_OUT2,VEE))/10-0.04),0,1)
+Bchk_any chk_any VEE V=limit(V(chk_abs_VCC,VEE)+V(chk_ovl_OUT1,VEE)+V(chk_abs_IN1M,VEE)+V(chk_abs_IN1P,VEE)+V(chk_abs_IN2P,VEE)+V(chk_abs_IN2M,VEE)+V(chk_ovl_OUT2,VEE),0,1)
+.model Dpin D(Is=1e-14 N=1 Rs=10)
+.ends LM358
