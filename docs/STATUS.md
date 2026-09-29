@@ -1,3 +1,43 @@
+## 2026-09-29 — support-gate identity and bench eligibility safeguards (D-060)
+
+Two reproduced support-gate bypasses are closed. First-page device identity is checked in the
+Features, Description and Overview sections as well as the heading, so an unlisted MCU,
+FPGA/CPLD, processor or SoC cannot become an allowed model merely because its class appears
+after a section heading. Application-only references to devices being powered remain distinct
+from the identity of the requested part. Declared family hints cannot override a blocked class.
+
+Buck support now requires each essential behavior to have a numeric operating reference and a
+valid `circuit_measurement` recipe with the exact physical terminal set, matching units and a
+compatible measurement operation.
+An unrelated generic probe, an empty or invalid recipe, missing condition evidence, or a
+dimensionally mismatched measurement no longer satisfies coverage merely because the row's
+statement names the behavior. Refused behavioral requests retain their missing-test reasons.
+These are support eligibility checks; only subsequent frozen LTspice observations can earn
+electrical PASS. M6 package confirmation and the unfinished buck qualification checks remain open.
+
+Focused command: `pytest -q tests/models/test_support.py tests/pipeline/test_support_gate.py
+-m "not ltspice and not network"`, with the work checkout's `src` on `PYTHONPATH` and its
+edition's canonical venv. General: **284 passed, 1 skipped, 2 deselected in 6.78 s**. Bob:
+**283 passed, 1 skipped, 2 deselected in 7.42 s**, with the existing `slow`-marker warning.
+Changed-file Ruff check/format, `git diff --check`, and the 49-file shared-core checks passed.
+Support decisions replayed against the saved TPS54332 and LM358 fixtures remain supported;
+the variants assigning one unrelated probe to all essential rows are refused. This replay
+does not rerun LTspice or alter the existing four nominal PASS / twelve mandatory UNKNOWN
+buck qualification results. No new electrical qualification is claimed by this safety follow-up.
+
+Full offline command: `pytest -q -m "not ltspice and not network"`, using the same checkout
+and venv setup. General: **2241 passed, 20 skipped, 190 deselected in 101.79 s**. Bob:
+**1999 passed, 31 skipped, 187 deselected in 75.69 s**, with four existing `slow`-marker warnings.
+
+A subsequent **General-only live LTspice TPS54332DDA replay** retained 12 PASS / 4 FAIL /
+41 UNKNOWN / 49 N/A ordinary rows and 4 PASS / 12 UNKNOWN supplemental checks, with
+`family_qualified=false` and zero provider calls. Extract / compile / simulate / total time was
+**1.924 / 0.004 / 159.805 / 164.873 s**. The delivered library SHA-256 remains
+`21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2`; the frozen plan SHA-256
+remains `19530176920a72d67c1e9531138c5c20bd1e2d91dc123db4453a023d8c3eb267`.
+Bob received the saved-fixture regression and full offline suite above, with **no new live
+simulator run for this safety follow-up**. These unchanged results add no broader qualification.
+
 ## 2026-09-29 — frozen qualification and reviewed source evidence (D-059)
 
 GitHub-reviewable acceptance summary:

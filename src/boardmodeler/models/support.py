@@ -18,13 +18,16 @@ This module decides; it builds nothing and judges nothing.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from boardmodeler.authoring.circuit_probe import CircuitRecipe
 from boardmodeler.authoring.part_class import classify
-from boardmodeler.authoring.spec import SpecSet
+from boardmodeler.authoring.pin_roles import physical_terminals
+from boardmodeler.authoring.spec import Characteristic, SpecSet
 from boardmodeler.models import op_amp
 from boardmodeler.models.buck_switching import (
     BuckDesign,
@@ -552,12 +555,50 @@ def _buck_uncited(design: object) -> tuple[str, ...]:
     return tuple(name for name in _BUCK_INPUTS if origin[name] == "template_default")
 
 
+def _buck_test_matches(row: Characteristic, label: str, terminals: set[str]) -> bool:
+    # Generic regulator probes assume VOUT/FB pins, not this physical buck power
+    # stage. A name alone is not a bench: require a source limit and an executable,
+    # dimensionally compatible circuit with an explained operating point.
+    if row.probe != "circuit_measurement" or not any(
+        value is not None and math.isfinite(value)
+        for value in (row.min_value, row.typ_value, row.max_value)
+    ):
+        return False
+    if (
+        row.req_class in ("UNKNOWN", "ABSOLUTE_MAXIMUM")
+        or row.source_page is None
+        or not row.excerpt
+    ):
+        return False
+    try:
+        recipe = CircuitRecipe.model_validate(row.probe_recipe)
+    except ValueError, TypeError:
+        return False
+    if recipe.unit != row.unit or set(recipe.terminals) != terminals:
+        return False
+    # This is an eligibility check, not a simulated verdict or complete corner
+    # qualification. The planner validates fixture/source conditions; the frozen
+    # harness must still observe the requested DUT response.
+    operations = {
+        "reference voltage": ("V", {"mean", "min", "max"}),
+        "switching frequency": ("Hz", {"frequency", "delay"}),
+        "current limit": ("A", {"max"}),
+        "soft start": ("A", {"mean", "min", "max"}),
+        "enable and undervoltage lockout": ("V", {"crossing_value", "hysteresis"}),
+    }
+    unit, allowed = operations[label]
+    return row.unit == unit and recipe.measurement.operation in allowed
+
+
 def _bound_gaps(spec: SpecSet, behaviours: tuple[tuple[str, str], ...]) -> tuple[str, ...]:
-    bound = [row.statement for row in spec.characteristics if row.probe]
+    terminals = set(physical_terminals(spec.pin_map))
     return tuple(
         label
         for label, pattern in behaviours
-        if not any(re.search(pattern, statement, re.I) for statement in bound)
+        if not any(
+            re.search(pattern, row.statement, re.I) and _buck_test_matches(row, label, terminals)
+            for row in spec.characteristics
+        )
     )
 
 
@@ -608,6 +649,22 @@ IMPLEMENTATIONS: tuple[Implementation, ...] = (
 )
 
 
+def _identity_sections(head: str) -> tuple[str, ...]:
+    """Keep device identity in headings/features/description, not application lists."""
+    sections = re.split(
+        r"\b(features|applications|description|contents|overview)\b", head, flags=re.I
+    )
+    candidates = [sections[0]] + [
+        sections[index + 1]
+        for index in range(1, len(sections), 2)
+        if sections[index].casefold() in ("features", "description", "overview")
+    ]
+    return tuple(
+        re.split(r"\b(?:for|powers|supplies|supports|drives)\b", section, maxsplit=1, flags=re.I)[0]
+        for section in candidates
+    )
+
+
 def decide_support(
     part: str,
     *,
@@ -631,19 +688,15 @@ def decide_support(
     blocked = classify(part, text=title)
     blocked_source = ""
     if blocked.supported:
-        # PDF metadata is often "untitled". Read the device heading too, before a
+        # PDF metadata is often "untitled". Read first-page identity too, before a
         # declared family or an otherwise matching implementation can admit it.
-        # Later features/applications may name a different device being powered;
+        # Applications may name a different device being powered;
         # "converter for FPGA supplies" does not make the converter an FPGA.
-        heading = re.split(
-            r"\b(?:features|applications|description|contents|overview|for)\b",
-            head,
-            maxsplit=1,
-            flags=re.I,
-        )[0]
-        blocked = classify(part, text=heading)
-        if not blocked.supported:
-            blocked_source = "the device heading on the first page of the datasheet"
+        for identity in _identity_sections(head):
+            blocked = classify(part, text=identity)
+            if not blocked.supported:
+                blocked_source = "the device identity on the first page of the datasheet"
+                break
     if not blocked.supported:
         state: State = "blocked_class"
         return SupportDecision(

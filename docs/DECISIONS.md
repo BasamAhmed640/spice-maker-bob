@@ -793,3 +793,29 @@ VREF=0.72-V candidates. The clean run has 4 PASS / 12 UNKNOWN; the changed candi
 times were 87.497255 s and 83.232343 s. Focused source-column, missing-citation, package-replay,
 fixture, wrong-candidate, provenance and callback tests accompany the code. This is a bounded
 source-engine milestone; the remaining mandatory checks and broader family coverage are unfinished.
+
+## D-060 — Check first-page device identity and executable buck test eligibility (2026-09-29)
+
+1. A device-class refusal must survive a first-page section boundary. Check identity-bearing
+   Features, Description and Overview text in addition to the heading before accepting an
+   implementation or declared family. Do not classify an ordinary analog device as an MCU or FPGA
+   solely because its applications or power-rail descriptions mention one.
+2. A row's statement plus any nonempty probe name is insufficient evidence that an essential
+   buck behavior is independently testable. Require an operating numeric reference, source
+   page/excerpt, and a valid circuit-measurement recipe with condition evidence, the exact
+   physical terminal set, matching units and a compatible operation. Generic regulator probes do
+   not describe this physical buck's power stage merely by sharing a behavioral name.
+3. This gate establishes test eligibility, not measured accuracy or full-family qualification.
+   Preserve explicit missing-test reasons and the independent frozen harness verdicts. Do not
+   use these safeguards to claim completion of M6 or the remaining M4b2/M4b3 checks.
+
+Rationale: reproductions admitted an unlisted MCU whose identity followed a Features heading,
+and accepted unrelated probe assignments as coverage for every essential buck behavior.
+Both bypasses could allow authoring or support claims without the intended evidence.
+
+Evidence: `tests/models/test_support.py` covers blocked identities after section headings,
+incidental application mentions, unrelated probes, malformed recipes, missing conditions/limits,
+wrong terminals, units and operations. The focused support/pipeline command recorded at the top
+of STATUS passed 284 tests in General and 283 in Bob, with one skip and two deselections in each.
+Saved TPS54332/LM358 support decisions remain accepted; unrelated-probe variants are refused.
+These checks add no simulator measurements or new electrical-accuracy claims.

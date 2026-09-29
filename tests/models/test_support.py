@@ -70,6 +70,47 @@ def _buck_spec():
     return peak_tests._spec(*peak_tests._basis())
 
 
+def _test_recipe(row):
+    # Synthetic physical benches for support eligibility, not simulator evidence.
+    operation, signal = {
+        "R_VREF": ("mean", "V(VSENSE)"),
+        "R_FSW": ("frequency", "V(PH)"),
+        "R_ILIM": ("max", "I(L1)"),
+        "R_EN_THRESHOLD": ("crossing_value", "V(EN)"),
+        "R_UVLO_VIN": ("crossing_value", "V(VIN)"),
+        "R_SS_CHARGE": ("mean", "I(VSS)"),
+    }[row.char_id]
+    return {
+        "purpose": row.statement,
+        "unit": row.unit,
+        "terminals": {
+            port.upper(): "0" if port in ("GND", "PowerPAD") else port for port in peak_tests._PORTS
+        },
+        "components": [
+            "VIN VIN 0 12",
+            "VEN EN 0 PWL(0 0 1m 3.3)",
+            "L1 PH VOUT 10u",
+            "COUT VOUT 0 22u",
+            "RLOAD VOUT 0 1",
+            "RFB VOUT VSENSE 30k",
+            "RFB2 VSENSE 0 10k",
+            "VSS SS 0 0.4",
+        ],
+        "stop": 0.001,
+        "step": 1e-8,
+        "measurement": {
+            "operation": operation,
+            "signal": signal,
+            "start": 0.0001,
+            "end": 0.001,
+            "level": 0.5,
+            "trigger": "V(PH)",
+            "trigger_level": 0.5,
+        },
+        "condition_evidence": "TEST_FIXTURE: nominal VIN=12 V, EN ramp, SS=0.4 V.",
+    }
+
+
 def _supported_rows():
     row = peak_tests._row
     extra = (
@@ -98,7 +139,9 @@ def _supported_rows():
     rows = (*peak_tests._basis(), *extra)
     bound = ("R_VREF", "R_FSW", "R_ILIM", "R_EN_THRESHOLD", "R_UVLO_VIN", "R_SS_CHARGE")
     return tuple(
-        dataclasses.replace(item, probe="circuit_measurement") if item.char_id in bound else item
+        dataclasses.replace(item, probe="circuit_measurement", probe_recipe=_test_recipe(item))
+        if item.char_id in bound
+        else item
         for item in rows
     )
 
@@ -121,11 +164,14 @@ def test_a_blocked_datasheet_title_stops_every_route(title: str) -> None:
 
 
 @pytest.mark.parametrize("heading", BLOCKED_TITLES)
-def test_a_blocked_first_page_heading_cannot_be_overridden_by_a_declared_family(heading) -> None:
+@pytest.mark.parametrize("section", ["", "Features", "Description", "Overview"])
+def test_a_blocked_first_page_heading_cannot_be_overridden_by_a_declared_family(
+    heading, section
+) -> None:
     decision = decide_support(
         "UNLISTED123",
         title="untitled",
-        head=f"{heading} Features Low power consumption Applications Industrial control",
+        head=f"UNLISTED123 {section} {heading} Features Low power consumption Applications Industrial control",
         declared_family="linear_regulator",
         spec=_buck_spec(),
     )
@@ -141,6 +187,8 @@ def test_a_blocked_first_page_heading_cannot_be_overridden_by_a_declared_family(
         "UNLISTED123 Step-down converter Applications FPGA and microcontroller power supplies",
         "UNLISTED123 Step-down converter Features Powers FPGA and microcontroller rails",
         "UNLISTED123 Step-down converter for FPGA and microcontroller power supplies",
+        "UNLISTED123 Description Step-down converter for FPGA and microcontroller power supplies",
+        "UNLISTED123 Overview Step-down converter Features Supports FPGA power rails",
     ],
 )
 def test_application_devices_on_the_first_page_do_not_change_the_parts_class(head) -> None:
@@ -200,6 +248,56 @@ def test_a_buck_with_cited_inputs_and_independent_tests_is_supported() -> None:
     assert decision.supported
     assert decision.missing == ()
     assert all(decision.allows(route) for route in ROUTES)
+
+
+@pytest.mark.parametrize("probe", ["uvlo_rise", "regulator_uvlo", "opamp_offset"])
+def test_a_buck_cannot_claim_all_behaviors_from_an_unrelated_probe(probe) -> None:
+    rows = tuple(dataclasses.replace(row, probe=probe) for row in _supported_rows())
+    decision = decide_support(
+        "DEMO_BUCK", spec=dataclasses.replace(_buck_spec(), characteristics=rows)
+    )
+    assert decision.state == "unsupported_family"
+    assert len([gap for gap in decision.missing if gap.startswith("independent test")]) == 5
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "empty",
+        "invalid",
+        "no_conditions",
+        "wrong_unit",
+        "wrong_operation",
+        "no_limit",
+        "wrong_pins",
+    ],
+)
+def test_a_buck_needs_a_numeric_limit_and_an_executable_matching_recipe(fault) -> None:
+    rows = []
+    for row in _supported_rows():
+        if row.char_id == "R_ILIM":
+            recipe = row.probe_recipe
+            if fault == "empty":
+                recipe = {}
+            elif fault == "invalid":
+                recipe = {**recipe, "components": [".include candidate.lib"]}
+            elif fault == "no_conditions":
+                recipe = {**recipe, "condition_evidence": ""}
+            elif fault == "wrong_unit":
+                recipe = {**recipe, "unit": "V"}
+            elif fault == "wrong_operation":
+                recipe = {**recipe, "measurement": {**recipe["measurement"], "operation": "mean"}}
+            elif fault == "no_limit":
+                row = dataclasses.replace(row, min_value=None, typ_value=None, max_value=None)
+            elif fault == "wrong_pins":
+                recipe = {**recipe, "terminals": {"VOUT": "VOUT", "GND": "0"}}
+            row = dataclasses.replace(row, probe_recipe=recipe)
+        rows.append(row)
+    decision = decide_support(
+        "DEMO_BUCK", spec=dataclasses.replace(_buck_spec(), characteristics=tuple(rows))
+    )
+    assert not decision.supported
+    assert "independent test for current limit" in decision.missing
 
 
 @pytest.mark.parametrize(
@@ -320,6 +418,28 @@ def test_the_frozen_tps54332_spec_is_represented_and_independently_tested() -> N
 
 
 # --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("folder", "part"),
+    [("engine-acceptance-buck", "TPS54332DDA"), ("engine-acceptance-opamp", "LM358")],
+)
+def test_retained_acceptance_bindings_keep_support_but_reject_same_probe_mutants(folder, part):
+    inputs = Path(__file__).resolve().parents[2] / "runs" / folder / "spec"
+    if not (inputs / "requirements.json").is_file():
+        pytest.skip("retained acceptance inputs are local and untracked")
+    spec = load_tps54320_spec(
+        inputs / "requirements.json", inputs / "bindings.json", part=part, subckt=part
+    )
+    assert decide_support(part, spec=spec).supported
+    for probe in ("uvlo_rise", "regulator_uvlo", "opamp_offset"):
+        rows = tuple(
+            dataclasses.replace(row, probe=probe) if row.probe else row
+            for row in spec.characteristics
+        )
+        assert not decide_support(
+            part, spec=dataclasses.replace(spec, characteristics=rows)
+        ).supported
+
+
 # Reading what kind of part it is: number and title, first page, cited rows.
 
 
