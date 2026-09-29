@@ -24,7 +24,7 @@ Read this first, then `docs/STATUS.md` (newest entry on top) and `docs/DECISIONS
 | TPS54331 (second buck, cached extraction) | behavioral | refused, `unsupported_family`: no cited current limit or enable threshold, no independent rows for four behaviours | 9 s |
 | XD7660 (charge pump) | pin_only | UNKNOWN by design, gate 12 pass, 1 unknown, 0 fail | 158 s (extract 154.5 s) |
 | LM5116 (21-pin controller) | pin_only | BLOCKED: gate failed two checks, nothing delivered | 348 s (extract 342.4 s) |
-| TPS54331 with `--plan-tests` | behavioral | see the last section | see the last section |
+| TPS54331 with `--plan-tests` | behavioral | refused again, `unsupported_family`: current limit and enable threshold not cited; independent tests for reference voltage and current limit missing (10 of 112 rows bind) | 294 s (planning call 284 s) |
 
 Outputs, including `run-timing.json` and `support-decision.json` per run, are under
 `C:\Users\basam\src\.smsnap\ex\` (`tps54331`, `xd7660`, `lm5116`, `tps54331_plan`, and `summary.log`).
@@ -34,8 +34,10 @@ at a time because there is one key.
 
 ## Do next, in this order
 
-1. Read the TPS54331 `--plan-tests` result (last section). If the decision is still not supported, the
-   missing pieces are the cited current limit and enable threshold; the extraction has to cite them.
+1. Make TPS54331 supportable: the extraction has to cite the current limit and the enable threshold,
+   and two more independent tests (reference voltage, current limit) have to bind; then re-run with
+   `--plan-tests`. Small aside: the timing record of a refused behavioural run says `agent_authoring`
+   for its route; it should say the run was refused before authoring.
 2. Save the failing gate report when `pin_only` is blocked (today `pin-only-report.json` is written only
    on success, so the LM5116 cause is not inspectable). Then decide whether a table with several
    grounds or rails should be refused before the build, as two supply domains already are.
@@ -63,7 +65,8 @@ at a time because there is one key.
 
 ## The TPS54331 `--plan-tests` run
 
-Pending when this was written: the run started at 00:48:50 and is capped at 20 minutes. Its output is in
-`C:\Users\basam\src\.smsnap\ex\tps54331_plan\` (look at `support-decision.json`, `run-timing.json`,
-`results.json`) and the last lines of `summary.log`. The earlier attempt with planning ran past 11
-minutes and was stopped; that is why planning is opt-in.
+Started 00:48:50, finished in 293.7 s (bind 284.2 s is the planning call, extract 6.7 s from the cache).
+Result: BLOCKED, `unsupported_family`, missing: cited input ILIM, cited input UVTH, independent test
+for reference voltage, independent test for current limit. 10 rows judged by probes, 102 declared not
+testable. The earlier attempt with planning ran past 11 minutes and was stopped; that is why planning
+is opt-in. Output: `C:/Users/basam/src/.smsnap/ex/tps54331_plan/`.

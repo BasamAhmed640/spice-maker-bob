@@ -9,6 +9,7 @@ routes with a live extraction, and the automated checks on `main` are green for 
 | Live extraction, XD7660 charge pump, `--engine pin_only` (opencode_go, deepseek-v4.1-flash, one key) | UNKNOWN by design in 157.9 s: extract 154.5 s (4 tasks, 0 cache hits, 17 pages, 43 rows, 8 pins), gate 5 benches 2.9 s, other stages under 0.3 s; 12 checks pass, 1 unknown (no short-circuit rating cited), 0 fail; no agent turns |
 | Live extraction, LM5116 controller, `--engine pin_only` | BLOCKED, and correctly: the gate failed the current-conservation and quiet-when-clean checks on the 21-pin shell, so nothing was delivered and no other route ran. 347.9 s: extract 342.4 s (8 batches, 240 rows, 21 pins), gate stage 0.07 s, benches 4.2 s |
 | TPS54331 second buck, `--engine behavioral`, cached extraction, deterministic bind | refused as `unsupported_family` in 9 s: the buck implementation matches, but the rows do not cite the current limit or the enable threshold and no independent row covers switching frequency, current limit, soft start or enable/UVLO (6 of 112 rows bind deterministically) |
+| TPS54331 again with `--plan-tests` (explicit AI planning, cached extraction) | refused again, `unsupported_family`, in 293.7 s (the planning call is 284.2 s of it): 10 of 112 rows now bind, and what is missing fell from four independent tests to two (reference voltage, current limit) plus the two cited inputs (current limit, enable threshold); no model written |
 | Pin-only on parts that already have behaviour | LM358 12 pass, 1 unknown, 0 fail; TPS54332 13 pass, 1 unknown, 0 fail |
 | LM358 from the datasheet PDF alone, internet switch off | built by the behavioural route in 25.4 s with no provider call; from the reviewed rows 29.0 s |
 | Automated checks on the pushed tips (`aed2bb0`) | ruff check, ruff format and the full pytest step all pass on this edition |
@@ -30,8 +31,9 @@ What changed.
 
 Not done, stated plainly.
 
-- One part per family, and TPS54331 is not a second supported buck. The explicit planning run is the
-  next thing to look at (the hand-off says where its output is).
+- One part per family. TPS54331 is not a second supported buck: even with explicit planning (5 minutes,
+  not the 11-plus of the first try) it lacks the cited current limit and enable threshold and two
+  independent tests, so the extraction has to cite them before the claim can be made.
 - The pin-only shell has one rail and one ground and clamps outputs to 0 V to the rail, so it cannot
   represent the negative output of a voltage inverter such as XD7660; its card asks for the pin table
   to be confirmed. LM5116 shows a multi-rail controller is withheld by the gate; the failing gate
