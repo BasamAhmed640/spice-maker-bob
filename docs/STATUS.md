@@ -15,6 +15,8 @@ These are pre-refactor results. The fresh clone lacks the ignored `models/T1-tps
 ## Implementation observations
 
 - The Bob runtime lock now exports eight pinned packages with SHA-256 hashes. `uv.lock` lists Windows x64 and ARM64 wheels for numpy, pydantic-core, and pypdfium2.
-- Post-change full test, format, source ZIP, shortcut, no-Python, offline, long-path, Bob Shell, and ARM64 results are pending. Their exact commands and output belong in [`docs/evidence/2026-09-28-terminal/REPORT.md`](evidence/2026-09-28-terminal/REPORT.md) once observed.
+- On Windows 11 x64, a committed source ZIP extracted under a path with spaces, `é`, and `Ω` installed the eight wheels, passed a real LTspice smoke test and `doctor`, and created, refreshed, and removed a Unicode-safe shortcut.
+- The focused suite passed 51 tests; Ruff lint and format checks passed. The broader baseline suite had missing ignored test data and setup-dependent failures and is not described as green.
+- Stubbed no-Python, installer-hash, and unsupported-architecture tests passed. The Python 3.14.7 installers were downloaded and verified but not run locally; GitHub Actions x64/ARM64 installer checks are pending after push.
 
-No live Bob authoring call has been made for this change.
+Exact commands and untested cases are in [`docs/evidence/2026-09-28-terminal/REPORT.md`](evidence/2026-09-28-terminal/REPORT.md). No live Bob authoring call has been made for this change.

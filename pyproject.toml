@@ -46,8 +46,10 @@ filterwarnings = ["error::DeprecationWarning:boardmodeler.*"]
 line-length = 100
 target-version = "py314"
 src = ["src", "tests", "tools"]
-extend-exclude = [
-    "docs/evidence",
+extend-exclude = ["docs/evidence"]
+
+[tool.ruff.format]
+exclude = [
     "src/boardmodeler/authoring/sanity.py",
     "src/boardmodeler/simulation/ltspice.py",
 ]
