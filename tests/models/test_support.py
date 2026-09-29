@@ -171,6 +171,45 @@ def test_a_buck_with_cited_inputs_and_independent_tests_is_supported() -> None:
     assert all(decision.allows(route) for route in ROUTES)
 
 
+@pytest.mark.parametrize(
+    ("statement", "supported"),
+    [
+        ("Switch current limit threshold", True),
+        ("Current-limit threshold", True),
+        ("Current limiter output", False),
+        ("Recurrent limit", False),
+        ("Current-limiting response", False),
+        ("Current sense gain", False),
+    ],
+)
+def test_current_limit_test_wording_must_name_the_behavior(statement, supported) -> None:
+    # Keep the suffix-backed input so this checks independent-test matching alone.
+    rows = tuple(
+        dataclasses.replace(row, statement=statement) if row.char_id == "R_ILIM" else row
+        for row in _supported_rows()
+    )
+    spec = dataclasses.replace(_buck_spec(), characteristics=rows)
+    decision = decide_support("DEMO_BUCK", title="DEMO_BUCK step-down converter", spec=spec)
+    assert decision.supported is supported
+    assert "cited input ILIM" not in decision.missing
+    assert ("independent test for current limit" in decision.missing) is not supported
+
+
+def test_hyphenated_current_limit_does_not_replace_missing_uvlo_input() -> None:
+    rows = tuple(
+        dataclasses.replace(row, statement="Current-limit threshold")
+        if row.char_id == "R_ILIM"
+        else row
+        for row in _supported_rows()
+        if row.char_id != "R_UVLO_VIN"
+    )
+    spec = dataclasses.replace(_buck_spec(), characteristics=rows)
+    decision = decide_support("DEMO_BUCK", title="DEMO_BUCK step-down converter", spec=spec)
+    assert not decision.supported
+    assert "cited input UVTH" in decision.missing
+    assert "independent test for current limit" not in decision.missing
+
+
 def test_removing_one_input_or_one_test_withdraws_the_claim() -> None:
     rows = _supported_rows()
     spec = dataclasses.replace(_buck_spec(), characteristics=rows)

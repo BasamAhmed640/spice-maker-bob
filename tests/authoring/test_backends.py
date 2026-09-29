@@ -104,6 +104,7 @@ def test_text_reply_uses_last_message_and_never_resumes(tmp_path, keyed):
     payload["last_message"] = '{"answer": "extracted"}'
     runner = Recorder(completed(json.dumps(payload)))
     backend = BobShellBackend(runner=runner)
+    assert backend.shell_invocations == 0
     text_result = backend.author(
         replace(request(tmp_path), expect_text=True, session_id="must-not-resume")
     )
@@ -113,6 +114,7 @@ def test_text_reply_uses_last_message_and_never_resumes(tmp_path, keyed):
     argv = runner.calls[1]["argv"]
     assert "--resume" not in argv
     assert PROMPT in runner.calls[1]["input_text"]
+    assert backend.shell_invocations == 2
 
 
 def completed(stdout: str = "", *, returncode: int = 0, timed_out: bool = False, stderr: str = ""):
@@ -350,6 +352,7 @@ def test_a_timeout_reports_the_timeout_reason(
     assert authored.ok is False
     assert authored.detail.startswith("bob_shell_timeout")
     assert "5 s" in authored.detail
+    assert backend.shell_invocations == 1
 
 
 def test_a_backend_without_a_timeout_never_bounds_the_run(
@@ -400,6 +403,7 @@ def test_a_set_cancel_event_stops_before_launching(
     assert authored.ok is False
     assert authored.detail.startswith("cancelled")
     assert recorder.calls == []
+    assert backend.shell_invocations == 0
 
 
 def test_cancellation_while_running_reports_cancelled(
@@ -481,6 +485,40 @@ def test_an_unavailable_backend_refuses_to_author(
 
     assert authored.ok is False
     assert authored.detail == BOB_NOT_INSTALLED
+    assert backend.shell_invocations == 0
+
+
+def test_run_timing_counts_only_this_runs_shell_starts_and_keeps_provider_requests_unknown(
+    tmp_path: Path, keyed: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from boardmodeler.pipeline import make_model as engine
+
+    backend = BobShellBackend(runner=Recorder(completed(payload_line())))
+    backend.author(request(tmp_path))  # An earlier user's request is not this build's usage.
+    constructed = []
+
+    def factory(build_request):
+        constructed.append(build_request)
+        return backend
+
+    monkeypatch.setattr(engine, "build_backend", factory)
+    build_request = engine.MakeModelRequest("X1", "X1", tmp_path / "part.pdf", tmp_path / "out")
+    run = engine._Run(build_request, engine._StageLog(None))
+    assert run._get_backend() is backend
+    assert run._get_backend() is backend
+    assert constructed == [build_request]
+    before = run._provider_call_fields()
+    assert before["backend_invocations"] == before["provider_calls"] == 0
+    assert before["provider_calls_complete"] is True
+
+    backend.author(request(tmp_path))
+    backend.author(request(tmp_path))
+    after = run._provider_call_fields()
+    assert backend.shell_invocations == 3
+    assert after["backend_invocations"] == 2
+    assert after["provider_calls"] is None and after["provider_calls_complete"] is False
+    assert after["provider_calls_observed"] == 0
+    assert "Bob Shell" in after["provider_calls_unknown_reason"]
 
 
 # ------------------------------------------------------------ secret hygiene
@@ -520,6 +558,7 @@ def test_a_raising_runner_cannot_leak_the_key(
     assert authored.detail.startswith("bob_shell_failed")
     assert SENTINEL_KEY not in authored.detail
     assert "[REDACTED]" in authored.detail
+    assert backend.shell_invocations == 1
 
 
 def test_run_bob_shell_refuses_an_executable_outside_the_guard_allowlist(tmp_path: Path) -> None:

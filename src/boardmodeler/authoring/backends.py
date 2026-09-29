@@ -323,6 +323,14 @@ class BobShellBackend:
         self.env = dict(env) if env is not None else None
         self.runner: ProcessRunner = runner if runner is not None else run_bob_shell
         self.timeout_s = None if timeout_s is None else float(timeout_s)
+        self._shell_invocations = 0
+        self._shell_invocations_lock = threading.Lock()
+
+    @property
+    def shell_invocations(self) -> int:
+        """Shell starts; the CLI does not reveal its internal provider-call count."""
+        with self._shell_invocations_lock:
+            return self._shell_invocations
 
     # ------------------------------------------------------------- contract
 
@@ -401,6 +409,8 @@ class BobShellBackend:
         # arrives — that is what ``timeout_s=None`` (no limit) means here.
         runner_timeout = float("inf") if limit is None else limit
         try:
+            with self._shell_invocations_lock:
+                self._shell_invocations += 1
             process = self.runner(
                 argv,
                 cwd=Path(request.workdir),

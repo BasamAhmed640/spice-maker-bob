@@ -13,6 +13,8 @@ import pytest
 from tests.pipeline import test_make_model as helpers
 
 from boardmodeler.authoring.backends import ScriptedBackend
+from boardmodeler.authoring.viability import GateCheck, GateReport
+from boardmodeler.domain.enums import Status
 from boardmodeler.pipeline import make_model as engine
 from boardmodeler.pipeline.make_model import MakeModelRequest, make_model
 from boardmodeler.simulation.ltspice import LtspiceInstall
@@ -185,6 +187,8 @@ def test_the_gate_and_its_seconds_are_recorded_even_when_the_run_is_refused(
     timing = json.loads((tmp_path / "out" / engine.TIMING_NAME).read_text(encoding="utf-8"))
     assert "gate" in timing["stage_seconds"]
     assert "author" not in timing["stage_seconds"]
+    assert timing["route"] == "refused_before_authoring"
+    assert timing["provider_calls"] == 0 and timing["provider_calls_complete"] is True
 
 
 def test_an_unknown_engine_or_a_behavioral_quick_check_is_rejected_up_front(
@@ -306,6 +310,43 @@ def test_pin_only_builds_a_limited_model_that_is_judged_by_the_gate_and_is_never
     assert timing["route"] == "pin_only_shell" and timing["author_turns"] == 0
     support = json.loads((out / engine.SUPPORT_RECORD_NAME).read_text(encoding="utf-8"))
     assert support["engine"] == "pin_only" and support["routes"]["pin_only"]["allowed"]
+
+
+@pytest.mark.parametrize("failure_status", [Status.FAIL, Status.BLOCKED])
+def test_a_withheld_pin_only_model_keeps_the_gate_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_status: Status
+) -> None:
+    monkeypatch.setattr(
+        engine, "locate", lambda explicit=None: LtspiceInstall(Path(__file__), "test")
+    )
+    check = GateCheck(
+        "current_conservation",
+        failure_status,
+        "the pin currents do not balance",
+        {"residual_a": 2e-9},
+    )
+    monkeypatch.setattr(
+        "boardmodeler.authoring.viability.run_gate",
+        lambda *args, **kwargs: GateReport("X1", [check], runs=1),
+    )
+
+    result, backend = _run(
+        tmp_path, monkeypatch, AMPLIFIER_WORDING, pins=PIN_TABLE, engine="pin_only"
+    )
+    out = tmp_path / "out"
+    assert result.status == "BLOCKED"
+    assert result.detail.startswith("pin_only_model_not_viable:")
+    assert backend.turns == 0
+    assert result.lib_path is None and result.asy_path is None and result.card_path is None
+    assert not any(out.glob("*.lib")) and not any(out.glob("*.asy"))
+    assert not (out / "MODEL_CARD.md").exists()
+    report = json.loads((out / "pin-only-report.json").read_text(encoding="utf-8"))
+    assert report["gate_checks"] == [check.as_dict()]
+    assert report["gate_status"] == ("FAIL" if failure_status is Status.FAIL else "UNKNOWN")
+    assert report["verdict"] == "UNJUDGED"
+    timing = json.loads((out / engine.TIMING_NAME).read_text(encoding="utf-8"))
+    assert timing["route"] == "pin_only_shell"
+    assert timing["provider_calls"] == 0 and timing["provider_calls_complete"] is True
 
 
 @pytest.mark.parametrize("route", ["behavioral", "pin_only"])

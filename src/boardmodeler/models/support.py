@@ -533,7 +533,7 @@ _BUCK_INPUTS = ("VREF", "FSW", "ILIM", "GMCS", "ISS", "ENTH", "UVTH")
 _BUCK_BEHAVIOURS = (
     ("reference voltage", "reference|feedback|output voltage"),
     ("switching frequency", "switching frequency|oscillator frequency"),
-    ("current limit", "current limit"),
+    ("current limit", r"\bcurrent[- ]limit\b"),
     ("soft start", "soft.?start|slow.?start"),
     ("enable and undervoltage lockout", "enable|undervoltage|uvlo"),
 )

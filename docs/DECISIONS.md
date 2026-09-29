@@ -689,3 +689,31 @@ Live results that bound the claims above: a charge pump (XD7660) reaches a limit
 about 158 s, most of it the extraction call; a 21-pin controller (LM5116) is withheld by the gate
 after a 348 s run; a second buck (TPS54331) is refused for missing cited limits and independent tests,
 not accepted on the strength of the buck template.
+
+## D-058 — Preserve withheld evidence, count observable calls, and keep unsupported rails blocked (2026-09-29)
+
+1. A pin-only viability failure withholds every model deliverable but still saves
+   `pin-only-report.json` with the measured gate checks. Replaying LM5116's saved evidence with real
+   LTspice confirmed the report survives a block and no library, symbol or card is delivered. The
+   report is diagnostic evidence, not permission to relabel the model PASS.
+2. The pin-only shell has one modeled rail. A second required supply terminal is structurally
+   refused as `pin_only_required_secondary_supply`, even when the extracted supply-domain fields
+   are blank or equal. It is refused before rendering or LTspice because the shell's existing
+   ground-referenced required-connection alarm fires on a correctly powered secondary rail. An
+   optional auxiliary supply does not itself trigger this refusal. Widening the shell later needs
+   real powered/open controls; weakening the alarm to obtain a green result is not an option.
+3. In the general edition, `run-timing.json` counts actual HTTP inference attempts at the API
+   transport boundary, including retries, rather than inferring calls from author turns or
+   extraction tasks. Cached and entirely local runs record exact zero. IBM Bob Shell is opaque:
+   after a CLI invocation its vendor-request
+   total is `null` with an explicit reason, while the observable shell invocation count is retained.
+   The timing route names refusals instead of claiming agent authoring happened.
+4. The TPS54331 historical extraction is not edited in place. Its electrical table has VIN UVLO
+   3.5 V as a maximum, EN 1.25 V as a typical and 1.35 V as a maximum, and current limit 3.5 A as
+   a minimum and 5.8 A as a typical. The operating description says typical VIN UVLO is unspecified.
+   This corrects the shorthand at the end of D-057: `UVTH` is a missing VIN UVLO design policy, not
+   an uncited EN threshold. A new reviewed extraction must be tied to the exact document hash; a
+   maximum must never be silently treated as a typical input. TPS54331 stays unsupported until the
+   input policy and independent test bindings are sound. A bounded matcher now reads both
+   `current limit` and `current-limit`; an offline replay removes only the ILIM citation gap and
+   still refuses the part for UVTH and missing independent VREF/current-limit tests.

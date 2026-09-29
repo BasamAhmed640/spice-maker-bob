@@ -88,6 +88,32 @@ def test_the_rail_is_the_supply_pin_named_like_one_and_the_others_draw_nothing()
     assert any("VIN is the rail" in note for note in built.notes)
 
 
+@pytest.mark.parametrize("domain", [None, "main rail"])
+def test_required_secondary_supplies_are_refused_even_without_distinct_domains(
+    domain: str | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from boardmodeler.models import pin_only
+
+    pins = [
+        pin("VIN", "power", 1, requirement="required", domain=domain),
+        pin("GND", "ground", 2),
+        pin("VCC", "power", 3, requirement="required", domain=domain),
+        pin("VCCX", "power", 4, domain=domain),
+        pin("HB", "power", 5, requirement="required", domain=domain),
+    ]
+    monkeypatch.setattr(
+        pin_only,
+        "render_shell",
+        lambda *args, **kwargs: pytest.fail("must refuse before rendering"),
+    )
+    with pytest.raises(
+        PinOnlyRefusal, match="pin_only_required_secondary_supply: required supply pins VCC, HB"
+    ) as refused:
+        build_pin_only("X1", "X1", pins)
+    assert "selected rail VIN" in str(refused.value)
+    assert "VCCX" not in str(refused.value)
+
+
 def test_a_second_required_ground_gets_the_missing_connection_alarm() -> None:
     pins = [
         pin("VCC", "power", 1),

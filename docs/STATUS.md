@@ -1,3 +1,40 @@
+## 2026-09-29 — hand-off takeover: retained failures, honest timing, bounded pin scope (D-058)
+
+The LM5116 pin-only failure now leaves its measured `pin-only-report.json` even though the library,
+symbol and model card are withheld. An offline replay of its saved extraction with real LTspice 26
+confirmed the report (9.954 s, no provider call). Its required VIN, VCC and HB pins also showed that
+the one-rail shell cannot judge additional required supplies: a second offline replay now refuses
+that table before rendering or LTspice as `pin_only_required_secondary_supply` (4.544 s, zero calls).
+Optional auxiliary supplies remain allowed.
+
+`run-timing.json` now records inference HTTP attempts, including retries, in the general edition.
+Bob records the number of shell invocations and marks the internal vendor-call total unknown after
+one runs; local and cached routes report exact zero. Timing routes distinguish refusals from agent
+authoring. The current-limit matcher reads both spaced and hyphenated wording without accepting
+unrelated words.
+
+The TPS54331 hand-off diagnosis needed correction: the saved extraction misplaces MIN/TYP/MAX values,
+and `UVTH` is VIN undervoltage lockout, whose typical threshold the datasheet leaves unspecified.
+An offline replay after the wording fix remains BLOCKED for cited UVTH and independent VREF and
+current-limit tests (6.685 s, zero provider calls). Historical run data and its original PDF were
+not edited; no new live AI call was made. A reviewed, exact-document extraction revision and an
+honest UVTH corner policy remain prerequisites to supporting this second buck.
+
+| Check | Result |
+| --- | --- |
+| General offline full suite, rerun alone | 2081 passed, 20 skipped, 190 deselected |
+| Bob offline full suite | 1784 passed, 31 skipped, 187 deselected |
+| Repo-wide Ruff check and format | passed in both editions (352 general / 310 Bob files formatted) |
+| Shared-core manifests and cross-edition comparison | 46 files intact and identical |
+
+The first general full run overlapped Bob's and hit a Windows access-denied error while saving the
+GUI sweep's temporary config. The isolated sweep and the serial full rerun passed; no engine test
+failed in that run.
+
+Remaining scope: only TPS54332 and LM358 have code-built behavioral implementations. The command
+line exposes `--engine` and `--family`, but the window does not; `legacy_ai` remains the default.
+More PCB families and independent tests are needed before broad coverage can be claimed.
+
 ## 2026-09-29 — engine step 3, second half: pin-only mode, live datasheet runs, automated checks green (D-057)
 
 Pin-only is a real route, the block list is wider, real datasheets have been run through the local

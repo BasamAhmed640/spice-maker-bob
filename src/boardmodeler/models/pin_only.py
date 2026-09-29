@@ -104,6 +104,22 @@ def build_pin_only(part: str, subckt: str, pin_map: Sequence[dict[str, Any]]) ->
             f"({', '.join(sorted(domains))}); this limited mode models one rail and one ground"
         )
     rail = next((n for n in supplies if _RAIL_NAME.match(n)), supplies[0])
+    required_secondary = [
+        name
+        for pin, name, kind in zip(pin_map, names, kinds, strict=True)
+        if kind == "supply"
+        and name != rail
+        and str(pin.get("connection_requirement")) == "required"
+    ]
+    if required_secondary:
+        # The shell's required-connection alarm is referenced to ground. It cannot
+        # distinguish a correctly powered extra supply from a floating connection,
+        # even when extraction omits the domain or labels both supplies alike.
+        raise PinOnlyRefusal(
+            "pin_only_required_secondary_supply: required supply pins "
+            f"{', '.join(required_secondary)} are additional to the selected rail {rail}; "
+            "this limited mode cannot represent their supply connections and alarms"
+        )
     if len(supplies) > 1:
         notes.append(f"{rail} is the rail; the other supply pins draw nothing and refer to it")
     pins: list[ShellPin] = []

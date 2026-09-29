@@ -110,6 +110,50 @@ def test_seed_preserves_physical_order_and_records_cited_and_default_values(tmp_
     assert payload["contract_sha256"] == seed.contract_sha256
 
 
+@pytest.mark.parametrize("statement", ["Switch current limit threshold", "Current-limit threshold"])
+@pytest.mark.parametrize(
+    ("typ", "minimum", "maximum", "expected", "origin"),
+    [(5.8, None, None, 5.8, "cited_row"), (None, 3.0, 5.0, 4.0, "derived_from_bounds")],
+)
+def test_current_limit_wording_selects_cited_values(
+    statement, typ, minimum, maximum, expected, origin
+):
+    current = _row(
+        "ROW_CURRENT",
+        statement,
+        unit="A",
+        typ=typ,
+        minimum=minimum,
+        maximum=maximum,
+    )
+    seed = seed_from_spec(_spec(*(row for row in _basis() if row.char_id != "R_ILIM"), current))
+    assert seed is not None
+    parameter = next(item for item in seed.parameters if item.name == "ILIM")
+    assert (parameter.value, parameter.origin, parameter.row_id) == (
+        expected,
+        origin,
+        "ROW_CURRENT",
+    )
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "Current limiter output",
+        "Recurrent limit",
+        "Current-limiting response",
+        "Current sense gain",
+    ],
+)
+def test_unrelated_current_wording_does_not_supply_ilim(statement):
+    current = _row("ROW_CURRENT", statement, unit="A", typ=5.8, minimum=3.0, maximum=5.0)
+    seed = seed_from_spec(_spec(*(row for row in _basis() if row.char_id != "R_ILIM"), current))
+    assert seed is not None
+    parameter = next(item for item in seed.parameters if item.name == "ILIM")
+    assert parameter.origin == "template_default"
+    assert parameter.row_id is None
+
+
 def test_sw_is_the_stable_default_and_invalid_modes_are_refused():
     # The switching topology is a frozen regression boundary while AVG is added.
     assert hashlib.sha256(_BODY.encode()).hexdigest() == (
