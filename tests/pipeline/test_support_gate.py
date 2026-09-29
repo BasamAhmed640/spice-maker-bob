@@ -306,3 +306,47 @@ def test_pin_only_builds_a_limited_model_that_is_judged_by_the_gate_and_is_never
     assert timing["route"] == "pin_only_shell" and timing["author_turns"] == 0
     support = json.loads((out / engine.SUPPORT_RECORD_NAME).read_text(encoding="utf-8"))
     assert support["engine"] == "pin_only" and support["routes"]["pin_only"]["allowed"]
+
+
+@pytest.mark.parametrize("route", ["behavioral", "pin_only"])
+def test_the_local_routes_never_ask_the_agent_to_plan_test_circuits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, route: str
+) -> None:
+    def no_planner(*args: object, **kwargs: object) -> None:
+        raise AssertionError("the agent test planner must not run on a local route")
+
+    monkeypatch.setattr("boardmodeler.authoring.test_planner.plan_bindings", no_planner)
+    monkeypatch.setattr(engine, "locate", lambda explicit=None: None)
+    result, backend = _run(
+        tmp_path,
+        monkeypatch,
+        AMPLIFIER_WORDING,
+        pins=PIN_TABLE,
+        engine=route,
+        bindings_json=None,
+        backend_name="api",
+    )
+    assert backend.turns == 0
+    assert "binding computed from the reviewed keyword table" in " ".join(
+        event.detail for event in result.stages if event.stage == "bind"
+    )
+
+
+def test_plan_tests_is_the_explicit_opt_in_to_the_agent_planner_on_a_local_route(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def planner(*args: object, **kwargs: object) -> None:
+        raise ValueError("planner was asked")
+
+    monkeypatch.setattr("boardmodeler.authoring.test_planner.plan_bindings", planner)
+    result, _backend = _run(
+        tmp_path,
+        monkeypatch,
+        AMPLIFIER_WORDING,
+        pins=PIN_TABLE,
+        engine="behavioral",
+        bindings_json=None,
+        backend_name="api",
+        plan_tests=True,
+    )
+    assert result.status == "BLOCKED" and "planner was asked" in result.detail

@@ -70,6 +70,7 @@ class _Request:
     reinforce: bool | None = None
     engine: str = "legacy_ai"
     family: str | None = None
+    plan_tests: bool = False
 
 
 class _Stage:
@@ -463,6 +464,11 @@ def test_the_engine_and_family_options_reach_the_request(
     cli.main([*base, "--engine", "behavioral", "--family", "switching_regulator"])
     capsys.readouterr()
     assert (calls[-1].engine, calls[-1].family) == ("behavioral", "switching_regulator")
+    assert calls[-1].plan_tests is False
+
+    cli.main([*base, "--engine", "behavioral", "--plan-tests"])
+    capsys.readouterr()
+    assert calls[-1].plan_tests is True
 
 
 def test_a_bad_engine_is_refused_by_the_parser(tmp_path: Path, datasheet: Path, capsys) -> None:

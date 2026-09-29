@@ -252,6 +252,13 @@ def build_parser() -> argparse.ArgumentParser:
         "first page nor the cited rows say; it never unblocks a refused class or makes a "
         "part supported (see docs/DECISIONS.md D-055 for the accepted names)",
     )
+    model_build.add_argument(
+        "--plan-tests",
+        action="store_true",
+        help="let the agent plan extra test circuits on --engine behavioral or pin_only (off by "
+        "default: those routes bind with the keyword table and ask no provider); the plan is "
+        "saved in spec/bindings.json for replay with --bindings",
+    )
     model_build.add_argument("--json", action="store_true")
     model_build.add_argument(
         "--strict", action="store_true", help="exit 1 when the outcome is not PASS"
@@ -1096,6 +1103,7 @@ def _cmd_model_build_from_datasheet(args: argparse.Namespace, *, subckt: str, em
         bindings_json=args.bindings,
         engine=args.engine,
         family=args.family,
+        plan_tests=args.plan_tests,
     )
     quiet = args.json
 

@@ -261,6 +261,11 @@ class MakeModelRequest:
     #: (a family id from models.support). It never unblocks a class and never makes a part
     #: supported; it only names the family for a part nothing else identifies.
     family: str | None = None
+    #: Let the agent plan the extra test circuits on a local route (behavioral, pin_only).
+    #: Off by default: the local routes bind with the reviewed keyword table and ask no
+    #: provider. The plan is frozen into spec/bindings.json, so a later run replays it with
+    #: bindings_json and asks nothing.
+    plan_tests: bool = False
 
 
 @dataclass(frozen=True)
@@ -1793,7 +1798,13 @@ class _Run:
         elif self.reference_bindings is not None:
             entries = self.reference_bindings
             note = "reviewed LM358 operating points and dual-amplifier probes"
-        elif self.pin_map and self.request.backend_name not in ("fixture", "scripted"):
+        elif (
+            self.pin_map
+            and self.request.backend_name not in ("fixture", "scripted")
+            and (self.request.engine == "legacy_ai" or self.request.plan_tests)
+        ):
+            # the agent plans the extra test circuits only on the agent route; the local
+            # routes bind with the reviewed keyword table and never ask a provider
             from boardmodeler.authoring.test_planner import plan_bindings
 
             try:
