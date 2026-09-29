@@ -7,6 +7,7 @@ the local environment and Desktop shortcut, outside the application's write guar
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import os
 import shutil
@@ -16,6 +17,7 @@ import sysconfig
 import tempfile
 import venv
 from pathlib import Path
+from uuid import UUID
 
 ROOT = Path(__file__).resolve().parents[1]
 VENV_PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
@@ -221,70 +223,82 @@ def _remove_shortcut(override: Path | None = None) -> None:
     print(f"Shortcut removed from {target.parent}.")
 
 
+def _save_shell_link(target: Path) -> None:
+    """Save a .lnk through IShellLinkW without ANSI path conversion or a compiler."""
+
+    class GUID(ctypes.Structure):
+        _fields_ = [
+            ("data1", ctypes.c_uint32),
+            ("data2", ctypes.c_uint16),
+            ("data3", ctypes.c_uint16),
+            ("data4", ctypes.c_ubyte * 8),
+        ]
+
+    def guid(value: str) -> GUID:
+        return GUID.from_buffer_copy(UUID(value).bytes_le)
+
+    def method(pointer: ctypes.c_void_p, index: int, *arguments):
+        table = ctypes.cast(pointer, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+        return ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *arguments)(table[index])
+
+    def succeeded(result: int) -> None:
+        if result < 0:
+            raise SetupError(
+                f"Windows could not create the shortcut (0x{result & 0xFFFFFFFF:08X})."
+            )
+
+    ole32 = ctypes.OleDLL("ole32")
+    ole32.CoInitializeEx.argtypes = (ctypes.c_void_p, ctypes.c_uint32)
+    ole32.CoInitializeEx.restype = ctypes.c_long
+    ole32.CoCreateInstance.argtypes = (
+        ctypes.POINTER(GUID),
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.POINTER(GUID),
+        ctypes.POINTER(ctypes.c_void_p),
+    )
+    ole32.CoCreateInstance.restype = ctypes.c_long
+    succeeded(ole32.CoInitializeEx(None, 2))  # COINIT_APARTMENTTHREADED
+    link = ctypes.c_void_p()
+    persist = ctypes.c_void_p()
+    try:
+        succeeded(
+            ole32.CoCreateInstance(
+                ctypes.byref(guid("00021401-0000-0000-C000-000000000046")),
+                None,
+                1,  # CLSCTX_INPROC_SERVER
+                ctypes.byref(guid("000214F9-0000-0000-C000-000000000046")),
+                ctypes.byref(link),
+            )
+        )
+        set_path = method(link, 20, ctypes.c_wchar_p)
+        set_workdir = method(link, 9, ctypes.c_wchar_p)
+        set_icon = method(link, 17, ctypes.c_wchar_p, ctypes.c_int)
+        succeeded(set_path(link, str(ROOT / "Start.cmd")))
+        succeeded(set_workdir(link, str(ROOT)))
+        succeeded(set_icon(link, str(ROOT / "assets" / "pepper.ico"), 0))
+        query = method(link, 0, ctypes.POINTER(GUID), ctypes.POINTER(ctypes.c_void_p))
+        succeeded(
+            query(
+                link,
+                ctypes.byref(guid("0000010B-0000-0000-C000-000000000046")),
+                ctypes.byref(persist),
+            )
+        )
+        save = method(persist, 6, ctypes.c_wchar_p, ctypes.c_int)
+        succeeded(save(persist, str(target), 1))
+    finally:
+        if persist.value:
+            method(persist, 2)(persist)
+        if link.value:
+            method(link, 2)(link)
+        ole32.CoUninitialize()
+
+
 def _write_shortcut(directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / SHORTCUT_NAME
-    # WScript.Shell can convert characters outside the active ANSI code page when
-    # it saves .lnk properties (for example Ω becomes O). Use the Unicode COM
-    # interface directly, and pass all paths through environment variables.
-    script = r"""
-$source = @'
-using System;
-using System.Runtime.InteropServices;
-namespace SpiceMaker {
-    [ComImport, Guid("000214F9-0000-0000-C000-000000000046")]
-    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    public interface IShellLinkW {
-        void GetPath(IntPtr file, int maxPath, IntPtr findData, uint flags);
-        void GetIDList(out IntPtr idList);
-        void SetIDList(IntPtr idList);
-        void GetDescription(IntPtr name, int maxName);
-        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string name);
-        void GetWorkingDirectory(IntPtr directory, int maxPath);
-        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string directory);
-        void GetArguments(IntPtr args, int maxPath);
-        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string args);
-        void GetHotkey(out short hotkey);
-        void SetHotkey(short hotkey);
-        void GetShowCmd(out int showCmd);
-        void SetShowCmd(int showCmd);
-        void GetIconLocation(IntPtr iconPath, int maxPath, out int icon);
-        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string iconPath, int icon);
-        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string path, uint reserved);
-        void Resolve(IntPtr window, uint flags);
-        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string path);
-    }
-    public static class Shortcut {
-        public static void Save(string target, string workdir, string icon, string path) {
-            Type type = Type.GetTypeFromCLSID(
-                new Guid("00021401-0000-0000-C000-000000000046"), true);
-            object link = Activator.CreateInstance(type);
-            try {
-                IShellLinkW unicode = (IShellLinkW)link;
-                unicode.SetPath(target);
-                unicode.SetWorkingDirectory(workdir);
-                unicode.SetIconLocation(icon, 0);
-                ((System.Runtime.InteropServices.ComTypes.IPersistFile)link).Save(path, true);
-            } finally {
-                Marshal.FinalReleaseComObject(link);
-            }
-        }
-    }
-}
-'@
-Add-Type -TypeDefinition $source -ErrorAction Stop
-[SpiceMaker.Shortcut]::Save($env:SPICE_START_PATH, $env:SPICE_APP_ROOT,
-    $env:SPICE_ICON_PATH, $env:SPICE_SHORTCUT_PATH)
-"""
-    _powershell(
-        script,
-        extra_env={
-            "SPICE_SHORTCUT_PATH": str(target),
-            "SPICE_START_PATH": str(ROOT / "Start.cmd"),
-            "SPICE_APP_ROOT": str(ROOT),
-            "SPICE_ICON_PATH": str(ROOT / "assets" / "pepper.ico"),
-        },
-    )
+    _save_shell_link(target)
     SHORTCUT_STATE.parent.mkdir(parents=True, exist_ok=True)
     SHORTCUT_STATE.write_text(json.dumps({"path": str(target)}, indent=2), encoding="utf-8")
     print(f"Shortcut ready: {target}")
