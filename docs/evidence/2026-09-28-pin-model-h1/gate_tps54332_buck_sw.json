@@ -1,0 +1,85 @@
+{
+  "part": "TPS54332DDA",
+  "status": "FAIL",
+  "runs": 11,
+  "wall_s": 46.92,
+  "checks": [
+    {
+      "id": "ports_match_pin_table",
+      "status": "PASS",
+      "detail": "9 ports, exactly the 9 pins of the pin table",
+      "measured": {
+        "ports": 9.0
+      }
+    },
+    {
+      "id": "no_global_ground",
+      "status": "PASS",
+      "detail": "every element and expression refers only to ports and internal nodes",
+      "measured": {
+        "elements": 0.0
+      }
+    },
+    {
+      "id": "no_internal_pin_ties",
+      "status": "PASS",
+      "detail": "no pin is tied to another pin inside the model",
+      "measured": {
+        "ties": 0.0
+      }
+    },
+    {
+      "id": "dc_paths",
+      "status": "PASS",
+      "detail": "no structural convergence errors found by the netlist linter",
+      "measured": {
+        "errors": 0.0
+      }
+    },
+    {
+      "id": "converges_in_every_pin_state",
+      "status": "PASS",
+      "detail": "all 11 benches converged (floating, grounded and tied-high inputs; outputs open and shorted to ground and to supply); 1 needed a solver fallback",
+      "measured": {
+        "runs": 11.0,
+        "fallbacks": 1.0
+      }
+    },
+    {
+      "id": "current_conservation",
+      "status": "PASS",
+      "detail": "currents into the pins sum to zero in all 11 benches (ground pin held 2.5 V above node 0)",
+      "measured": {}
+    },
+    {
+      "id": "output_short_limited",
+      "status": "FAIL",
+      "detail": "an output has no realistic current limit: PH carried 28.86 A in short_gnd_high (rating 6.5 A)",
+      "measured": {
+        "peak_a_PH": 28.8588274834725
+      }
+    },
+    {
+      "id": "supply_carries_output_current",
+      "status": "PASS",
+      "detail": "whenever an output delivered current, the supply and ground pins carried it",
+      "measured": {}
+    },
+    {
+      "id": "floating_inputs_in_rails",
+      "status": "PASS",
+      "detail": "every floating input settles inside the rails",
+      "measured": {
+        "rail_v": 12.0
+      }
+    },
+    {
+      "id": "supply_draws_current",
+      "status": "PASS",
+      "detail": "supply pins draw 1.001e-06 A with the inputs grounded",
+      "measured": {
+        "supply_a": 1.001210762296978e-06
+      }
+    }
+  ]
+}

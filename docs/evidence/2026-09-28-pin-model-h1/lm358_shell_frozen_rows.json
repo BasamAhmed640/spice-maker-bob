@@ -1,0 +1,206 @@
+{
+  "summary": {
+    "model_sha256": "3c60f025b634a2909042f39f05c7940a20bde1b0f3b41acb7d6544ebff5bd09b",
+    "spec_digest": "0fb03ad8fd52101eb40d5d1420bd03421d96ab18e949c713f1062c9260f594cc",
+    "rows": 32,
+    "after": {
+      "PASS": 32
+    },
+    "changed_vs_baseline": 0,
+    "elapsed_s": 16.3
+  },
+  "rows": [
+    {
+      "id": "LM358_VOS_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_VOS_CH1 [DOCUMENTED_LIMIT]: measured opamp_value=0.003014 V within <= 0.007 V"
+    },
+    {
+      "id": "LM358_IB_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_IB_CH1 [DOCUMENTED_LIMIT]: measured opamp_value=2.00015e-08 A within <= 2.5e-07 A"
+    },
+    {
+      "id": "LM358_IOS_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_IOS_CH1 [DOCUMENTED_LIMIT]: measured opamp_value=2.00302e-09 A within <= 5e-08 A"
+    },
+    {
+      "id": "LM358_AOL_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_AOL_CH1 [DOCUMENTED_LIMIT]: measured opamp_value=98486.2 V/V within >= 25000 V/V"
+    },
+    {
+      "id": "LM358_GBW_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_GBW_CH1 [TYPICAL_VALUE]: measured opamp_value=701123 Hz, |measured - typ 700000| = 1123.06 Hz versus the 10 % band 70000 Hz (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_SR_RISE_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_SR_RISE_CH1 [TYPICAL_VALUE]: measured opamp_value=299471 V/s, |measured - typ 300000| = 528.781 V/s versus the 10 % band 30000 V/s (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_SR_FALL_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_SR_FALL_CH1 [TYPICAL_VALUE]: measured opamp_value=299647 V/s, |measured - typ 300000| = 352.555 V/s versus the 10 % band 30000 V/s (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_VOH_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_VOH_CH1 [DOCUMENTED_LIMIT]: measured opamp_value=2.02797 V within <= 3 V"
+    },
+    {
+      "id": "LM358_VOL_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_VOL_CH1 [DOCUMENTED_LIMIT]: measured opamp_value=0.004995 V within <= 0.02 V"
+    },
+    {
+      "id": "LM358_VOS_TYP_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_VOS_TYP_CH1 [TYPICAL_VALUE]: measured opamp_value=0.003014 V, |measured - typ 0.003| = 1.39978e-05 V versus the 10 % band 0.0003 V (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_IB_TYP_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_IB_TYP_CH1 [TYPICAL_VALUE]: measured opamp_value=2.00015e-08 A, |measured - typ 2e-08| = 1.50896e-12 A versus the 10 % band 2e-09 A (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_IOS_TYP_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_IOS_TYP_CH1 [TYPICAL_VALUE]: measured opamp_value=2.00302e-09 A, |measured - typ 2e-09| = 3.01793e-12 A versus the 10 % band 2e-10 A (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_AOL_TYP_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_AOL_TYP_CH1 [TYPICAL_VALUE]: measured opamp_value=98486.2 V/V, |measured - typ 100000| = 1513.79 V/V versus the 10 % band 10000 V/V (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_VOH_TYP_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_VOH_TYP_CH1 [TYPICAL_VALUE]: measured opamp_value=2.02797 V, |measured - typ 2| = 0.0279723 V versus the 10 % band 0.2 V (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_VOL_TYP_CH1",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_VOL_TYP_CH1 [TYPICAL_VALUE]: measured opamp_value=0.004995 V, |measured - typ 0.005| = 4.99505e-06 V versus the 10 % band 0.0005 V (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_VOS_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_VOS_CH2 [DOCUMENTED_LIMIT]: measured opamp_value=0.003014 V within <= 0.007 V"
+    },
+    {
+      "id": "LM358_IB_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_IB_CH2 [DOCUMENTED_LIMIT]: measured opamp_value=2.00015e-08 A within <= 2.5e-07 A"
+    },
+    {
+      "id": "LM358_IOS_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_IOS_CH2 [DOCUMENTED_LIMIT]: measured opamp_value=2.00302e-09 A within <= 5e-08 A"
+    },
+    {
+      "id": "LM358_AOL_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_AOL_CH2 [DOCUMENTED_LIMIT]: measured opamp_value=98486.2 V/V within >= 25000 V/V"
+    },
+    {
+      "id": "LM358_GBW_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_GBW_CH2 [TYPICAL_VALUE]: measured opamp_value=701123 Hz, |measured - typ 700000| = 1123.06 Hz versus the 10 % band 70000 Hz (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_SR_RISE_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_SR_RISE_CH2 [TYPICAL_VALUE]: measured opamp_value=299471 V/s, |measured - typ 300000| = 528.781 V/s versus the 10 % band 30000 V/s (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_SR_FALL_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_SR_FALL_CH2 [TYPICAL_VALUE]: measured opamp_value=299647 V/s, |measured - typ 300000| = 352.555 V/s versus the 10 % band 30000 V/s (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_VOH_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_VOH_CH2 [DOCUMENTED_LIMIT]: measured opamp_value=2.02797 V within <= 3 V"
+    },
+    {
+      "id": "LM358_VOL_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_VOL_CH2 [DOCUMENTED_LIMIT]: measured opamp_value=0.004995 V within <= 0.02 V"
+    },
+    {
+      "id": "LM358_VOS_TYP_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_VOS_TYP_CH2 [TYPICAL_VALUE]: measured opamp_value=0.003014 V, |measured - typ 0.003| = 1.39978e-05 V versus the 10 % band 0.0003 V (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_IB_TYP_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_IB_TYP_CH2 [TYPICAL_VALUE]: measured opamp_value=2.00015e-08 A, |measured - typ 2e-08| = 1.50896e-12 A versus the 10 % band 2e-09 A (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_IOS_TYP_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_IOS_TYP_CH2 [TYPICAL_VALUE]: measured opamp_value=2.00302e-09 A, |measured - typ 2e-09| = 3.01793e-12 A versus the 10 % band 2e-10 A (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_AOL_TYP_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_AOL_TYP_CH2 [TYPICAL_VALUE]: measured opamp_value=98486.2 V/V, |measured - typ 100000| = 1513.79 V/V versus the 10 % band 10000 V/V (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_VOH_TYP_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_VOH_TYP_CH2 [TYPICAL_VALUE]: measured opamp_value=2.02797 V, |measured - typ 2| = 0.0279723 V versus the 10 % band 0.2 V (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_VOL_TYP_CH2",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_VOL_TYP_CH2 [TYPICAL_VALUE]: measured opamp_value=0.004995 V, |measured - typ 0.005| = 4.99505e-06 V versus the 10 % band 0.0005 V (typical-value comparison, not a min/max limit check)"
+    },
+    {
+      "id": "LM358_IQ",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_IQ [DOCUMENTED_LIMIT]: measured opamp_value=0.00035 A within <= 0.0006 A"
+    },
+    {
+      "id": "LM358_IQ_TYP",
+      "before": "PASS",
+      "after": "PASS",
+      "detail": "LM358_IQ_TYP [TYPICAL_VALUE]: measured opamp_value=0.00035 A, |measured - typ 0.00035| = 2.51037e-12 A versus the 10 % band 3.5e-05 A (typical-value comparison, not a min/max limit check)"
+    }
+  ]
+}

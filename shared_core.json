@@ -20,7 +20,7 @@
   "authoring/standard_fixtures.py": "93588b289d4e2e398f5f695401815d7cdc1a328856d837776e1b6653c10d9027",
   "authoring/test_planner.py": "d34dad45cc1907c040b7b2047dc878a1eb2b36f7db51155abf8205f7009d9bea",
   "authoring/validation_cache.py": "8ca91fedd02e6693b459082462c028309dd5afa22b6ee6424e25695d5c0da7a2",
-  "authoring/viability.py": "5b1d9b065f5176f57b85d024593796eada54c62f0ab35aff9f5b891a189a2f5f",
+  "authoring/viability.py": "b54453eb0f446cdb7cca45ca849bbac8c16fd542a12d6e119b2170f157fc276a",
   "documents/__init__.py": "47780fc36e4c2bef386651af1f75881759878a9003bb6ab8835b9688dd29a5ca",
   "documents/chunk.py": "1e33ca6d5a6b3ffaacc28a98901228cf33348c92375e26ca340bd5f9298cd386",
   "documents/digest.py": "290e10907fd5a79b4d237cb2b7ec4b8fd4ae00ac3665000fe5079a3dcc1da6ab",

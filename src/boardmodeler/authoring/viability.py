@@ -131,6 +131,9 @@ class GateSpec:
     pins: tuple[GatePin, ...]
     #: cited internal pin-to-pin ties (pairs of port names); none by default
     allowed_ties: tuple[tuple[str, str], ...] = ()
+    #: bench length, and the largest solver step for parts that switch (None: the default)
+    tstop: float = TSTOP_S
+    tmax: float | None = None
 
     def pin(self, port: str) -> GatePin | None:
         lowered = port.lower()
@@ -439,7 +442,7 @@ def _plan_runs(spec: GateSpec, ports: Sequence[str]) -> list[_Run]:
         patterns: list[tuple[str, dict[str, str]]] = [("low", uniform("low"))]
         if len(commanded_outputs) < len(outputs):  # an output only inputs can drive needs patterns
             patterns.append(("high", uniform("high")))
-            for port in driven[:_MAX_PATTERN_PINS]:
+            for port in [p for p in driven if _kind(spec, p) != "analog"][:_MAX_PATTERN_PINS]:
                 patterns.append((f"hot_{port}", {**uniform("low"), port: "high"}))
                 patterns.append((f"cold_{port}", {**uniform("high"), port: "low"}))
         for short in ("gnd", "vcc"):
@@ -520,9 +523,15 @@ def _deck(lib_path: Path, spec: GateSpec, ports: Sequence[str], run: _Run) -> st
     lines.append(f"Xdut {nodes} {spec.subckt}{params}")
     saves = " ".join(f"I(Vm{i}) V(n{i})" for i in range(1, len(ports) + 1))
     saves += "".join(f" V(xdut:{node})" for _kind_, _port_, node in _claimed_alarms(spec, ports))
-    tran = TranSpec(tstep=TSTEP_S, tstop=TSTOP_S)
+    tran = _tran(spec)
     lines += [".options plotwinsize=0", tran.card(), f".save {saves}", ".end"]
     return "\n".join(lines) + "\n"
+
+
+def _tran(spec: GateSpec) -> TranSpec:
+    if spec.tmax is None:
+        return TranSpec(tstep=TSTEP_S, tstop=spec.tstop)
+    return TranSpec(tstep=TSTEP_S, tstop=spec.tstop, tstart=0.0, tmax=spec.tmax)
 
 
 def _tail_mean(values: np.ndarray) -> float:
@@ -550,9 +559,7 @@ def _execute(
     if log is None:
         result.blocked = f"LTspice produced no log ({batch.observed()})"
         return result
-    diag = diagnose(
-        log=log, raw=raw, tran=TranSpec(tstep=TSTEP_S, tstop=TSTOP_S), raw_error=raw_error
-    )
+    diag = diagnose(log=log, raw=raw, tran=_tran(spec), raw_error=raw_error)
     result.warnings = list(diag.warnings)
     if diag.convergence_issues:
         result.convergence = "; ".join((diag.errors + diag.convergence_issues)[:2])

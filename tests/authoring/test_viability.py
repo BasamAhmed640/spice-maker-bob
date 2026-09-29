@@ -248,3 +248,13 @@ def test_the_committed_lm358_model_is_not_viable_in_a_system(
         "floating_inputs_in_rails",
     } <= failing
     assert report.status is Status.FAIL
+
+
+def test_a_switching_part_gets_a_finer_solver_step_and_a_longer_bench() -> None:
+    from boardmodeler.authoring.viability import GateSpec as Spec
+    from boardmodeler.authoring.viability import _tran
+
+    plain = _tran(SPEC).card()
+    fine = _tran(Spec("X", "X", SPEC.pins, tstop=1.5e-3, tmax=20e-9)).card()
+    assert plain.startswith(".tran ") and plain.count(" ") == 2  # tstep tstop only
+    assert fine.split()[2:] == ["0.0015", "0", "2e-08"]
