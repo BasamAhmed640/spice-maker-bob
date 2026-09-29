@@ -51,7 +51,8 @@ FROZEN_BINDINGS = REPO / "models/T1-tps54332/spec/bindings.json"
 REQUIREMENTS_SHA256 = "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060"
 BINDINGS_SHA256 = "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57"
 SPEC_DIGEST = "499ed2442781bd4cad22041e7cb028bb6af9ec3df7bd34fe053750b9782b14d7"
-SW_LIBRARY_SHA256 = "21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2"
+SW_LIBRARY_SHA256 = "df4abecd09c5642360499450ae8123b51ef8e75beccc9df03832fec189da948f"
+AVG_LIBRARY_SHA256 = "718b763aa006de166b6807536861026a49892525047c163ae30fcdaf5bdb525c"
 ROW_IDS = {
     "vref": "B002_TPS54332DDA_VREF",
     "ss_charge": "B002_TPS54332DDA_SS_CHARGE",
@@ -606,8 +607,8 @@ def main() -> int:
     sw.write(models["SW"])
     avg.write(models["AVG"])
     hashes = {mode: _sha256(model) for mode, model in models.items()}
-    if hashes["SW"] != SW_LIBRARY_SHA256 or hashes["AVG"] == hashes["SW"]:
-        raise ValueError("frozen SW hash changed or AVG rendered as SW")
+    if hashes != {"SW": SW_LIBRARY_SHA256, "AVG": AVG_LIBRARY_SHA256}:
+        raise ValueError("reviewed SW/AVG model hash changed")
     if ".param L_EXT=" not in avg.library_text:
         raise ValueError("AVG model lacks instance L_EXT")
     provenance = {

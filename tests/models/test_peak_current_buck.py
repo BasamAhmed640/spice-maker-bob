@@ -111,9 +111,9 @@ def test_seed_preserves_physical_order_and_records_cited_and_default_values(tmp_
 
 
 def test_sw_is_the_stable_default_and_invalid_modes_are_refused():
-    # The switching topology is a frozen regression boundary while AVG is added.
+    # Pin the reviewed switching body, including the cited falling-threshold correction.
     assert hashlib.sha256(_BODY.encode()).hexdigest() == (
-        "25625b851f675f71ff153a1b15ae31eea7ade7b2d7bb0c1bfae8e7dcf03310e6"
+        "787dbd4c845140f3ecc029adbce2542307e6fe35eacceaf341a42c633f488524"
     )
     spec = _spec(*_basis())
     default = seed_from_spec(spec)

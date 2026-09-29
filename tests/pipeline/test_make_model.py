@@ -1177,6 +1177,58 @@ def test_rows_sharing_one_case_get_their_own_verdicts(
     assert "1 pass" in totals and "1 fail" in totals and "1 unknown" in totals, totals
 
 
+def test_buck_card_discloses_calculated_trips_and_dynamic_citations() -> None:
+    metadata = {
+        "parameters": [
+            {
+                "name": "ENTH",
+                "value": 1.25,
+                "unit": "V",
+                "origin": "cited_row",
+                "row_id": "REQ_OTHER_PART_ENABLE",
+                "page": 7,
+            },
+            {"name": "ENHYS", "value": 0.02, "unit": "V", "origin": "template_default"},
+            {
+                "name": "UVTH",
+                "value": 3.5,
+                "unit": "V",
+                "origin": "cited_row",
+                "row_id": "REQ_OTHER_PART_UVLO",
+                "page": 9,
+            },
+            {"name": "UVHYS", "value": 0.02, "unit": "V", "origin": "template_default"},
+        ]
+    }
+
+    card = engine._buck_template_card_provenance(metadata, same_as_seed=True)
+
+    assert "EN: rising 1.28 V; falling 1.26 V" in card
+    assert "VIN UVLO: rising 3.53 V; falling 3.51 V" in card
+    assert "`REQ_OTHER_PART_ENABLE`, PDF page index 7" in card
+    assert "`REQ_OTHER_PART_UVLO`, PDF page index 9" in card
+    assert "synthetic voltage hysteresis assumption" in card
+    assert "not measured silicon values" in card
+    assert "distinct from any datasheet EN hysteresis current" in card
+
+
+def test_buck_card_does_not_infer_trips_after_seed_repair() -> None:
+    metadata = {
+        "parameters": [
+            {"name": "ENTH", "value": 1.25, "unit": "V", "origin": "template_default"},
+            {"name": "ENHYS", "value": 0.02, "unit": "V", "origin": "template_default"},
+            {"name": "UVTH", "value": 3.5, "unit": "V", "origin": "template_default"},
+            {"name": "UVHYS", "value": 0.02, "unit": "V", "origin": "template_default"},
+        ]
+    }
+
+    card = engine._buck_template_card_provenance(metadata, same_as_seed=False)
+
+    assert "Bob changed the seed during repair" in card
+    assert "rising" not in card
+    assert "synthetic voltage hysteresis assumption" not in card
+
+
 # --------------------------------------------------------------------------- #
 # (g) one judge event per turn, in order, matching the final report
 

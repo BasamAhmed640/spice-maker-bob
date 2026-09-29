@@ -1357,6 +1357,71 @@ def _rejection_from_report(report: HarnessReport) -> str | None:
     return None
 
 
+def _buck_template_card_provenance(metadata: Mapping[str, Any], *, same_as_seed: bool) -> str:
+    """Describe the delivered buck seed without promoting assumptions to silicon facts."""
+    parameters = metadata["parameters"]
+    defaults = [entry for entry in parameters if entry["origin"] == "template_default"]
+    lines = [
+        "\n## Buck template parameter origins\n",
+        "The starting template and its cited rows are recorded in "
+        "`template-parameters.json`. This file is provenance, not verification.\n",
+    ]
+    if not same_as_seed:
+        lines.append(
+            "Bob changed the seed during repair. Parameter origins in the JSON "
+            "describe the starting seed; review the delivered library for final values.\n"
+        )
+        return "".join(lines)
+
+    lines.append("The delivered library matches the simulator-judged template seed.\n")
+    if defaults:
+        lines.append("Template defaults without a cited datasheet value:\n")
+        lines.extend(
+            f"- `{entry['name']}` = {entry['value']:g} {entry['unit']} (template default)\n"
+            for entry in defaults
+        )
+
+    by_name = {entry["name"]: entry for entry in parameters}
+    controls = (("EN", "ENTH", "ENHYS"), ("VIN UVLO", "UVTH", "UVHYS"))
+    if all(
+        threshold in by_name and width in by_name and by_name[width]["origin"] == "template_default"
+        for _, threshold, width in controls
+    ):
+        lines.append(
+            "\nModeled control trips (calculated from the template, not measured silicon "
+            "values): this template sets LTspice SCHMITT Vt = TH + HYS and "
+            "Vh = HYS/2, so it trips at TH + 1.5*HYS on a rising input "
+            "and TH + 0.5*HYS on a falling input.\n"
+        )
+        for label, threshold_name, width_name in controls:
+            threshold = by_name[threshold_name]
+            width = by_name[width_name]
+            source = (
+                f"cited row `{threshold['row_id']}`"
+                + (
+                    f", PDF page index {threshold['page']}"
+                    if threshold.get("page") is not None
+                    else ""
+                )
+                if threshold.get("row_id")
+                else "template default; no cited row"
+            )
+            lines.append(
+                f"- {label}: rising {threshold['value'] + 1.5 * width['value']:g} V; "
+                f"falling {threshold['value'] + 0.5 * width['value']:g} V. "
+                f"`{threshold_name}` = {threshold['value']:g} V from {source}; "
+                f"`{width_name}` = {width['value']:g} V is a synthetic voltage "
+                "hysteresis assumption.\n"
+            )
+        lines.append(
+            "Synthetic voltage hysteresis is distinct from any datasheet EN "
+            "hysteresis current; those current characteristics need separate "
+            "verification. The judged rows above show only the operating points "
+            "and edges actually measured.\n"
+        )
+    return "".join(lines)
+
+
 class _Run:
     """One make-model run: the six stages, the state they produce, the result."""
 
@@ -2255,35 +2320,10 @@ class _Run:
                 self.out_dir / "template-parameters.json",
                 json.dumps(metadata, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
             )
-            defaults = [
-                parameter
-                for parameter in metadata["parameters"]
-                if parameter["origin"] == "template_default"
-            ]
-            provenance = [
-                "\n## Buck template parameter origins\n",
-                "The starting template and its cited rows are recorded in "
-                "`template-parameters.json`. This file is provenance, not verification.\n",
-            ]
-            if same_as_seed:
-                provenance.append(
-                    "The delivered library matches the simulator-judged template seed.\n"
-                )
-                if defaults:
-                    provenance.append("Template defaults without a cited datasheet value:\n")
-                    provenance.extend(
-                        f"- `{entry['name']}` = {entry['value']:g} {entry['unit']} "
-                        "(template default)\n"
-                        for entry in defaults
-                    )
-            else:
-                provenance.append(
-                    "Bob changed the seed during repair. Parameter origins in the JSON "
-                    "describe the starting seed; review the delivered library for final values.\n"
-                )
             self._write_text(
                 self.card_path,
-                self.card_path.read_text(encoding="utf-8") + "".join(provenance),
+                self.card_path.read_text(encoding="utf-8")
+                + _buck_template_card_provenance(metadata, same_as_seed=same_as_seed),
             )
             notes.append("saved buck template parameter origins")
         if request.verification == "sanity":

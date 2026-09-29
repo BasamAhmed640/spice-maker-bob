@@ -368,8 +368,10 @@ Ren EN GND 100Meg
 * Unused logic inputs sit on each gate's own common node (GND). LTspice ignores an
 * input only there; an input on global node 0 counts as logic low whenever the
 * fixture's ground is a different node, which held every AND gate off.
-Aen EN GND GND GND GND nc_en en_ok GND SCHMITT Vt={ENTH-ENHYS/2} Vh={ENHYS/2} Vhigh=1 Vlow=0
-Auv VIN GND GND GND GND nc_uv uv_ok GND SCHMITT Vt={UVTH-UVHYS/2} Vh={UVHYS/2} Vhigh=1 Vlow=0
+* LTspice SCHMITT trips at Vt+Vh rising and Vt-Vh falling. Hysteresis is a
+* synthetic template assumption; TH anchors the source row, not an exact trip.
+Aen EN GND GND GND GND nc_en en_ok GND SCHMITT Vt={ENTH+ENHYS} Vh={ENHYS/2} Vhigh=1 Vlow=0
+Auv VIN GND GND GND GND nc_uv uv_ok GND SCHMITT Vt={UVTH+UVHYS} Vh={UVHYS/2} Vhigh=1 Vlow=0
 Aon en_ok uv_ok GND GND GND nc_on run GND AND Vhigh=1 Vlow=0
 Rrun run GND 1Meg
 Bq VIN GND I={IQSD_BASE}+({IQOP}-{IQSD_BASE})*V(run,GND)
@@ -468,7 +470,8 @@ Bavgin VIN GND I=V(duty,GND)*max(I(Vavgsns),0)
 Anrun run GND GND GND GND nrun nc_nrun GND BUF Vhigh=1 Vlow=0
 Rboot BOOT PH 10Meg
 .model AVGHS SW(Ron=1m Roff=10G Vt=0.5 Vh=-0.1)
-.model AVGBLOCK D(Is=1n N=1 Rs=1m)
+* Synthetic 0.1 pF junction capacitance regularizes the AVG turn-off event.
+.model AVGBLOCK D(Is=1n N=1 Rs=1m Cjo=0.1p)
 .model SSOFF SW(Ron=100 Roff=1G Vt=0.5 Vh=-0.1)
 .model DCL D(Is=1e-14 N=0.05)"""
 

@@ -272,7 +272,7 @@
     {
       "name": "ENHYS",
       "unit": "V",
-      "default": 0.05,
+      "default": 0.02,
       "sources": []
     },
     {
@@ -297,7 +297,7 @@
     {
       "name": "UVHYS",
       "unit": "V",
-      "default": 0.2,
+      "default": 0.02,
       "sources": []
     },
     {

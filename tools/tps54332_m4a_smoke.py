@@ -48,7 +48,8 @@ FROZEN_BINDINGS = REPO / "models/T1-tps54332/spec/bindings.json"
 REQUIREMENTS_SHA256 = "3884fd76976e071cd2ea81d5db64cb1bde17aecbaccc8f87399e7448646cc060"
 BINDINGS_SHA256 = "1b3d45e8977948ce2ed7f1079db2aaa598b543cd65a83b697af8455d6345ad57"
 SPEC_DIGEST = "499ed2442781bd4cad22041e7cb028bb6af9ec3df7bd34fe053750b9782b14d7"
-SW_LIBRARY_SHA256 = "21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2"
+SW_LIBRARY_SHA256 = "df4abecd09c5642360499450ae8123b51ef8e75beccc9df03832fec189da948f"
+AVG_LIBRARY_SHA256 = "718b763aa006de166b6807536861026a49892525047c163ae30fcdaf5bdb525c"
 AVG_MAX_STEP_S = 1e-6
 
 
@@ -519,10 +520,8 @@ def main() -> int:
     sw.write(models["SW"])
     avg.write(models["AVG"])
     model_hashes = {mode: _sha256(path) for mode, path in models.items()}
-    if model_hashes["SW"] != SW_LIBRARY_SHA256:
-        raise ValueError("SW library differs from the frozen M3 rendered model")
-    if model_hashes["AVG"] == model_hashes["SW"]:
-        raise ValueError("AVG rendered identical switching library bytes")
+    if model_hashes != {"SW": SW_LIBRARY_SHA256, "AVG": AVG_LIBRARY_SHA256}:
+        raise ValueError("SW/AVG library differs from the reviewed threshold correction")
     if ".param L_EXT=" not in avg.library_text:
         raise ValueError("AVG model does not declare an instance L_EXT parameter")
     provenance: dict[str, Any] = {

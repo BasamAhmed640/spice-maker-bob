@@ -174,6 +174,36 @@ remains TODO until all parts are complete.
    tracker, and push both only after checks are green. Give the next
    substantive check-in in about one hour.
 
+### M4b2 execution: bidirectional thresholds, then active gain and limits
+
+M4b2a covers the verified TPS54332 VIN UVLO and EN thresholds in both SW and
+AVG. The frozen datasheet rows require rising **and falling** VIN UVLO at or
+above 3.5 V and rising **and falling** EN in 1.25–1.35 V. Code-build separate
+slow VIN and EN up/down ramps around the M2 external application. Measure both
+directions from LTspice waveforms, prove the power stage is in the intended
+state, and run a deliberately wrong threshold control without changing a cited
+band. An internal control trace may explain a result but cannot substitute for
+observable external behavior. Keep a failing or unresolved direction as FAIL
+or UNKNOWN; do not infer it from the parameter declaration.
+
+M4b2b measures active COMP-to-current gain and current-limit behavior in SW and
+AVG using the cited 12 A/V typical (declared ±10% fixture band) and 4.2–6.5 A
+limit. Sweep at least three distinct COMP points above the cited 0.5 V Eco
+boundary, fit the active slope, and use resistive overload after SS charging
+and settling for limit corners. Preserve the frozen legacy gain and ILIM FAILs
+as historical results; their old fixtures do not prove the new slope or
+overload behavior. Instance overrides prove parameter response, not silicon
+process corners.
+
+For both subparts, pin frozen requirements/bindings/spec and model hashes,
+record deck/log/raw hashes and timings, run both editions with only the
+explicitly selected LTspice executable, and keep all unsupported results
+UNKNOWN. After any model or shared-harness edit, rerun the frozen TPS 19-row
+and LM358 controls and explain every changed verdict before committing.
+Run focused tests, model-fixture integration, Ruff, diff and shared-core
+parity, then push only a completed measured subpart. M4b2 remains TODO until
+both M4b2a and M4b2b are complete.
+
 `DONE` means its acceptance evidence exists. A partial milestone must be split
 into named parts such as M3a/M3b rather than silently marked done. The commit
 columns identify the substantive change in each repository; tracker follow-up
@@ -194,6 +224,8 @@ commits may record those IDs afterward.
 | M4b | Both-mode cited qualification, SW ballpark shapes, honest AVG UNKNOWNs, speed | TODO | — | — | — | — |
 | M4b1 | Both-mode cited VREF, SS charge, and state-checked supply current | DONE (8 clean PASS / 8 wrong-value FAIL per edition) | 2026-09-26 | `docs/evidence/2026-09-26-system-models-m4b1/REPORT.md` | `0aa00a51196a59cad7a4c7f7e43d9ee8fa0a32c0` | `f1fc60f2647f901555fc36c2ad58b96bf6ad46d7` |
 | M4b2 | Bidirectional UVLO/EN and gain/limit corner checks | TODO | — | — | — | — |
+| M4b2a | Both-mode rising and falling VIN UVLO and EN waveform qualification | TODO | — | — | — | — |
+| M4b2b | Both-mode active COMP gain and resistive-overload limit qualification | TODO | — | — | — | — |
 | M4b3 | SW shapes, power behavior, speed, and full M4b acceptance | TODO | — | — | — | — |
 | M4c | Versioned installer and ZIP release checkpoint after M4b acceptance | TODO | — | — | — | — |
 | M5 | PinDefinition-based model alarms, exercised with clean/fault small synthetic circuits and measured LTspice evidence | TODO | — | — | — | — |
