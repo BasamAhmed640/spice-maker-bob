@@ -1,3 +1,146 @@
+## 2026-09-29 — frozen qualification and reviewed source evidence (D-059)
+
+GitHub-reviewable acceptance summary:
+[`docs/evidence/2026-09-29-engine-refactor/REPORT.md`](evidence/2026-09-29-engine-refactor/REPORT.md).
+
+The buck qualification plan is now production code, frozen from the source requirements and spec
+before candidate authoring. It contains the source hashes, cited conditions, independent benches,
+mandatory checks and implementation hashes. Candidate parameters cannot change its references or
+acceptance bands. The ordinary row harness and the supplemental qualification report remain separate;
+four measured nominal passes do not qualify the whole buck family.
+
+The broader north-star acceptance is still incomplete. **M6 remains open**: package selection,
+symbol pin numbers and discrete terminal order need source-backed confirmation before publication
+(PIN-01/02/05). Current file identity checks, recorded pin order and the TPS54331 PowerPAD guard
+do not complete that gate.
+
+Citation replay now persists the current page-check result on every DOCUMENT row before writing
+new frozen requirements or a qualification plan. Missing document text, failed excerpts and missing
+verifier results clear stale `citation_verified=true` flags. The input history stays untouched.
+Regressions in `tests/pipeline/test_frozen_citation_state.py` cover false current-IQ source flags,
+missing source text and missing verifier results; affected qualification cases stay gaps.
+Resumed buck/op-amp designs are reconstructed and rendered before retaining an exact association.
+Schema/type, design/library hashes, part, subcircuit and frozen spec must match; an edited payload
+cannot keep an exact claim merely because library bytes are unchanged. Invalid provenance supplies
+no exact design hash to qualification. Supplemental BLOCKED is publicly BLOCKED with its refusal
+reason; fixed FAIL stays FAIL, while fixed UNKNOWN downgrades an ordinary PASS.
+
+The window, CLI and new `MakeModelRequest` API now default to `behavioral`. AI extraction is
+the only default AI stage and is avoided when supplied, cached or exact reviewed evidence suffices.
+AI authoring and repair require the explicit legacy route. AI planning runs with full legacy
+verification or a separate local-route opt-in. Behavioral and pin-only routes require full verification; quick drafts require
+`legacy_ai`. Old saved requests without an engine keep their historical legacy interpretation.
+
+Final default-route replay receipts after citation/provenance/status hardening are retained in each checkout's
+`runs/engine-acceptance-opamp/`, `runs/engine-acceptance-buck/` and
+`runs/engine-acceptance-tps54331/`, including `results.json`, `run-timing.json`, support decisions,
+and the delivered hashes/reports where a model was published. All six runs recorded zero provider
+calls with complete accounting; none exercised live inference.
+
+| Default-route case | Row result | Extract / compile / simulate / total (s) |
+| --- | --- | --- |
+| General LM358, exact reviewed PDF | PASS; 32 PASS / 10 N/A | 5.572 / 0.003 / 15.647 / 26.237 |
+| Bob LM358, exact reviewed PDF | PASS; 32 PASS / 10 N/A | 5.513 / 0.001 / 15.648 / 26.158 |
+| General TPS54332DDA | UNKNOWN; 12 PASS / 4 FAIL / 41 UNKNOWN / 49 N/A | 2.013 / 0.004 / 156.473 / 161.600 |
+| Bob TPS54332DDA | UNKNOWN; 12 PASS / 4 FAIL / 41 UNKNOWN / 49 N/A | 2.104 / 0.009 / 158.944 / 164.024 |
+| General TPS54331 | BLOCKED before authoring; no library or symbol | 2.068 / — / — / 4.165 |
+| Bob TPS54331 | BLOCKED before authoring; no library or symbol | 2.083 / — / — / 4.272 |
+
+Both LM358 deliveries have SHA-256
+`67766c0cf0d6ce85b9042df94ce4766deb264e917988df1e45d782e9fbaabed2`.
+Both buck deliveries have SHA-256
+`21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2`, an exact typed-design
+association and a qualification report identifying those same delivered bytes. Each buck
+qualification is 4 PASS / 12 UNKNOWN with `family_qualified=false`. General simulation time
+includes 111.953 s ordinary judgment and 44.520 s qualification; Bob includes 113.779 s ordinary
+judgment and 45.164 s qualification. Stage totals include reading, binding and publication as well.
+
+The general plan hash is
+`19530176920a72d67c1e9531138c5c20bd1e2d91dc123db4453a023d8c3eb267`; Bob's is
+`331fd872052ffb0491b2c792276ad0c01a49196b0d5d629e6d490d8a9df1c71c`.
+Both plans froze before generation; their hashes differ because simulator implementation hashes
+are edition-specific. The 106-row current buck extraction is distinct from the frozen 19-row
+regression: the latter retained 12 PASS / 4 FAIL / 3 UNKNOWN for TPS54332 and 19 PASS for LM358,
+with `changed_rows={}`. Those frozen results do not describe the new extraction's coverage.
+
+The following earlier standalone qualification receipts preserve the wrong-candidate control:
+
+| Retained real-LTspice evidence | Observed result |
+| --- | --- |
+| TPS54332DDA clean candidate, controls enabled | 4 nominal PASS, 0 FAIL, 12 mandatory UNKNOWN; qualification UNKNOWN; 87.497255 s |
+| Same frozen plan, candidate VREF changed to 0.72 V | 3 PASS, 1 FAIL, 12 UNKNOWN; VREF measured 0.719933 V against the unchanged 0.772–0.828 V band; 83.232343 s |
+| Plan identity across both candidates | `548871ecfa2b5ef595b85294ed3fc0cefbc7366b9d4a78185e64a0ed1dbf8234`; serialized plan unchanged |
+| Clean candidate / changed candidate SHA-256 | `d9b0b5e3d4729168933f1a834e49d4e25588dfb6239cf420047c00f999d913e2` / `6ab382f439e8811c8560e7feb8cbdb1a669090338a92fe49b5a030020cf9a7cb` |
+| Four synthetic fault controls on the clean candidate | All four rejected; each clean/fault pair discriminates; controls excluded from device counts |
+
+Evidence is local and git-ignored in the general checkout at
+`runs/qualification-acceptance/acceptance.json`, with immutable per-execution receipts under its
+`clean/` and `wrong/` directories. `run_acceptance.py` is the reproduction entry point and names the
+local frozen source files and LTspice executable. These are simulator runs of the shared qualification
+code, not a Bob provider run or a final end-to-end published-model acceptance run. The default omits
+the optional controls and performs four nominal simulations; an earlier observed run took about
+45 s, but its summary receipt was not retained. This is not an end-to-end build-time claim.
+
+TPS54331 now has a partial reviewed extraction profile for the exact TI SLVS839H PDF hash
+`cf72dfd0ac69eec645b7b493de628dc1c3aa66f5f925a2ea9be6bb5c38260730`. Its source columns remain
+VIN UVLO MAX 3.5 V with no typical value; EN TYP 1.25 V / MAX 1.35 V; current limit MIN 3.5 A /
+TYP 5.8 A with no maximum. Row quantity identities prevent unrelated EN/VREF and supply/current-limit
+rows from becoming false conflicts. Explicit loaded VREF/current-limit fixtures come from cited raw
+rows, with the soft-start guard intact; a VIN operating range is not mistaken for a singleton test
+condition. Supplied historical requirements and bindings retain precedence and are never rewritten.
+
+The fresh reviewed-profile run remains BLOCKED: `UVTH`, switching-frequency, soft-start and enable/UVLO
+bench coverage, and unresolved D versus DDA packaging remain gaps. The DDA-only PowerPAD is recorded,
+and saved common-pin maps retain a package-ambiguity marker that blocks publication even if later
+numeric inputs pass. The retained run in `../tps54331-reviewed-takeover/replay-summary.json` took
+5.034 s, recorded `provider_calls=0`, complete accounting and `refused_before_authoring`, and wrote no
+library or symbol. That receipt predates the final singleton-VIN parser correction.
+
+Publication provenance records the actual delivered library and symbol hashes and pin order.
+Resumed repairs invalidate a prior exact design association when library bytes change; absent typed
+provenance is marked unavailable. Publication preserves candidate bytes and refuses a harness report
+whose model hash or frozen spec digest does not match. Qualification receives that exact delivered
+library and its exact typed-design hash when available. A refused rerun archives prior app-owned
+deliverables under `build/publication-history/` instead of presenting them as current output.
+The focused publication regressions verify these associations and refusal paths, not electrical
+accuracy. General API attempts are counted at transport, including retries. Bob Shell
+starts are counted separately, with its internal provider-request total left unknown after a start.
+
+The window exposes engine and family choices, and the CLI/window/API default to code-built
+`behavioral`. `legacy_ai` remains an
+explicit route, with no silent fallback. MCU/FPGA/CPLD/processor/SoC evidence in the part identity or
+first-page identity takes precedence over family hints; incidental application mentions do not
+become device identity.
+
+Focused checks observed during this change: general pipeline subset 90 passed / 7 deselected; Bob
+93 passed / 7 deselected; final fixed-bench plus reviewed-profile subset 27 passed in each edition.
+The commands were `python -m pytest -q tests/authoring/test_tps54331_reference.py
+tests/pipeline/test_publication_provenance.py tests/pipeline/test_make_model.py
+tests/pipeline/test_support_gate.py tests/pipeline/test_publish_guard.py -m "not ltspice and not network"`
+and `python -m pytest -q tests/authoring/test_buck_fixed_bindings.py
+tests/authoring/test_tps54331_reference.py -m "not ltspice and not network"`, with each work checkout's
+`src` on `PYTHONPATH` and the corresponding canonical repo venv. Ruff check/format and diff whitespace
+checks passed for these changed files. Final integrated suite and shared-manifest results are recorded
+separately when observed.
+
+Final offline command in each edition: `pytest -q -m 'not ltspice and not network'`.
+General reported **2203 passed, 20 skipped, 190 deselected in 97.30 s**.
+Bob reported **1961 passed, 31 skipped, 187 deselected in 76.09 s**, with four pre-existing
+unregistered `slow` marker warnings. Legacy-specific reopen, GUI sweep and network fixture tests
+now request their legacy route explicitly. Shared-core checks found 49 intact files per edition, all 49 identical;
+repo-wide Ruff check, Ruff format check and diff whitespace checks passed in both editions;
+no installer build was performed for this milestone.
+These final suites include the citation replay, resumed-design and public BLOCKED regressions.
+
+`tests/pipeline/test_qualification_publication.py` also passed in both editions. It verifies that
+the plan freezes before publication and qualification receives the exact delivered library path,
+model hash and typed-design hash. This is an integration regression with a stubbed simulator, not
+an additional live end-to-end acceptance receipt.
+
+Still open: the twelve mandatory qualification gaps, an honest TPS54331 UVTH policy and resolved
+package, M6's package/symbol confirmation gate, and further families and pinouts. No universal
+functional coverage, full-family qualification, new installer release or live Bob inference is claimed.
+
 ## 2026-09-29 — hand-off takeover: retained failures, honest timing, bounded pin scope (D-058)
 
 The LM5116 pin-only failure now leaves its measured `pin-only-report.json` even though the library,

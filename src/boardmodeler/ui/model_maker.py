@@ -27,6 +27,7 @@ from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QPolygon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QDialog,
     QFileDialog,
     QGridLayout,
@@ -39,6 +40,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -382,7 +384,7 @@ class DoctorView(QDialog):
 
 
 class ModelMakerWindow(QMainWindow):
-    """Part number + datasheet + save location -> agent-authored, simulator-judged model."""
+    """Per-build inputs and engine choice -> simulator-judged model."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -418,6 +420,8 @@ class ModelMakerWindow(QMainWindow):
         layout.addWidget(self._build_result_header())
         layout.addWidget(self._build_rows(), 5)
         layout.addLayout(self._build_result_actions())
+        self.engine_combo.currentIndexChanged.connect(self._engine_changed)
+        self._engine_changed()
         layout.activate()
         self.setMinimumSize(_smallest_useful(layout.minimumSize()))
 
@@ -469,14 +473,36 @@ class ModelMakerWindow(QMainWindow):
         grid.addWidget(QLabel("SAVE MODEL TO"), 2, 0)
         grid.addWidget(self.out_edit, 2, 1)
         grid.addWidget(browse_out, 2, 2)
+
+        self.engine_combo = QComboBox()
+        self.engine_combo.addItem("Code-built behavioral (default)", "behavioral")
+        self.engine_combo.addItem("AI authored (legacy)", "legacy_ai")
+        self.engine_combo.addItem("Pins only (no functional behavior)", "pin_only")
+        grid.addWidget(QLabel("BUILD ENGINE"), 3, 0)
+        grid.addWidget(self.engine_combo, 3, 1, 1, 2)
+
+        from boardmodeler.models.support import ORDINARY_FAMILIES
+
+        self.family_combo = QComboBox()
+        self.family_combo.addItem("Automatic from the datasheet", None)
+        for family_id, label, _phrases in ORDINARY_FAMILIES:
+            self.family_combo.addItem(label, family_id)
+        self.family_combo.setToolTip(
+            "Optional classification hint for this build. Choosing a family does not add model support."
+        )
+        grid.addWidget(QLabel("FAMILY (OPTIONAL)"), 4, 0)
+        grid.addWidget(self.family_combo, 4, 1, 1, 2)
+
+        self.engine_hint = QLabel()
+        self.engine_hint.setWordWrap(True)
+        self.engine_hint.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        grid.addWidget(self.engine_hint, 5, 0, 1, 3)
         return grid
 
     def _build_actions(self) -> QHBoxLayout:
         row = QHBoxLayout()
         self.go_button = QPushButton("GO")
-        self.go_button.setToolTip(
-            "Send this datasheet and model text to the provider selected in SETUP"
-        )
+        self.go_button.setToolTip("Build using the selected engine and verification mode")
         self.go_button.clicked.connect(self._make_model)
         self.cancel_button = QPushButton("CANCEL")
         self.cancel_button.clicked.connect(self._cancel)
@@ -490,6 +516,7 @@ class ModelMakerWindow(QMainWindow):
             "Remembered for the next build."
         )
         self.full_check.setChecked(_configured_full_verification())
+        self._legacy_full_verification = self.full_check.isChecked()
         self.full_check.toggled.connect(self._full_verification_toggled)
         row.addWidget(self.full_check)
         # The hourglass sits immediately beside the clock it belongs to, and both are driven
@@ -524,9 +551,7 @@ class ModelMakerWindow(QMainWindow):
         holder = QWidget()
         row = QHBoxLayout(holder)
         row.setContentsMargins(0, 0, 0, 0)
-        self.status_label = QLabel(
-            "GO sends this datasheet and model text to the provider selected in SETUP"
-        )
+        self.status_label = QLabel("Choose a build engine, then press GO")
         # Wrapped, not clipped: a status line can carry a whole failure reason, and an
         # unwrapped QLabel would force the window's minimum width to the full sentence.
         self.status_label.setWordWrap(True)
@@ -569,6 +594,31 @@ class ModelMakerWindow(QMainWindow):
         return row
 
     # ------------------------------------------------------------------ helpers
+    def _engine_changed(self) -> None:
+        engine = self.engine_combo.currentData()
+        legacy = engine == "legacy_ai"
+        # Requiring full verification for a code-built route must not overwrite the
+        # user's remembered choice for legacy builds.
+        previous = self.full_check.blockSignals(True)
+        self.full_check.setChecked(self._legacy_full_verification if legacy else True)
+        self.full_check.blockSignals(previous)
+        self.full_check.setEnabled(legacy and self.go_button.isEnabled())
+        hints = {
+            "legacy_ai": (
+                "The provider selected in SETUP writes and repairs model text. "
+                "This legacy route sends datasheet and model text to that provider."
+            ),
+            "behavioral": (
+                "Builds supported behavioral templates in code; unsupported parts stop. "
+                "Full verification is required. Extraction may still need the configured provider."
+            ),
+            "pin_only": (
+                "Creates a pin interface without functional behavior or an electrical accuracy "
+                "claim. Full verification is required. Extraction may still need the provider."
+            ),
+        }
+        self.engine_hint.setText(hints[engine])
+
     def _choose_datasheet(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -595,6 +645,9 @@ class ModelMakerWindow(QMainWindow):
 
     def _set_busy(self, busy: bool) -> None:
         self.go_button.setEnabled(not busy)
+        self.engine_combo.setEnabled(not busy)
+        self.family_combo.setEnabled(not busy)
+        self.full_check.setEnabled(not busy and self.engine_combo.currentData() == "legacy_ai")
         self.cancel_button.setEnabled(busy)
         self.again_button.setEnabled(not busy and self._result is not None)
         self.progress.setVisible(busy)
@@ -655,8 +708,11 @@ class ModelMakerWindow(QMainWindow):
             )
             return
 
+        engine = self.engine_combo.currentData()
         provider = _configured_provider()
-        usable, reason = _agent_availability()
+        # Code-built routes may have reviewed local extraction and need no provider.
+        # The pipeline checks availability only when extraction actually needs one.
+        usable, reason = _agent_availability() if engine == "legacy_ai" else (True, "")
         if not usable:
             self.setup_hint.setText("no agent key — press SETUP")
             if provider is None:
@@ -673,6 +729,15 @@ class ModelMakerWindow(QMainWindow):
             )
             return
         self.setup_hint.setText("")
+        try:
+            provider_id = provider.id if provider is not None else _configured_provider_id()
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Settings not readable",
+                f"Nothing was started because the saved settings could not be read:\n\n{exc}",
+            )
+            return
         out_dir.mkdir(parents=True, exist_ok=True)
 
         subckt = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in part).upper()
@@ -683,17 +748,23 @@ class ModelMakerWindow(QMainWindow):
             datasheet=datasheet,
             out_dir=out_dir,
             backend_name="api",
-            verification="full" if self.full_check.isChecked() else "sanity",
+            verification="full"
+            if engine != "legacy_ai" or self.full_check.isChecked()
+            else "sanity",
+            engine=engine,
+            family=self.family_combo.currentData(),
+            plan_tests=False,
             allow_remote=True,
             # The configured id as written, so ``build_api_backend`` refuses a provider
             # this build lacks instead of another provider answering with the wrong key.
-            provider=provider.id if provider is not None else _configured_provider_id(),
+            provider=provider_id,
         )
         self._out_dir = out_dir
         self._start(request)
 
     def _full_verification_toggled(self, checked: bool) -> None:
         """Remember the choice without letting a settings error escape a Qt slot."""
+        self._legacy_full_verification = bool(checked)
         try:
             from boardmodeler.config import load_config, save_config
 

@@ -41,7 +41,7 @@ import os
 import threading
 import time
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -715,7 +715,10 @@ def _author(
 
 
 def revalidate_candidate(
-    request: BuildRequest, cancel: threading.Event | None = None
+    request: BuildRequest,
+    cancel: threading.Event | None = None,
+    *,
+    on_report: Callable[[HarnessReport], None] | None = None,
 ) -> BuildOutcome | None:
     """Judge an existing candidate this process did not observe, with one harness run.
 
@@ -748,6 +751,8 @@ def revalidate_candidate(
             timeout_s=request.timeout_s,
             cancel=cancel,
         )
+        if on_report is not None:
+            on_report(report)
         write_report(cache_root, key, report)
     except Exception:
         return None
@@ -767,6 +772,7 @@ def build_model(
     cancel: threading.Event | None = None,
     *,
     candidate_revalidated: bool = False,
+    on_report: Callable[[HarnessReport], None] | None = None,
 ) -> BuildOutcome:
     """Run the author loop until the harness is satisfied or the agent stalls.
 
@@ -831,7 +837,7 @@ def build_model(
         # A candidate left by an earlier run was not observed by this process, so its
         # cache entry is not evidence. One LTspice run re-judges it for no author turn,
         # keeping a passing candidate a PASS without trusting files the agent can write.
-        revalidated = revalidate_candidate(request, cancel)
+        revalidated = revalidate_candidate(request, cancel, on_report=on_report)
         if revalidated is not None:
             return revalidated
         cached = read_report(cache_root, key, frozen, path)
@@ -940,6 +946,8 @@ def build_model(
                     timeout_s=request.timeout_s,
                     cancel=cancel,
                 )
+                if on_report is not None:
+                    on_report(report)
                 write_report(cache_root, key, report)
         except Exception as exc:
             history.append(f"turn {turn}: {note}; harness_error: {type(exc).__name__}: {exc}")

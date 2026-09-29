@@ -9,6 +9,7 @@ judges". No test reaches the network.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import threading
@@ -186,6 +187,7 @@ def make_request(tmp_path: Path, **overrides: object) -> MakeModelRequest:
         "out_dir": tmp_path / "out",
         "requirements_json": requirements,
         "bindings_json": BINDINGS,
+        "engine": "legacy_ai",
     }
     values.update(overrides)
     return MakeModelRequest(**values)  # type: ignore[arg-type]
@@ -1000,7 +1002,7 @@ def test_each_operating_point_keeps_its_own_row_status(
     requirements_path, bindings_path = _two_corner_voh_inputs(tmp_path)
 
     def canned_harness(*, model_lib, subckt, spec, workdir, ltspice, timeout_s=120.0, cancel=None):
-        del model_lib, subckt, workdir, ltspice, timeout_s, cancel
+        del subckt, workdir, ltspice, timeout_s, cancel
         verdicts = (("REQ_VOH_33", "FAIL", 1.2), ("REQ_VOH_18", "PASS", 1.7))
         outcomes = tuple(
             ProbeOutcome(
@@ -1016,7 +1018,10 @@ def test_each_operating_point_keeps_its_own_row_status(
             for char_id, status, value in verdicts
         )
         return HarnessReport(
-            part=spec.part, model_sha256="a" * 64, spec_digest=spec.digest(), outcomes=outcomes
+            part=spec.part,
+            model_sha256=hashlib.sha256(Path(model_lib).read_bytes()).hexdigest(),
+            spec_digest=spec.digest(),
+            outcomes=outcomes,
         )
 
     monkeypatch.setattr(loop_module, "run_harness", canned_harness)
@@ -1114,7 +1119,7 @@ def test_rows_sharing_one_case_get_their_own_verdicts(
     calls: list[str] = []
 
     def canned_harness(*, model_lib, subckt, spec, workdir, ltspice, timeout_s=120.0, cancel=None):
-        del model_lib, subckt, workdir, ltspice, timeout_s, cancel
+        del subckt, workdir, ltspice, timeout_s, cancel
         calls.append("harness")
         outcome = ProbeOutcome(
             probe_id="io_voh",
@@ -1127,7 +1132,10 @@ def test_rows_sharing_one_case_get_their_own_verdicts(
             judged="io_voltage_v = 2.7 V",
         )
         return HarnessReport(
-            part=spec.part, model_sha256="a" * 64, spec_digest=spec.digest(), outcomes=(outcome,)
+            part=spec.part,
+            model_sha256=hashlib.sha256(Path(model_lib).read_bytes()).hexdigest(),
+            spec_digest=spec.digest(),
+            outcomes=(outcome,),
         )
 
     monkeypatch.setattr(loop_module, "run_harness", canned_harness)
@@ -1333,7 +1341,7 @@ def test_extraction_is_cached_by_content_hash_so_a_second_run_makes_zero_calls(
 # stopping on progress: no cap, no deadline, one turn bound if the caller sets one
 
 
-def _canned_report(spec, outcome_char: str, *, status: str = "FAIL"):
+def _canned_report(spec, outcome_char: str, *, model_lib: Path, status: str = "FAIL"):
     """One harness report with a single judged probe, for the stopping-rule tests."""
     from boardmodeler.authoring.harness import HarnessReport, ProbeOutcome
 
@@ -1352,7 +1360,7 @@ def _canned_report(spec, outcome_char: str, *, status: str = "FAIL"):
     )
     return HarnessReport(
         part=spec.part,
-        model_sha256="a" * 64,
+        model_sha256=hashlib.sha256(model_lib.read_bytes()).hexdigest(),
         spec_digest=spec.digest(),
         outcomes=(outcome,),
     )
@@ -1375,8 +1383,8 @@ def test_a_stalled_agent_stops_the_build_and_keeps_the_measured_rows(
     reports = []
 
     def canned_harness(*, model_lib, subckt, spec, workdir, ltspice, timeout_s=120.0, cancel=None):
-        del model_lib, workdir, ltspice, timeout_s, cancel
-        report = _canned_report(spec, VREF_ID)
+        del workdir, ltspice, timeout_s, cancel
+        report = _canned_report(spec, VREF_ID, model_lib=model_lib)
         reports.append(report)
         return report
 
@@ -1414,8 +1422,8 @@ def test_a_capped_run_with_every_row_measured_wrong_is_fail(
     from boardmodeler.authoring import loop as loop_module
 
     def canned_harness(*, model_lib, subckt, spec, workdir, ltspice, timeout_s=120.0, cancel=None):
-        del model_lib, workdir, ltspice, timeout_s, cancel
-        return _canned_report(spec, VREF_ID)
+        del workdir, ltspice, timeout_s, cancel
+        return _canned_report(spec, VREF_ID, model_lib=model_lib)
 
     monkeypatch.setattr(loop_module, "run_harness", canned_harness)
     monkeypatch.setattr(engine, "locate", lambda explicit=None: fake_ltspice(tmp_path))
@@ -1596,7 +1604,10 @@ def test_a_broken_candidate_is_prechecked_once_without_a_spurious_judge_turn(
             char_ids=(VREF_ID,),
         )
         return HarnessReport(
-            part=spec.part, model_sha256="a" * 64, spec_digest=spec.digest(), outcomes=(outcome,)
+            part=spec.part,
+            model_sha256=hashlib.sha256(Path(model_lib).read_bytes()).hexdigest(),
+            spec_digest=spec.digest(),
+            outcomes=(outcome,),
         )
 
     monkeypatch.setattr(loop_module, "run_harness", canned_harness)
@@ -1641,7 +1652,15 @@ def test_the_saved_result_round_trips_including_the_turn_bounds(tmp_path: Path) 
             request=request,
         )
 
-    request = make_request(tmp_path, turn_timeout_s=42.5, max_iterations=5, stall_patience=3)
+    request = make_request(
+        tmp_path,
+        turn_timeout_s=42.5,
+        max_iterations=5,
+        stall_patience=3,
+        engine="behavioral",
+        family="buck_converter",
+        plan_tests=True,
+    )
     result = saved(request)
     restored = MakeModelResult.from_json(result.to_json())
     assert restored == result
@@ -1649,6 +1668,16 @@ def test_the_saved_result_round_trips_including_the_turn_bounds(tmp_path: Path) 
     assert restored.request.turn_timeout_s == 42.5
     assert restored.request.max_iterations == 5
     assert restored.request.stall_patience == 3
+    assert restored.request.engine == "behavioral"
+    assert restored.request.family == "buck_converter"
+    assert restored.request.plan_tests is True
+
+    old = json.loads(saved(make_request(tmp_path)).to_json())
+    for field in ("engine", "family", "plan_tests"):
+        old["request"].pop(field)
+    old_request = MakeModelResult.from_json(json.dumps(old)).request
+    assert old_request is not None
+    assert old_request.engine == "legacy_ai"
 
     uncapped = MakeModelResult.from_json(saved(make_request(tmp_path)).to_json())
     assert uncapped.request is not None

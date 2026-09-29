@@ -420,7 +420,13 @@ def test_quick_pipeline_skips_planner_simulator_and_never_claims_accuracy(
     old.parent.mkdir(parents=True)
     old.write_text(VALID, encoding="utf-8")
     request = engine.MakeModelRequest(
-        "TEST", "TEST", tmp_path / "fake.pdf", out, verification="sanity", family="linear_regulator"
+        "TEST",
+        "TEST",
+        tmp_path / "fake.pdf",
+        out,
+        verification="sanity",
+        engine="legacy_ai",
+        family="linear_regulator",
     )
     result = engine.make_model(request)
     assert result.status == "UNKNOWN"
@@ -494,7 +500,13 @@ def test_quick_pipeline_records_the_one_load_check_and_publishes(tmp_path, monke
 
     out = tmp_path / "out"
     request = engine.MakeModelRequest(
-        "TEST", "TEST", tmp_path / "fake.pdf", out, verification="sanity", family="linear_regulator"
+        "TEST",
+        "TEST",
+        tmp_path / "fake.pdf",
+        out,
+        verification="sanity",
+        engine="legacy_ai",
+        family="linear_regulator",
     )
     result = engine.make_model(request)
 

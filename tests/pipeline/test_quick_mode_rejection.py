@@ -72,7 +72,7 @@ def test_a_model_the_real_simulator_rejects_is_never_published(
 
     out = tmp_path / "out"
     request = engine.MakeModelRequest(
-        PART, SUBCKT, tmp_path / "fake.pdf", out, verification="sanity"
+        PART, SUBCKT, tmp_path / "fake.pdf", out, verification="sanity", engine="legacy_ai"
     )
     result = engine.make_model(request)
 

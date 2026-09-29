@@ -142,7 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     model = sub.add_parser(
         "model",
-        help="author an LTspice model from a datasheet and judge it with real simulation",
+        help="build an LTspice model from a datasheet and judge it with real simulation",
     )
     model_sub = model.add_subparsers(dest="model_command")
 
@@ -158,7 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     model_build = model_sub.add_parser(
         "build",
-        help="let an agent author the model, then judge it against the datasheet rows",
+        help="build a model with the selected engine and judge it against the datasheet rows",
     )
     model_build.add_argument(
         "--part",
@@ -181,7 +181,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--requirements",
         type=Path,
         default=None,
-        help="extracted requirements JSON with citations (offline alternative to --datasheet)",
+        help="reviewed requirements JSON with citations; pair with --bindings to reuse extraction "
+        "(code-built engines still require --datasheet)",
     )
     model_build.add_argument(
         "--bindings", type=Path, default=None, help="requirement -> probe binding JSON"
@@ -193,7 +194,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--backend",
         default="api",
         choices=["api", "bob", "scripted", "fixture"],
-        help="which agent authors the model (api = an API key stored in SETUP, "
+        help="backend for extraction or legacy authoring (api = an API key stored in SETUP, "
         "bob = IBM Bob Shell, scripted/fixture = the bundled offline template)",
     )
     model_build.add_argument("--team-id", default=None, help="Bob team id for a general API key")
@@ -234,15 +235,15 @@ def build_parser() -> argparse.ArgumentParser:
     model_build.add_argument(
         "--sanity",
         action="store_true",
-        help="local structural checks only; no simulation test planning",
+        help="local structural checks only (requires --engine legacy_ai); no simulation test planning",
     )
     model_build.add_argument(
         "--engine",
-        choices=("legacy_ai", "behavioral", "pin_only"),
-        default="legacy_ai",
-        help="which route builds the model: legacy_ai (an agent authors it; the default), "
-        "behavioral (built by code from the cited rows, no AI, only for a part marked "
-        "supported) or pin_only (reserved; refuses until a confirmed pin table exists). "
+        choices=("behavioral", "legacy_ai", "pin_only"),
+        default="behavioral",
+        help="which route builds the model: behavioral (default; code-built from cited rows "
+        "for supported parts), legacy_ai (an agent authors it), or pin_only (a pin interface "
+        "without functional behavior). Extraction may still need a provider. "
         "No route falls back to another",
     )
     model_build.add_argument(
@@ -255,8 +256,7 @@ def build_parser() -> argparse.ArgumentParser:
     model_build.add_argument(
         "--plan-tests",
         action="store_true",
-        help="let the agent plan extra test circuits on --engine behavioral or pin_only (off by "
-        "default: those routes bind with the keyword table and ask no provider); the plan is "
+        help="opt in to AI planning of extra test circuits (off by default); the plan is "
         "saved in spec/bindings.json for replay with --bindings",
     )
     model_build.add_argument("--json", action="store_true")
@@ -932,6 +932,23 @@ def _cmd_model_build(args: argparse.Namespace) -> int:
             },
             2,
         )
+    if args.engine != "legacy_ai":
+        return emit(
+            {
+                "tool": "boardmodeler",
+                "command": "model build",
+                "status": "BLOCKED",
+                "detail": (
+                    f"--engine {args.engine} requires --datasheet; it can accompany reviewed "
+                    "--requirements and --bindings. Historical spec-only AI authoring requires "
+                    "explicit --engine legacy_ai."
+                ),
+                "history": [],
+                "probes": [],
+                "files": [],
+            },
+            2,
+        )
     try:
         spec = load_tps54320_spec(args.requirements, args.bindings, part=args.part, subckt=subckt)
     except (OSError, ValueError) as exc:
@@ -1052,7 +1069,7 @@ def _sanitize_subckt(part: str) -> str:
 
 
 def _cmd_model_build_from_datasheet(args: argparse.Namespace, *, subckt: str, emit: Any) -> int:
-    """The product path: datasheet in, agent-authored and simulator-judged model out."""
+    """The product path: datasheet in, selected engine and simulator-judged model out."""
     from boardmodeler.pipeline.make_model import MakeModelRequest, make_model
 
     if not args.datasheet.is_file():

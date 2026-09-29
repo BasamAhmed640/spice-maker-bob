@@ -8,20 +8,56 @@ test code only; see [D-052](docs/DECISIONS.md).
 Source and checked-in installer version: **1.6.0**. Check `SHA256SUMS.txt`
 against the installer in the ZIP you download.
 
+## Current source engine
+
+New builds in the window, CLI and API default to **Code-built behavioral** with full LTspice
+verification. AI extraction is the only default AI stage and can be skipped for matching cached,
+supplied or exact reviewed evidence. Local code binds independent tests, builds a typed design from
+cited inputs and renders SPICE. It does not invoke an AI author, planner or repair loop by default.
+
+The implemented behavioral families are the peak-current buck and eight-pin dual op amp.
+Each part still needs supported pins, essential cited inputs and independent tests. Missing evidence
+or an unresolved package can produce **BLOCKED** with diagnostics and no model. Microcontrollers,
+FPGAs, CPLDs, processors and SoCs are refused on every route; a family hint cannot bypass the gate.
+
+- `behavioral` is the default code-built route. Unsupported parts stop; no other engine runs as a fallback.
+- `legacy_ai` explicitly selects AI authoring, full-mode AI planning and bounded repair.
+  `--plan-tests` separately opts a local route into extra AI planning.
+- `pin_only` explicitly creates a limited pin interface with no device function or electrical
+  accuracy claim. It supports one supply rail and one ground; a second required rail is refused.
+
+Quick structural drafts require `legacy_ai`; the two code-built engines require full verification.
+Old saved requests keep their recorded route, and requests without an engine field retain their
+historical legacy interpretation. See [the workflow](docs/AGENT_WORKFLOW.md),
+[quick-mode limits](docs/QUICK_MODE.md) and [current evidence](docs/STATUS.md).
+
+The current evidence does not establish full-family qualification: TPS54332 has four nominal
+qualification passes and twelve mandatory UNKNOWN gaps, while TPS54331 remains BLOCKED on UVTH,
+package and independent coverage. These source changes do not constitute a rebuilt installer release.
+The planned M6 publication gate still needs source-confirmed package selection, symbol pin numbers
+and discrete pin order. Current file hashes, pin-order records and the TPS54331 pad guard do not
+complete that gate.
+The [engine acceptance report](docs/evidence/2026-09-29-engine-refactor/REPORT.md) records exact
+delivered hashes, measured timings, row counts and the remaining limits.
+
+Replayed extraction records must pass citation checks against the available source document again.
+An old `citation_verified=true` flag cannot certify itself; missing or failed checks are saved as
+unverified in the new run and cannot supply a qualified test reference.
+
 **Safety update:** SETUP requires you to choose an LTspice executable with **BROWSE** and save it. The app does not search installed programs or adopt an inherited `LTSPICE_EXE`. Bob Shell receives the complete prompt through stdin with its read, edit, execute, MCP, skill, todo, subagent and mode tools disabled. The application writes Bob's model text and runs LTspice itself; a Bob reply cannot mark a model verified.
 
 The root `AGENTS.md` and `.bob/rules/` files guide work when this repository is opened as an IBM Bob project. Embedded model authoring uses a generated scratch workspace with the same tool restrictions; it does not load repository rules or hooks. The application supplies the model requirements and safety limits in the prompt.
 
-**IBM Bob is the only AI in this edition, in both the UI and the application source.** Bob is a CLI provider, so it declares no HTTP endpoint: an HTTP destination is refused for it rather than guessed. Bob reads a datasheet, authors an LTspice model and repairs it using actual simulator
-feedback. A model card records measured behavior and every uncovered requirement.
+**IBM Bob is the only AI in this edition, in both the UI and the application source.** Bob is a CLI provider, so it declares no HTTP endpoint: an HTTP destination is refused for it rather than guessed. Bob extracts datasheet records when local evidence is unavailable. Model authoring,
+AI test planning and repair require the explicit legacy route or a planning opt-in. A model card records measured behavior and every uncovered requirement.
 
 **Full electrical verification is the default.** Its checkbox is beside **GO** in
-the build window; uncheck it for a quick structural draft whose electrical
-accuracy remains unverified. SETUP has one **INTERNET ACCESS** checkbox for Bob
+the build window. It can be unchecked only on **AI authored (legacy)** for a quick structural
+draft whose electrical accuracy remains unverified. SETUP has one **INTERNET ACCESS** checkbox for Bob
 and the part vendor's supporting-material site. With it off, the app refuses
 Bob runs and key checks before launching Bob Shell. [Modes and limitations](docs/QUICK_MODE.md).
 
-**1.6.0 adds template-first buck models.** For a supported buck-converter pinout,
+**Installer 1.6.0 history: template-first buck models.** For a supported buck-converter pinout,
 the app fills a known-convergent template from cited datasheet rows, labels any
 template defaults and judges the candidate with LTspice. Bob receives measured
 failures for bounded repair. If repair cannot improve the model, the simulator-
@@ -93,9 +129,10 @@ substitutes an agent or displays the incompatible agent's name.
 ## Make and test a model
 
 Enter the exact part number, select its PDF and a save folder, then press **GO**.
-For supported buck converters, LTspice may judge a cited template without a Bob
-authoring turn. When Bob is needed, the app sends the relevant datasheet and model
-text through Bob Shell with all tool groups disabled. SETUP holds the persistent
+The default engine builds supported behavioral implementations in code. Bob may be needed for
+extraction, while exact reviewed or cached evidence can allow a build with no Bob calls. AI model
+authoring and repair run only after selecting **AI authored (legacy)**. When an AI stage runs,
+the app sends its relevant text through Bob Shell with all tool groups disabled. SETUP holds the persistent
 model folder and the one **INTERNET ACCESS** switch; **FULL VERIFICATION** is beside
 GO for each build. CANCEL requests cancellation;
 results provide Open model folder, Run tests again and Install into LTspice actions.
@@ -112,10 +149,10 @@ revoke remote permission without changing its content identity. Invalid extracti
 gets bounded repair; failures identify the parse location with secrets redacted before
 any diagnostic excerpt is shortened.
 
-The frozen specification owns limits, citations and conditions. Bob proposes model
-text; only the application writes candidates. Repairs receive the current model and observed results,
-retain the best candidate and stop at the iteration/stall limit. Repeated valid builds
-can skip authoring calls; a fresh process re-establishes simulator evidence.
+The frozen specification owns limits, citations and conditions. On the default route, local code
+writes the candidate. On the explicit legacy route, Bob proposes model text; only the application
+writes it. Legacy repairs receive the current model and observed results, retain the best candidate
+and stop at the iteration/stall limit. Revalidation checks the current bytes against simulator evidence.
 
 ## What is actually validated
 

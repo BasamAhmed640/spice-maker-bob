@@ -194,6 +194,7 @@ def write_report(root: Path, key: str | None, report) -> None:
 
 def progress_score(report, spec) -> tuple[int, int, float]:
     """Minimize unknown rows, then failed rows, then normalized electrical error."""
+    from boardmodeler.authoring.harness import comparison_value
     from boardmodeler.authoring.probes import PROBES
 
     unknown = failed = 0
@@ -202,18 +203,28 @@ def progress_score(report, spec) -> tuple[int, int, float]:
         unknown += len(outcome.char_ids) if outcome.status == "UNKNOWN" else 0
         failed += len(outcome.char_ids) if outcome.status == "FAIL" else 0
         probe = PROBES.get(outcome.probe_id)
-        value = outcome.measured.get(probe.judge_key) if probe else None
+        key = (
+            "recipe_value"
+            if outcome.probe_id == "circuit_measurement"
+            else (probe.judge_key if probe else None)
+        )
+        value = outcome.measured.get(key) if key else None
         if not isinstance(value, (int, float)):
             continue
         for char_id in outcome.char_ids:
             char = spec.by_id(char_id)
+            compared = comparison_value(char, value)
             lo, hi = char.min_value, char.max_value
             if lo is None and hi is None and char.typ_value is not None:
                 band = abs(char.typ_value) * 0.1
                 lo, hi = char.typ_value - band, char.typ_value + band
             scale = max(abs(lo or 0), abs(hi or 0), 1e-12)
             error += (
-                max((lo - value) if lo is not None else 0, (value - hi) if hi is not None else 0, 0)
+                max(
+                    (lo - compared) if lo is not None else 0,
+                    (compared - hi) if hi is not None else 0,
+                    0,
+                )
                 / scale
             )
     return unknown, failed, round(error, 12)

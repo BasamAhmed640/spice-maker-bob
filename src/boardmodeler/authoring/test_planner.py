@@ -758,7 +758,7 @@ def _buck_fixture_issue(recipe, source_rows, statement):
                 references = [
                     value
                     for text, limits in source_rows
-                    if re.search(r"\bvoltage\s+reference\b", text, re.I)
+                    if re.search(r"\b(?:voltage\s+reference|reference\s+voltage)\b", text, re.I)
                     and _limit_has_unit(limits, "V")
                     for side in ("min", "typ", "max")
                     if (value := _positive_numeric_limit(limits, side)) is not None

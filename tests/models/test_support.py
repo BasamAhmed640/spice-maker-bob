@@ -120,6 +120,37 @@ def test_a_blocked_datasheet_title_stops_every_route(title: str) -> None:
     assert not any(decision.allows(route) for route in ROUTES)
 
 
+@pytest.mark.parametrize("heading", BLOCKED_TITLES)
+def test_a_blocked_first_page_heading_cannot_be_overridden_by_a_declared_family(heading) -> None:
+    decision = decide_support(
+        "UNLISTED123",
+        title="untitled",
+        head=f"{heading} Features Low power consumption Applications Industrial control",
+        declared_family="linear_regulator",
+        spec=_buck_spec(),
+    )
+    assert decision.state == "blocked_class"
+    assert decision.implementation is None
+    assert not any(decision.allows(route) for route in ROUTES)
+    assert "first page" in decision.identified_from
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        "UNLISTED123 Step-down converter Applications FPGA and microcontroller power supplies",
+        "UNLISTED123 Step-down converter Features Powers FPGA and microcontroller rails",
+        "UNLISTED123 Step-down converter for FPGA and microcontroller power supplies",
+    ],
+)
+def test_application_devices_on_the_first_page_do_not_change_the_parts_class(head) -> None:
+    decision = decide_support("UNLISTED123", title="untitled", head=head)
+    assert decision.state == "unsupported_family"
+    assert decision.family == "switching_regulator"
+    assert decision.allows("legacy_ai")
+    assert decision.allows("pin_only")
+
+
 def test_a_blocked_class_wins_even_when_the_rows_look_like_a_buck() -> None:
     decision = decide_support("STM32F407", title="step-down converter", spec=_buck_spec())
     assert decision.state == "blocked_class"

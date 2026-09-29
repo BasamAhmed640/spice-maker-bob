@@ -21,6 +21,7 @@ def test_full_verification_is_a_window_choice_and_remembered(qtbot, tmp_path, mo
     window = ui.ModelMakerWindow()
     qtbot.addWidget(window)
     assert window.full_check.text() == "FULL VERIFICATION"
+    window.engine_combo.setCurrentIndex(window.engine_combo.findData("legacy_ai"))
     assert window.full_check.isChecked()
 
     window.full_check.setChecked(False)
@@ -37,7 +38,7 @@ def test_quick_result_is_unverified_and_full_action_uses_worker(qtbot, tmp_path,
     window = ui.ModelMakerWindow()
     qtbot.addWidget(window)
     request = MakeModelRequest(
-        "TEST", "TEST", tmp_path / "test.pdf", tmp_path, verification="sanity"
+        "TEST", "TEST", tmp_path / "test.pdf", tmp_path, verification="sanity", engine="legacy_ai"
     )
     result = SimpleNamespace(
         status="UNKNOWN",
@@ -54,6 +55,7 @@ def test_quick_result_is_unverified_and_full_action_uses_worker(qtbot, tmp_path,
     window.again_button.click()
     assert started[0].verification == "full"
     assert started[0].datasheet == request.datasheet
+    assert started[0].engine == "legacy_ai"
     persisted = MakeModelResult(
         "UNKNOWN", "quick", "TEST", tmp_path, None, None, None, (), {}, (), request
     )
@@ -78,6 +80,7 @@ def test_go_uses_the_windows_verification_choice(qtbot, tmp_path, monkeypatch):
     window = ui.ModelMakerWindow()
     qtbot.addWidget(window)
     monkeypatch.setattr(window, "_start", started.append)
+    window.engine_combo.setCurrentIndex(window.engine_combo.findData("legacy_ai"))
     window.part_edit.setText("TPS54320")
     window.datasheet_edit.setText(str(datasheet))
     window.out_edit.setText(str(tmp_path))

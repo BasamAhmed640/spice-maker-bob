@@ -77,6 +77,7 @@ import json
 import re
 import threading
 import time
+import uuid
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -150,6 +151,8 @@ HARNESS_REPORT_NAME = "harness-report.json"
 RESULTS_NAME = "results.json"
 TIMING_NAME = "run-timing.json"
 SUPPORT_RECORD_NAME = "support-decision.json"
+QUALIFICATION_REPORT_NAME = "qualification-report.json"
+QUALIFICATION_PLAN_NAME = "qualification-plan.json"
 ENGINES = ("legacy_ai", "behavioral", "pin_only")
 DESIGN_RECORD_NAME = "model-design.json"
 EXAMPLE_NAME = "EXAMPLE.cir"
@@ -166,9 +169,8 @@ _TEXT_SUFFIXES = frozenset({".txt", ".text", ".md"})
 #: still measuring the model wrong" rather than "the build stopped early".
 _CAP_PREFIX = "max_iterations="
 
-#: Serialises the harness instrumentation (see :func:`_observe_reports`). One
-#: process runs one model build at a time; a second concurrent call is reported
-#: rather than interleaving two builds' harness reports.
+#: One process runs one model build at a time; a second concurrent call is
+#: reported rather than interleaving the builds' authoring work.
 _BUILD_LOCK = threading.Lock()
 
 _SUBCKT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -251,12 +253,12 @@ class MakeModelRequest:
     reinforce_timeout_s: float | None = 45.0
     #: Low-level API remains full by default; the GUI defaults to sanity mode.
     verification: str = "full"
-    #: Which generation route may run. legacy_ai is the agent authoring that has always
-    #: been the default; behavioral is code-built with no agent turn and runs only for a
+    #: Which generation route may run. behavioral is the code-built default with no
+    #: agent authoring turn and runs only for a
     #: part the support decision marks supported; pin_only is separately requested and
     #: limited. Every route is refused for a blocked or unclassified part, and none is a
     #: fallback for another.
-    engine: str = "legacy_ai"
+    engine: str = "behavioral"
     #: What kind of part this is, when the operator knows and the datasheet does not say
     #: (a family id from models.support). It never unblocks a class and never makes a part
     #: supported; it only names the family for a part nothing else identifies.
@@ -391,6 +393,9 @@ def _request_payload(request: MakeModelRequest) -> dict[str, Any]:
         "out_dir": str(request.out_dir),
         "backend_name": request.backend_name,
         "verification": request.verification,
+        "engine": request.engine,
+        "family": request.family,
+        "plan_tests": request.plan_tests,
         "provider": request.provider,
         "agent_model": request.agent_model,
         "agent_max_tokens": (
@@ -423,6 +428,10 @@ def _request_from_payload(payload: Mapping[str, Any]) -> MakeModelRequest:
         out_dir=Path(payload["out_dir"]),
         backend_name=str(payload.get("backend_name", "api")),
         verification=str(payload.get("verification", "full")),
+        # Results written before engine selection existed used the agent route.
+        engine=str(payload.get("engine", "legacy_ai")),
+        family=None if payload.get("family") is None else str(payload["family"]),
+        plan_tests=bool(payload.get("plan_tests", False)),
         provider=None if payload.get("provider") is None else str(payload["provider"]),
         agent_model=None if payload.get("agent_model") is None else str(payload["agent_model"]),
         agent_max_tokens=(
@@ -1149,48 +1158,6 @@ def _bundled_author(request: MakeModelRequest) -> ScriptedBackend:
     return ScriptedBackend(script, name="scripted")
 
 
-@contextlib.contextmanager
-def _observe_reports(on_report: Callable[[HarnessReport], None]):
-    """Route every harness report the author loop produces to ``on_report``.
-
-    ``build_model`` offers no per-turn hook, so the one seam it exposes — the
-    module-level ``run_harness`` name — is wrapped for the duration of the build
-    and restored in a ``finally``. :data:`_BUILD_LOCK` keeps two concurrent
-    builds in one process from swapping each other's wrapper.
-    """
-    from boardmodeler.authoring import loop as loop_module
-
-    original = loop_module.run_harness
-
-    def wrapper(
-        *,
-        model_lib: Path,
-        subckt: str,
-        spec: SpecSet,
-        workdir: Path,
-        ltspice: Path,
-        timeout_s: float = 120.0,
-        cancel: threading.Event | None = None,
-    ) -> HarnessReport:
-        report = original(
-            model_lib=model_lib,
-            subckt=subckt,
-            spec=spec,
-            workdir=workdir,
-            ltspice=ltspice,
-            timeout_s=timeout_s,
-            cancel=cancel,
-        )
-        on_report(report)
-        return report
-
-    loop_module.run_harness = wrapper
-    try:
-        yield
-    finally:
-        loop_module.run_harness = original
-
-
 # --------------------------------------------------------------------------- #
 # internal control flow
 
@@ -1472,6 +1439,7 @@ class _Run:
         self.turns = 0
         self.sanity_ok = False
         self.reference_bindings: list[dict[str, Any]] | None = None
+        self.reviewed_extraction: dict[str, Any] | None = None
         self.citation_lookup = None
         self.status = Status.UNKNOWN.value
         self.detail = ""
@@ -1488,6 +1456,12 @@ class _Run:
         self.support: Any = None
         self.head_text = ""
         self.template_seed_judge_s: float | None = None
+        self.template_compile_s: float | None = None
+        self.qualification_plan: Any = None
+        self.qualification_problem: str | None = None
+        self.qualification_report: dict[str, Any] | None = None
+        self.previous_publication_dir: Path | None = None
+        self.publication_problem: str | None = None
 
     def _get_backend(self) -> AuthorBackend:
         """Keep one backend so extraction, planning and authoring share one meter."""
@@ -1637,6 +1611,44 @@ class _Run:
             return
 
         if self.record is not None and self.request.backend_name not in ("fixture", "scripted"):
+            from boardmodeler.authoring import tps54331_reference
+
+            if tps54331_reference.matches(self.request.part, self.record.file_hash):
+                self.citation_lookup = _page_lookup(self.record, self.store)
+                pages = {
+                    page: self.citation_lookup(self.record.doc_id, page) or ""
+                    for page in tps54331_reference.PAGES
+                }
+                try:
+                    self.requirements, self.pin_map, self.reviewed_extraction = (
+                        tps54331_reference.records(self.record, pages)
+                    )
+                except ValueError as exc:
+                    raise _Stop("extract", Status.BLOCKED.value, str(exc)) from exc
+                validation = validate_requirements(self.requirements, documents=self._documents())
+                if validation.errors:
+                    raise _Stop(
+                        "extract",
+                        Status.BLOCKED.value,
+                        "reviewed_extraction_invalid: "
+                        + "; ".join(issue.message for issue in validation.errors[:3]),
+                    )
+                self._verify_citations()
+                if self.unverified:
+                    raise _Stop(
+                        "extract", Status.BLOCKED.value, "reviewed extraction citations failed"
+                    )
+                self._write_json(
+                    self.out_dir / "reviewed-extraction.json", self.reviewed_extraction
+                )
+                self.log.emit(
+                    "extract",
+                    "ok",
+                    "reviewed TPS54331 SLVS839H table columns matched the exact TI datasheet; "
+                    "partial extraction; D/DDA package unresolved; zero extraction API calls",
+                    self._row_counts(),
+                )
+                return
             from boardmodeler.authoring.lm358_reference import matches, records
 
             if matches(self.request.part, self.record.file_hash):
@@ -1770,11 +1782,13 @@ class _Run:
         return {self.record.doc_id: self.record}
 
     def _verify_citations(self) -> None:
-        """Fill :attr:`unverified` (req_id -> reason) for this run's rows.
+        """Record this run's citation checks on the rows and in :attr:`unverified`.
 
         With the cited document registered and readable, the excerpts are checked
         against its own page text. Without it, a supplied extraction result cannot
-        verify its own citations; the document must be available.
+        verify its own citations; the document must be available. Persist the new
+        result on DOCUMENT rows before any frozen source or qualification plan is
+        written, so a replay's old ``citation_verified`` flag cannot certify itself.
         """
         documents = self._documents()
         if documents:
@@ -1785,24 +1799,31 @@ class _Run:
                 excerpt_lookup=self.citation_lookup or _page_lookup(self.record, self.store),
             )
             self.unverified = {
-                req_id: (
+                requirement.req_id: (
                     "the excerpt is not on the page it cites, or the citation is incomplete "
                     f"(doc {self.record.doc_id})"
-                    if not verified
-                    else ""
                 )
-                for req_id, verified in checks.items()
-                if not verified
+                for requirement in self.requirements
+                if requirement.origin is RequirementOrigin.DOCUMENT
+                and checks.get(requirement.req_id) is not True
             }
-            return
-        self.unverified = {
-            requirement.req_id: (
-                "the datasheet text for the cited document is not available, so the citation "
-                "could not be verified"
+        else:
+            self.unverified = {
+                requirement.req_id: (
+                    "the datasheet text for the cited document is not available, so the citation "
+                    "could not be verified"
+                )
+                for requirement in self.requirements
+                if requirement.origin is RequirementOrigin.DOCUMENT
+            }
+        self.requirements = [
+            requirement.model_copy(
+                update={"citation_verified": requirement.req_id not in self.unverified}
             )
-            for requirement in self.requirements
             if requirement.origin is RequirementOrigin.DOCUMENT
-        }
+            else requirement
+            for requirement in self.requirements
+        ]
 
     def _row_counts(self) -> dict[str, int]:
         return {"rows": len(self.requirements), "unverified": len(self.unverified)}
@@ -1860,6 +1881,16 @@ class _Run:
         else:
             entries = bind_requirements(self.requirements, unverified=self.unverified)
             note = "binding computed from the reviewed keyword table"
+        if (
+            request.verification == "full"
+            and request.bindings_json is None
+            and self.reference_bindings is None
+        ):
+            from boardmodeler.authoring.buck_fixtures import complete_buck_bindings
+
+            entries = complete_buck_bindings(
+                self.requirements, self.pin_map, entries, unverified=self.unverified
+            )
         # The binding this run is judged against is always written for review, and
         # *it* is what the loader reads, so ``bindings_json`` replays a run exactly.
         bindings_path = self._write_json(
@@ -1923,6 +1954,8 @@ class _Run:
         """The requirement set this run is judged against, in the loader's fixture shape."""
         record = self.record
         document: dict[str, Any] = {"doc_id": "" if record is None else record.doc_id}
+        if self.reviewed_extraction is not None:
+            document["reviewed_extraction"] = self.reviewed_extraction
         if record is not None:
             document.update(
                 {
@@ -1978,6 +2011,7 @@ class _Run:
         if impl is None:
             impl = next(item for item in IMPLEMENTATIONS if item.name == "peak_current_buck")
         label = impl.template.replace("_", " ")
+        compile_started = time.monotonic()
         try:
             seed = impl.seed(self.spec, self.unverified)
         except ValueError as exc:
@@ -1987,6 +2021,7 @@ class _Run:
             return None
         self.template_name, self.template_heading = impl.template, impl.heading
         seed.write(path)
+        self.template_compile_s = time.monotonic() - compile_started
         self.template_seed = seed.payload()
         self.template_seed_bytes = path.read_bytes()
         self.template_design = seed.design
@@ -2023,7 +2058,7 @@ class _Run:
         The decision is saved whether or not it allows the route: a refusal, a limited route
         and a supported claim are all facts the deliverables should carry.
         """
-        from boardmodeler.models.support import decide_support
+        from boardmodeler.models.support import RouteVerdict, decide_support
 
         title = "" if self.record is None else self.record.title
         decision = decide_support(
@@ -2034,6 +2069,23 @@ class _Run:
             unverified=self.unverified,
             declared_family=self.request.family,
         )
+        # Common pins do not resolve package-specific exposed pads. The marker is
+        # frozen into requirements/bindings replays, so a later numeric/test fix
+        # cannot turn an ambiguous pin map into a published D or DDA model.
+        if decision.state not in ("blocked_class", "unclassified") and any(
+            pin.get("package_resolution") == "unresolved" for pin in self.pin_map
+        ):
+            from boardmodeler.authoring.tps54331_reference import PACKAGE_GAP
+
+            reason = f"{decision.reason}; missing {PACKAGE_GAP}"
+            refusal = f"unsupported_part: unresolved_package: {reason}"
+            decision = dataclasses.replace(
+                decision,
+                state="unsupported_family",
+                reason=reason,
+                missing=(*decision.missing, PACKAGE_GAP),
+                routes={name: RouteVerdict(False, refusal) for name in decision.routes},
+            )
         self.support = decision
         route = self.request.engine
         record = {
@@ -2408,8 +2460,9 @@ class _Run:
             self.status, self.detail = Status.BLOCKED.value, reason
             return
         try:
-            with _observe_reports(self._on_report):
-                outcome = build_model(request, cancel, candidate_revalidated=prechecked)
+            outcome = build_model(
+                request, cancel, candidate_revalidated=prechecked, on_report=self._on_report
+            )
         finally:
             _BUILD_LOCK.release()
         if seed_report is not None and self.template_seed_bytes is not None:
@@ -2496,9 +2549,81 @@ class _Run:
 
     # ------------------------------------------------------------------- save
 
+    def _archive_deliverables(self, *, include_diagnostics: bool = False) -> None:
+        """Withdraw only app-owned root outputs, retaining their exact old bytes.
+
+        The workdir candidate and measured evidence remain available for revalidation.
+        Old root files are history, never the deliverables of a refused rerun.
+        """
+        names = {
+            f"{self.request.subckt}.lib",
+            f"{self.request.subckt}.asy",
+            "MODEL_CARD.md",
+            EXAMPLE_NAME,
+            "example.cir",
+            "install.md",
+            HARNESS_REPORT_NAME,
+            DESIGN_RECORD_NAME,
+            "template-parameters.json",
+            "sanity-report.json",
+            "pin-only-report.json",
+            QUALIFICATION_REPORT_NAME,
+            RESULTS_NAME,
+            TIMING_NAME,
+        }
+        if include_diagnostics:
+            names.update((SUPPORT_RECORD_NAME, "reviewed-extraction.json"))
+        # A reused output directory can switch subcircuit names. Only recorded
+        # direct-child libraries/symbols count; a results file cannot name outsiders.
+        try:
+            previous = json.loads((self.out_dir / RESULTS_NAME).read_text(encoding="utf-8"))
+            for key, suffix in (("lib_path", ".lib"), ("asy_path", ".asy")):
+                value = previous.get(key)
+                if isinstance(value, str):
+                    path = Path(value)
+                    if (
+                        path.parent.resolve() == self.out_dir.resolve()
+                        and path.suffix.lower() == suffix
+                    ):
+                        names.add(path.name)
+        except OSError, ValueError, AttributeError:
+            pass
+        history = self.workdir / "publication-history" / uuid.uuid4().hex
+        moved = False
+        seen: set[str] = set()
+        for name in sorted(names):
+            path = self.out_dir / name
+            # Windows case aliases refer to one artifact. The existence check
+            # also keeps the code correct on case-sensitive platforms.
+            identity = str(path.absolute())
+            if identity in seen or not path.is_file():
+                continue
+            seen.add(identity)
+            history.mkdir(parents=True, exist_ok=True)
+            path.rename(history / name)
+            moved = True
+        if include_diagnostics or (
+            self.qualification_plan is None and self.status == Status.BLOCKED.value
+        ):
+            prior_plan = self.spec_dir / QUALIFICATION_PLAN_NAME
+            if prior_plan.is_file():
+                (history / SPEC_DIRNAME).mkdir(parents=True, exist_ok=True)
+                prior_plan.rename(history / SPEC_DIRNAME / QUALIFICATION_PLAN_NAME)
+                moved = True
+        if moved and self.previous_publication_dir is None:
+            self.previous_publication_dir = history
+        self.lib_path = self.asy_path = self.card_path = None
+
     def save(self) -> None:
         self.log.emit("save", "running", f"publishing deliverables into {self.out_dir}")
         notes: list[str] = []
+        try:
+            self._archive_deliverables()
+        except OSError as exc:
+            self.publication_problem = f"publication_withdrawal_failed: {exc}"
+            self.detail = f"{self.detail}; {self.publication_problem}".strip("; ")
+            self.log.emit("save", "failed", self.publication_problem, {"files": 0})
+            return
         gate_report_saved = False
         if self.pin_only_info is not None:
             # Keep the observed gate result even when a failed gate withholds the library.
@@ -2516,6 +2641,10 @@ class _Run:
                 gate_report_saved = True
                 notes.append("saved the pin-only gate report")
         source = None if self.spec is None else model_file(self.workdir, self.request.subckt)
+        if self.status == Status.BLOCKED.value or (
+            self.outcome is not None and self.outcome.status == Status.BLOCKED.value
+        ):
+            source = None
         if self.request.verification == "sanity" and not self.sanity_ok:
             source = None
         if self.template_seed is not None and not any(
@@ -2532,10 +2661,14 @@ class _Run:
             except (OSError, ValueError, ModelStoreError) as exc:
                 notes.append(f"the model could not be published: {type(exc).__name__}: {exc}")
                 refusal = f"model_not_published: {exc}"
-                self.detail = f"{self.detail}; {refusal}".strip("; ") if self.detail else refusal
-                self.lib_path = None
-                self.asy_path = None
-                self.card_path = None
+                self.publication_problem = refusal
+                prior_detail = self.detail or (self.outcome.detail if self.outcome else "")
+                self.detail = f"{prior_detail}; {refusal}".strip("; ")
+                try:
+                    self._archive_deliverables()
+                except OSError as cleanup:
+                    self.detail += f"; publication_withdrawal_failed: {cleanup}"
+                self.lib_path = self.asy_path = self.card_path = None
         else:
             remaining = (
                 f"{SPEC_DIRNAME}/, pin-only-report.json and {RESULTS_NAME}"
@@ -2549,6 +2682,110 @@ class _Run:
             "ok" if self.lib_path is not None else "skipped",
             "; ".join(notes) or f"published {len(published)} model file(s)",
             {"files": len(published)},
+        )
+
+    def freeze_qualification(self) -> None:
+        """Freeze independent buck checks before any author can write the candidate."""
+        with contextlib.suppress(OSError):
+            (self.spec_dir / QUALIFICATION_PLAN_NAME).unlink(missing_ok=True)
+        if (
+            self.request.verification != "full"
+            or self.spec is None
+            or self.support is None
+            or self.support.implementation != "peak_current_buck"
+        ):
+            return
+        from boardmodeler.authoring.qualification import build_buck_qualification_plan
+
+        try:
+            plan = build_buck_qualification_plan(self.spec, self.spec_dir / REQUIREMENTS_NAME)
+            self._write_text(self.spec_dir / QUALIFICATION_PLAN_NAME, plan.to_json())
+        except (OSError, ValueError, TypeError) as exc:
+            self.qualification_problem = f"qualification_plan_unavailable: {exc}"
+            self.log.emit("qualify", "skipped", self.qualification_problem)
+            return
+        self.qualification_plan = plan
+        self.log.emit("qualify", "ready", "fixed buck conditions and mandatory checklist frozen")
+
+    def qualify(self, cancel: threading.Event | None) -> None:
+        """Judge only the exact published library; keep unfinished checks visible."""
+        if self.lib_path is None or (
+            self.qualification_plan is None and self.qualification_problem is None
+        ):
+            return
+        from boardmodeler.authoring.qualification import run_qualification
+
+        if self.qualification_plan is None:
+            report: dict[str, Any] = {
+                "record_kind": "qualification_report",
+                "part": self.request.part,
+                "status": "UNKNOWN",
+                "family_qualified": False,
+                "reason": self.qualification_problem,
+                "model_sha256": hashlib.sha256(self.lib_path.read_bytes()).hexdigest(),
+            }
+        else:
+            try:
+                install = locate()
+                design = json.loads((self.out_dir / DESIGN_RECORD_NAME).read_text(encoding="utf-8"))
+                digest = (
+                    design.get("design_sha256")
+                    if self._saved_design_is_exact(design, self.lib_path.read_bytes())
+                    else None
+                )
+                report = run_qualification(
+                    self.qualification_plan,
+                    self.lib_path,
+                    None if install is None else install.path,
+                    self.workdir / "qualification",
+                    design_sha256=digest,
+                    timeout_s=min(self.request.timeout_s, 120.0),
+                    cancel=cancel,
+                )
+            except (OSError, ValueError, TypeError) as exc:
+                report = {
+                    "record_kind": "qualification_report",
+                    "part": self.request.part,
+                    "status": "UNKNOWN",
+                    "family_qualified": False,
+                    "reason": f"qualification_unavailable: {type(exc).__name__}: {exc}",
+                    "model_sha256": hashlib.sha256(self.lib_path.read_bytes()).hexdigest(),
+                }
+        self.qualification_report = report
+        try:
+            self._write_json(self.out_dir / QUALIFICATION_REPORT_NAME, report)
+        except OSError as exc:
+            self.log.emit("qualify", "failed", f"qualification report could not be saved: {exc}")
+            return
+        if self.card_path is not None:
+            counts = report.get("counts") or {}
+            summary = (
+                ", ".join(
+                    f"{key} {counts.get(key, 0)}" for key in ("PASS", "FAIL", "UNKNOWN", "BLOCKED")
+                )
+                if counts
+                else report.get("reason", "unavailable")
+            )
+            try:
+                self._write_text(
+                    self.card_path,
+                    self.card_path.read_text(encoding="utf-8")
+                    + "\n## Independent buck qualification\n\n"
+                    + f"{report['status']} ({summary}). "
+                    + "This is a supplemental, fixed checklist; a passing subset does not "
+                    + "qualify the whole family. See `qualification-report.json` and "
+                    + "`spec/qualification-plan.json` for the model hash, conditions, "
+                    + "measurements and explicit gaps.\n",
+                )
+            except OSError as exc:
+                self.log.emit(
+                    "qualify", "incomplete", f"qualification card note unavailable: {exc}"
+                )
+        self.log.emit(
+            "qualify",
+            "ok" if report.get("family_qualified") else "incomplete",
+            f"fixed qualification {report['status']}; family qualified: "
+            f"{bool(report.get('family_qualified'))}",
         )
 
     def _receipt_load(self) -> dict:
@@ -2584,15 +2821,39 @@ class _Run:
 
     def _publish(self, source: Path, notes: list[str]) -> None:
         request = self.request
-        text = source.read_text(encoding="utf-8", errors="replace")
+        delivered = source.read_bytes()
+        text = delivered.decode("utf-8")
         self._refuse_known_invalid(text)
+        if self.status == Status.BLOCKED.value or (
+            self.outcome is not None and self.outcome.status == Status.BLOCKED.value
+        ):
+            raise ValueError("publication_blocked: this run did not authorize a candidate")
+        if self.spec is None or self.report.spec_digest != self.spec.digest():
+            raise ValueError("publication_spec_mismatch: report does not describe the frozen spec")
+        if hashlib.sha256(delivered).hexdigest() != self.report.model_sha256:
+            raise ValueError("publication_model_mismatch: candidate differs from the judged bytes")
+        for frozen in (
+            self.spec_dir / CHARACTERISTICS_NAME,
+            self.workdir / SPEC_DIRNAME / CHARACTERISTICS_NAME,
+        ):
+            if (
+                frozen.is_file()
+                and SpecSet.from_json(frozen.read_text(encoding="utf-8")).digest()
+                != self.report.spec_digest
+            ):
+                raise ValueError("publication_spec_mismatch: frozen spec file differs from report")
         ports = list(subckt_ports(text, request.subckt))
         if not ports:
             raise ValueError(f"{source} declares no .subckt {request.subckt}")
-        lib_target = self._write_text(self.out_dir / f"{request.subckt}.lib", text)
+        if source.read_bytes() != delivered:
+            raise ValueError("publication_model_mismatch: candidate changed during publication")
+        lib_target = self.out_dir / f"{request.subckt}.lib"
+        lib_target.parent.mkdir(parents=True, exist_ok=True)
+        lib_target.write_bytes(delivered)
         self.lib_path = lib_target
         symbol, note = self._publish_symbol(ports, lib_target.name)
         self.asy_path = symbol
+        self._publish_design_record(lib_target.read_bytes(), symbol=symbol, ports=ports)
         notes.append(note)
         written = write_deliverables(
             out_dir=self.out_dir,
@@ -2603,8 +2864,7 @@ class _Run:
             document=self.spec.doc_id if self.spec is not None else None,
             backend=(
                 self.template_name
-                if self.template_seed_bytes is not None
-                and text.encode("utf-8") == self.template_seed_bytes
+                if self.template_seed_bytes is not None and delivered == self.template_seed_bytes
                 else self.backend_name or None
             ),
             iterations=None if self.outcome is None else int(self.outcome.iterations),
@@ -2615,24 +2875,17 @@ class _Run:
             self.out_dir / "MODEL_CARD.md",
         )
         if self.template_seed is not None and self.template_seed_bytes is not None:
-            same_as_seed = text.encode("utf-8") == self.template_seed_bytes
+            same_as_seed = delivered == self.template_seed_bytes
             metadata = {
                 **self.template_seed,
                 "seed_sha256": hashlib.sha256(self.template_seed_bytes).hexdigest(),
-                "final_model_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                "final_model_sha256": hashlib.sha256(delivered).hexdigest(),
                 "final_model_matches_seed": same_as_seed,
             }
             self._write_text(
                 self.out_dir / "template-parameters.json",
                 json.dumps(metadata, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
             )
-            if self.template_design is not None:
-                record = self.template_design.record(text.encode("utf-8"))
-                self._write_text(
-                    self.out_dir / DESIGN_RECORD_NAME,
-                    json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
-                )
-                notes.append("saved model design record")
             defaults = [
                 parameter
                 for parameter in metadata["parameters"]
@@ -2732,6 +2985,128 @@ class _Run:
         notes.append(
             f"model sha256 {self.report.model_sha256[:12] or 'unknown'}, "
             f"{self.turns} harness turn(s)"
+        )
+        if (
+            lib_target.read_bytes() != delivered
+            or hashlib.sha256(delivered).hexdigest() != self.report.model_sha256
+            or self.report.spec_digest != self.spec.digest()
+        ):
+            raise ValueError("publication_evidence_changed: delivered bytes or frozen spec changed")
+
+    def _publish_design_record(
+        self, delivered: bytes, *, symbol: Path, ports: Sequence[str]
+    ) -> None:
+        """Every publication refreshes provenance, including resumed legacy repairs.
+
+        A resumed run may have no in-memory seed. A prior design then describes
+        only the old candidate; changing its library cannot preserve an exact
+        association. Missing or unreadable provenance is explicitly unavailable.
+        """
+        path = self.out_dir / DESIGN_RECORD_NAME
+        digest = hashlib.sha256(delivered).hexdigest()
+        if self.template_design is not None:
+            record = self.template_design.record(delivered)
+        else:
+            try:
+                prior_path = path
+                if not prior_path.is_file() and self.previous_publication_dir is not None:
+                    prior_path = self.previous_publication_dir / DESIGN_RECORD_NAME
+                previous = json.loads(prior_path.read_text(encoding="utf-8"))
+            except OSError, ValueError:
+                previous = None
+            if (
+                isinstance(previous, dict)
+                and previous.get("record_kind") == "model_design_record"
+                and isinstance(previous.get("design"), dict)
+                and isinstance(previous.get("rendered_library_sha256"), str)
+            ):
+                exact = self._saved_design_is_exact(previous, delivered)
+                record = {
+                    **previous,
+                    "delivered_library_sha256": digest,
+                    "association": "exact" if exact else "invalid_after_change",
+                    "association_note": (
+                        "The saved design was revalidated against the delivered library and spec."
+                        if exact
+                        else "The saved design could not be revalidated against the delivered "
+                        "library and spec. It is retained as prior provenance only; final "
+                        "parameters were not reconstructed from SPICE text."
+                    ),
+                    "verdict": "UNJUDGED",
+                }
+            else:
+                record = {
+                    "schema_version": 1,
+                    "record_kind": "model_design_record",
+                    "design": None,
+                    "design_sha256": None,
+                    "rendered_library_sha256": None,
+                    "delivered_library_sha256": digest,
+                    "association": "unavailable",
+                    "association_note": "No usable typed design is associated with this library.",
+                    "verdict": "UNJUDGED",
+                }
+        record["delivered_symbol_sha256"] = hashlib.sha256(symbol.read_bytes()).hexdigest()
+        record["delivered_pin_order"] = list(ports)
+        self._write_json(path, record)
+        # A resumed run can also retain parameter provenance from its old seed.
+        # Keep those origins, but never leave their delivered-byte claim stale.
+        parameters_path = self.out_dir / "template-parameters.json"
+        prior_parameters = parameters_path
+        if not prior_parameters.is_file() and self.previous_publication_dir is not None:
+            prior_parameters = self.previous_publication_dir / "template-parameters.json"
+        if self.template_seed is None and prior_parameters.is_file():
+            try:
+                parameters = json.loads(prior_parameters.read_text(encoding="utf-8"))
+            except OSError, ValueError:
+                parameters = {}
+            if not isinstance(parameters, dict):
+                parameters = {}
+            parameters.update(
+                final_model_sha256=digest,
+                final_model_matches_seed=parameters.get("seed_sha256") == digest,
+                provenance_note="Retained starting-seed parameters; final parameters not inferred.",
+            )
+            self._write_json(parameters_path, parameters)
+
+    def _saved_design_is_exact(self, record: Any, delivered: bytes) -> bool:
+        """Reconstruct and render saved provenance before trusting an exact association."""
+        from boardmodeler.models.buck_switching import BuckDesign
+        from boardmodeler.models.op_amp import OpAmpDesign
+
+        if not isinstance(record, dict) or record.get("association") != "exact":
+            return False
+        payload = record.get("design")
+        if not isinstance(payload, dict) or self.spec is None:
+            return False
+        if not isinstance(payload.get("record_kind"), str):
+            return False
+        design_type = {
+            "buck_design": BuckDesign,
+            "op_amp_design": OpAmpDesign,
+        }.get(payload.get("record_kind"))
+        if design_type is None:
+            return False
+        try:
+            design = design_type.from_payload(payload)
+            refreshed = design.record(delivered)
+        except AttributeError, KeyError, OSError, OverflowError, TypeError, ValueError:
+            return False
+        return (
+            design.spec_digest == self.spec.digest()
+            and design.part == self.spec.part
+            and design.subckt == self.spec.subckt
+            and refreshed["association"] == "exact"
+            and all(
+                record.get(key) == refreshed[key]
+                for key in (
+                    "schema_version",
+                    "record_kind",
+                    "design_sha256",
+                    "rendered_library_sha256",
+                    "delivered_library_sha256",
+                )
+            )
         )
 
     def _publish_symbol(self, ports: Sequence[str], lib_name: str) -> tuple[Path, str]:
@@ -2848,6 +3223,10 @@ class _Run:
     def decide(self, rows: Sequence[RowOutcome]) -> tuple[str, str]:
         """``(status, detail)`` for this run, with the next action in the detail."""
         outcome = self.outcome
+        if self.status == Status.BLOCKED.value:
+            return self.status, self.detail
+        if self.publication_problem:
+            return Status.UNKNOWN.value, self.detail
         if outcome is None:
             reason = self.detail or "the build did not reach the authoring stage"
             return self.status, reason
@@ -2902,6 +3281,35 @@ def _confirmed_wrong(outcome: BuildOutcome, max_iterations: int | None) -> bool:
     )
 
 
+def _apply_qualification_status(
+    status: str, detail: str, report: dict[str, Any] | None
+) -> tuple[str, str]:
+    """A measured fixed-check failure cannot disappear behind the row-harness verdict."""
+    if report is None:
+        return status, detail
+    verdict = report.get("status")
+    counts = report.get("counts") or {}
+    summary = (
+        f"{counts.get('PASS', 0)} PASS, {counts.get('FAIL', 0)} FAIL, "
+        f"{counts.get('UNKNOWN', 0)} UNKNOWN, {counts.get('BLOCKED', 0)} BLOCKED"
+    )
+    if verdict == Status.FAIL.value:
+        return Status.FAIL.value, (
+            f"independent fixed qualification measured a failure ({summary}); {detail}"
+        )
+    if verdict == Status.BLOCKED.value:
+        return Status.BLOCKED.value, (
+            f"independent fixed qualification is BLOCKED ({summary}); "
+            f"see qualification-report.json for the required simulation refusal; {detail}"
+        )
+    if verdict == Status.UNKNOWN.value and status == Status.PASS.value:
+        return Status.UNKNOWN.value, (
+            f"row harness passed, but independent fixed qualification is {verdict} "
+            f"({summary}); see qualification-report.json for missing mandatory checks"
+        )
+    return status, detail
+
+
 # --------------------------------------------------------------------------- #
 # entry point
 
@@ -2936,18 +3344,23 @@ def make_model(
     local_spec_supplied = (
         request.requirements_json is not None and request.bindings_json is not None
     )
-    if _author_needs_network(request) and not internet_allowed() and not local_spec_supplied:
-        detail = refusal_detail("extracting and authoring a model through Bob")
-        log.emit("author", "failed", detail)
-        return _empty_result(request, log, detail)
     try:
         run.out_dir.mkdir(parents=True, exist_ok=True)
+        run._archive_deliverables(include_diagnostics=True)
     except OSError as exc:
         detail = f"output_dir_unusable: {type(exc).__name__}: {exc}"
         log.emit("read", "failed", detail)
         return _empty_result(request, log, detail)
     ledger = _Ledger()
     try:
+        if _author_needs_network(request) and not internet_allowed() and not local_spec_supplied:
+            # Refuse before provider work, using the same withdrawal/result path
+            # as later refusals so a reused folder cannot present an old model.
+            raise _Stop(
+                "author",
+                Status.BLOCKED.value,
+                refusal_detail("authoring a model through Bob"),
+            )
         with ledger.stage("read"):
             run.read()
         with ledger.stage("extract"):
@@ -2956,10 +3369,14 @@ def make_model(
             run.bind(cancel)
         with ledger.stage("gate"):
             run.support_gate()
+        with ledger.stage("qualification_plan"):
+            run.freeze_qualification()
         with ledger.stage("author"):
             run.author(cancel)
         with ledger.stage("save"):
             run.save()
+        with ledger.stage("qualification"):
+            run.qualify(cancel)
     except _Stop as stop:
         log.emit(stop.stage, "failed", stop.detail)
         run.status, run.detail = stop.status, stop.detail
@@ -2967,6 +3384,7 @@ def make_model(
             run.save()
     rows = run.rows()
     status, detail = run.decide(rows)
+    status, detail = _apply_qualification_status(status, detail, run.qualification_report)
     result = MakeModelResult(
         status=status,
         detail=detail,
@@ -2988,21 +3406,47 @@ def make_model(
         result = dataclasses.replace(
             result, detail=f"{result.detail}; {note}", stages=tuple(log.events)
         )
+    if "author" not in ledger.seconds:
+        timing_route = "refused_before_authoring"
+    elif request.engine == "pin_only":
+        timing_route = "pin_only_shell" if run.pin_only_info is not None else "pin_only_refused"
+    elif request.engine == "behavioral":
+        timing_route = (
+            f"{run.template_name}_seed" if run.template_seed is not None else "behavioral_refused"
+        )
+    else:
+        timing_route = "agent_authoring"
     with contextlib.suppress(OSError):  # a courtesy record: it never changes the verdict
         timing = ledger.payload(
             part=request.part,
             status=status,
-            route="pin_only_shell"
-            if run.pin_only_info is not None
-            else "pin_only_refused"
-            if request.engine == "pin_only"
-            else f"{run.template_name}_seed"
-            if run.template_seed is not None
-            else "agent_authoring"
-            if "author" in ledger.seconds
-            else "refused_before_authoring",
+            route=timing_route,
             template_seed_judge_seconds=(
                 None if run.template_seed_judge_s is None else round(run.template_seed_judge_s, 3)
+            ),
+            template_compile_seconds=(
+                None if run.template_compile_s is None else round(run.template_compile_s, 3)
+            ),
+            simulation_seconds=(
+                None
+                if run.template_seed_judge_s is None and run.qualification_report is None
+                else round(
+                    (run.template_seed_judge_s or 0.0)
+                    + (
+                        0.0
+                        if run.qualification_report is None
+                        else float(run.qualification_report.get("simulation_seconds", 0.0))
+                    ),
+                    3,
+                )
+            ),
+            qualification_simulation_seconds=(
+                None
+                if run.qualification_report is None
+                else round(float(run.qualification_report.get("simulation_seconds", 0.0)), 3)
+            ),
+            qualification_status=(
+                None if run.qualification_report is None else run.qualification_report.get("status")
             ),
             author_turns=None if run.outcome is None else int(run.outcome.iterations),
             **run._provider_call_fields(),

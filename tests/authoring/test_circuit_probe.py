@@ -7,7 +7,12 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from boardmodeler.authoring.circuit_probe import CircuitRecipe, make_probe
+from boardmodeler.authoring.circuit_probe import (
+    CircuitRecipe,
+    _time_mean,
+    _time_rms,
+    make_probe,
+)
 from boardmodeler.authoring.probes import ProbeError
 from boardmodeler.authoring.spec import load_tps54320_spec
 from boardmodeler.domain.records import Limit, RelativeLimit
@@ -30,6 +35,42 @@ def recipe():
         },
         "condition_evidence": "TEST_FIXTURE: 0.5 V input and 1 kohm load; not device data.",
     }
+
+
+def test_transient_averages_weight_elapsed_time_and_interpolate_frozen_edges():
+    # Three short solver intervals flank one long, steady interval. Equal
+    # weighting of saved points would report 0.6 V and 0.775 V RMS here.
+    axis = np.array([0, 0.01, 0.02, 0.98, 1.0])
+    signal = np.array([0, 1, 1, 1, 0])
+    assert _time_mean(axis, signal, 0, 1) == pytest.approx(0.985)
+    assert _time_rms(axis, signal, 0, 1) == pytest.approx(np.sqrt(0.98))
+    # A frozen window between raw samples must use its stated boundaries.
+    assert _time_mean(axis, signal, 0.005, 0.015) == pytest.approx(0.875)
+
+
+@pytest.mark.parametrize(
+    ("operation", "signal", "expected"),
+    [
+        ("mean", np.array([1, 1.0005, 1.0005, 1.0005, 1]), 1.0004925),
+        ("rms", np.array([0, 1, 1, 1, 0]), np.sqrt(0.98)),
+    ],
+)
+def test_frozen_recipe_uses_time_weighted_transient_measurement(
+    monkeypatch, operation, signal, expected
+):
+    data = recipe()
+    data.update(stop=1, step=0.01)
+    data["measurement"].update(operation=operation, start=0, end=1)
+    axis = np.array([0, 0.01, 0.02, 0.98, 1.0])
+    raw = SimpleNamespace(
+        data=np.column_stack((axis, signal)),
+        complex_data=False,
+        column=lambda _: signal,
+    )
+    monkeypatch.setattr("boardmodeler.simulation.raw.read_raw", lambda _: raw)
+    assert make_probe(data).measure(Path("nonuniform.raw"), {})["recipe_value"] == pytest.approx(
+        expected
+    )
 
 
 @pytest.mark.parametrize(

@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--compare", type=Path, metavar="OTHER_REPO")
     args = parser.parse_args(argv)
     if args.write:
-        MANIFEST.write_text(json.dumps(current(), indent=2) + "\n", encoding="utf-8")
+        MANIFEST.write_text(json.dumps(current(), indent=2) + "\n", encoding="utf-8", newline="\n")
         print(f"wrote {MANIFEST.name}: {len(current())} core files")
         return 0
     if args.check:

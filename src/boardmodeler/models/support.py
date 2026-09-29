@@ -629,10 +629,32 @@ def decide_support(
     can never unblock a class, and it never makes a part supported.
     """
     blocked = classify(part, text=title)
+    blocked_source = ""
+    if blocked.supported:
+        # PDF metadata is often "untitled". Read the device heading too, before a
+        # declared family or an otherwise matching implementation can admit it.
+        # Later features/applications may name a different device being powered;
+        # "converter for FPGA supplies" does not make the converter an FPGA.
+        heading = re.split(
+            r"\b(?:features|applications|description|contents|overview|for)\b",
+            head,
+            maxsplit=1,
+            flags=re.I,
+        )[0]
+        blocked = classify(part, text=heading)
+        if not blocked.supported:
+            blocked_source = "the device heading on the first page of the datasheet"
     if not blocked.supported:
         state: State = "blocked_class"
         return SupportDecision(
-            part, state, blocked.kind, None, blocked.detail, (), _routes(state, blocked.detail)
+            part,
+            state,
+            blocked.kind,
+            None,
+            blocked.detail,
+            (),
+            _routes(state, blocked.detail),
+            blocked_source,
         )
     if declared_family is not None and declared_family not in family_ids():
         raise ValueError(f"family must be one of {family_ids()}, got {declared_family!r}")

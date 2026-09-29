@@ -402,7 +402,10 @@ def test_fail_then_pass_reaches_pass_on_turn_two(monkeypatch, tmp_path: Path) ->
             return super().author(request, cancel)
 
     backend = Recorder(script)
-    outcome = loop.build_model(make_request(tmp_path, spec, backend), None)
+    observed = []
+    outcome = loop.build_model(
+        make_request(tmp_path, spec, backend), None, on_report=observed.append
+    )
 
     assert outcome.status == "PASS"
     assert outcome.iterations == 2
@@ -412,6 +415,7 @@ def test_fail_then_pass_reaches_pass_on_turn_two(monkeypatch, tmp_path: Path) ->
     assert outcome.history[1] == "turn 2: progress; failing none"
 
     assert len(double.calls) == 2
+    assert observed == double.reports
     assert double.calls[0]["model_lib"] == workdir / "model" / f"{SUBCKT}.lib"
     assert double.calls[0]["text"] == "* attempt 1\n"
     assert double.calls[1]["text"] == "* attempt 2\nCORRECTED\n"
@@ -1123,12 +1127,16 @@ def test_a_fresh_process_revalidates_a_passing_candidate_without_authoring(
     authored: list[int] = []
     backend = ScriptedBackend(lambda turn, path, prompt: authored.append(turn))
 
-    outcome = loop.build_model(make_request(tmp_path, spec, backend, workdir=workdir))
+    observed = []
+    outcome = loop.build_model(
+        make_request(tmp_path, spec, backend, workdir=workdir), on_report=observed.append
+    )
 
     assert outcome.status == "PASS", outcome.detail
     assert outcome.iterations == 0
     assert authored == []
     assert len(double.calls) == 1
+    assert observed == double.reports
 
 
 def test_loop_request_bounds_are_validated_and_no_cap_is_the_default(tmp_path: Path) -> None:

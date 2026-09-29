@@ -286,6 +286,41 @@ def _frequency(t, y, level, rising):
     return 1.0 / middle
 
 
+def _weighted_window(axis, signal, start: float, end: float):
+    """Return the exact frozen time window, interpolating its boundary samples.
+
+    LTspice adapts its transient step size to the circuit. Counting each saved
+    point equally makes the answer depend on the solver's sampling density rather
+    than elapsed time, especially around switching edges.
+    """
+    from boardmodeler.authoring.probes import ProbeError
+
+    if start < axis[0] or end > axis[-1] or np.any(np.diff(axis) < 0):
+        raise ProbeError("recipe_window_uncovered")
+    interior = (axis > start) & (axis < end)
+    times = np.concatenate(([start], axis[interior], [end]))
+    values = np.concatenate(
+        ([np.interp(start, axis, signal)], signal[interior], [np.interp(end, axis, signal)])
+    )
+    if not np.all(np.isfinite(values)) or not np.any(np.diff(times) > 0):
+        raise ProbeError("recipe_nonfinite")
+    return times, values
+
+
+def _time_mean(axis, signal, start: float, end: float) -> float:
+    times, values = _weighted_window(axis, signal, start, end)
+    return float(np.trapezoid(values, times) / (end - start))
+
+
+def _time_rms(axis, signal, start: float, end: float) -> float:
+    times, values = _weighted_window(axis, signal, start, end)
+    # Each raw interval represents a linear waveform. Integrate its square
+    # exactly; trapezoid(y**2) would overstate the energy on sloped intervals.
+    first, last = values[:-1], values[1:]
+    square_area = np.sum(np.diff(times) * (first * first + first * last + last * last) / 3)
+    return float(np.sqrt(square_area / (end - start)))
+
+
 def make_probe(payload):
     from boardmodeler.authoring.probes import ProbeError, ProbeSpec, model_ports
     from boardmodeler.simulation.raw import read_raw
@@ -364,15 +399,25 @@ def make_probe(payload):
                     other = (full_axis >= m.second_start) & (full_axis <= m.second_end)
                     if np.count_nonzero(other) < 2:
                         raise ProbeError("recipe_window_uncovered")
-                    rail = float(np.mean(_trace(raw, m.reference)[other]))
+                    rail = _time_mean(
+                        full_axis, _trace(raw, m.reference), m.second_start, m.second_end
+                    )
                     values = []
                     for signal in (m.signal, *m.additional_signals):
                         low, high = _trace(raw, signal)[mask], _trace(raw, signal)[other]
                         if not np.all(np.isfinite(np.concatenate((low, high)))):
                             raise ProbeError("recipe_nonfinite")
-                        if max(np.ptp(low), np.ptp(high)) > max(1e-6, abs(rail) * 1e-3):
+                        full_signal = _trace(raw, signal)
+                        _, low_window = _weighted_window(full_axis, full_signal, m.start, m.end)
+                        _, high_window = _weighted_window(
+                            full_axis, full_signal, m.second_start, m.second_end
+                        )
+                        if max(np.ptp(low_window), np.ptp(high_window)) > max(
+                            1e-6, abs(rail) * 1e-3
+                        ):
                             raise ProbeError("recipe_not_settled")
-                        bottom, top = float(np.mean(low)), float(np.mean(high))
+                        bottom = _time_mean(full_axis, full_signal, m.start, m.end)
+                        top = _time_mean(full_axis, full_signal, m.second_start, m.second_end)
                         if bottom < -1e-6 or top > rail + 1e-6 or bottom >= top:
                             raise ProbeError(
                                 "output_outside_supplies",
@@ -418,17 +463,22 @@ def make_probe(payload):
                         raise ProbeError("recipe_slew_invalid")
                     value = abs(m.level - m.trigger_level) / (b - a)
                 else:
-                    if m.operation == "mean" and np.ptp(y) > max(
-                        1e-9, abs(float(np.mean(y))) * 1e-3
-                    ):
-                        raise ProbeError("recipe_not_settled")
+                    mean = None
+                    if m.operation == "mean":
+                        signal = _trace(raw, m.signal)
+                        _, window = _weighted_window(full_axis, signal, m.start, m.end)
+                        mean = _time_mean(full_axis, signal, m.start, m.end)
+                        if np.ptp(window) > max(1e-9, abs(mean) * 1e-3):
+                            raise ProbeError("recipe_not_settled")
                     value = float(
                         {
-                            "mean": np.mean,
+                            "mean": lambda _: mean,
                             "min": np.min,
                             "max": np.max,
                             "peak_to_peak": np.ptp,
-                            "rms": lambda x: np.sqrt(np.mean(x * x)),
+                            "rms": lambda _: _time_rms(
+                                full_axis, _trace(raw, m.signal), m.start, m.end
+                            ),
                         }[m.operation](y)
                     )
             if m.absolute:

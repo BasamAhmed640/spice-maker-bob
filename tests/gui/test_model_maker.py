@@ -64,6 +64,9 @@ class _Request:
     provider: str | None = None
     requirements_json: Path | None = None
     bindings_json: Path | None = None
+    engine: str = "legacy_ai"
+    family: str | None = None
+    plan_tests: bool = False
 
 
 def _engine_module(result: _Result, calls: list[_Request]) -> ModuleType:
@@ -287,6 +290,7 @@ def test_no_agent_available_stops_before_any_work(qtbot, tmp_path, monkeypatch) 
     from boardmodeler.ui.model_maker import ModelMakerWindow
 
     window = ModelMakerWindow()
+    window.engine_combo.setCurrentIndex(window.engine_combo.findData("legacy_ai"))
     qtbot.addWidget(window)
     datasheet = tmp_path / "ds.pdf"
     datasheet.write_bytes(b"%PDF-1.4")
@@ -336,4 +340,4 @@ def test_a_malformed_config_shows_the_blocked_dialog_instead_of_raising(
     window.go_button.click()
 
     assert calls == [], "no build may start from an unreadable config"
-    assert shown and shown[0][0] == "No agent available"
+    assert shown and shown[0][0] == "Settings not readable"

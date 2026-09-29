@@ -76,7 +76,15 @@ def test_the_model_window_can_be_resized(qtbot, window) -> None:
 def test_the_model_window_keeps_every_control_when_shrunk_to_its_minimum(qtbot, window) -> None:
     """A resizable window may not become a window with unreachable controls."""
     window.resize(window.minimumSize())
-    for name in ("part_edit", "datasheet_edit", "out_edit", "go_button", "cancel_button"):
+    for name in (
+        "part_edit",
+        "datasheet_edit",
+        "out_edit",
+        "engine_combo",
+        "family_combo",
+        "go_button",
+        "cancel_button",
+    ):
         widget = getattr(window, name)
         assert widget.isVisible(), f"{name} must stay reachable at the minimum size"
         assert widget.width() > 0 and widget.height() > 0, f"{name} must have real room"

@@ -89,8 +89,10 @@ def test_model_build_refuses_before_read_or_bob_spawn_when_off(tmp_path: Path, m
         datasheet=tmp_path / "absent.pdf",
         out_dir=out,
         backend_name="bob",
+        engine="legacy_ai",
     )
     result = engine.make_model(request)
     assert result.status == "BLOCKED"
     assert "internet_access_off" in result.detail
-    assert not out.exists()
+    # Saving the refusal receipt is allowed; no read or extraction stage may run.
+    assert [event.stage for event in result.stages if event.stage != "save"] == ["author"]

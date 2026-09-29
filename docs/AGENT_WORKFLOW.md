@@ -1,37 +1,62 @@
-# Current default: full electrical verification
-
-GUI GO runs the full electrical verification workflow by default. Quick mode is an explicit option and exports its model as electrically unverified after structural checks and a five-second unpowered LTspice load when available. See [quick mode](QUICK_MODE.md) for its limits.
-
 # What happens after GO
 
-The elapsed clock beside GO shows hours:minutes:seconds, with a small hourglass beside it
-that drains only while a build runs. It updates while the agent
-is quiet, includes cancellation cleanup, and keeps the final duration after success,
-a blocked run or an error. The next accepted GO resets it. It measures elapsed time;
-it does not predict completion or show the agent's private reasoning.
+New builds default to **Code-built behavioral** with **FULL VERIFICATION** in the window,
+CLI and `MakeModelRequest` API. Code selects a supported implementation, builds a typed design
+from cited inputs, renders SPICE and judges it in LTspice. AI extraction is the only default AI
+stage; matching cached records, supplied evidence or an exact reviewed PDF profile can avoid it.
+No default AI author, test planner, reinforcement search or repair loop runs.
 
-The application uses the selected agent for several sequential jobs. Short inputs share extraction context. Long inputs use smaller cached page batches,
-with up to three requests in parallel and bounded recovery of failed batches.
-In the Bob edition, all of these AI jobs use IBM Bob.
+Replayed DOCUMENT rows are checked against the currently available cited text. The result replaces
+their saved citation flags before the new source/spec and qualification plan freeze. Missing text,
+a failed match or a missing verifier result makes the row unverified; an old true flag cannot
+certify itself. Original historical run artifacts are not rewritten.
 
-| Stage | Who does it | What actually happens |
+The implemented behavioral families are the peak-current buck and eight-pin dual op amp.
+A family name alone does not establish support: missing essential evidence, independent tests
+or an unresolved package can stop the build as **BLOCKED**. Microcontrollers, FPGAs, CPLDs,
+processors and SoCs are refused on every route. A family hint cannot override that gate.
+An unsupported behavioral build never falls back to AI authoring or a pin shell.
+
+| Stage | Who does it by default | What happens |
 | --- | --- | --- |
-| Read | Local code | Registers and hashes the PDF, then reads its pages and text. |
-| Extract | Selected agent | Returns the exact part's identity, pins, electrical requirements with conditions and citations, and a capability summary in structured JSON. A malformed reply gets one correction request before extraction fails. Matching cached extraction can avoid this call. |
-| Check and bind | Local code | Validates the structure and cited text, plans and validates independent device-specific circuits (or uses a reviewed fixture), records unsupported rows, then freezes the specification and its hash. |
-| Reinforce, when enabled | Selected agent plus local retrieval | Suggests supporting URLs such as application notes and errata. The app retrieves sources and records evidence. These references cannot replace frozen limits or produce a passing verdict. |
-| Author | Selected agent and local code | Bob returns a self-contained LTspice library as text against the frozen requirements and required ports. The application validates and writes the library, then generates the symbol locally. On a repair turn, Bob receives the current model and previous simulation failures in its prompt. |
-| Judge | LTspice plus local code | Runs the applicable test circuits, reads observed outputs, and compares measurements with the frozen requirements. The agent cannot award itself PASS or loosen the limits. |
-| Repair | Selected agent, then the judge again | Revises the model and repeats the applicable checks. The best observed candidate is retained. By default, two consecutive turns without measurable improvement stop the loop; cancellation, errors, or an explicitly configured turn cap can also stop it. |
-| Save | Local code | Publishes the model and symbol when available, the model card, row results, and recorded evidence. An early failure can leave diagnostics without a model. |
+| Read | Local code | Hashes the PDF and reads its pages and text. |
+| Extract | Selected provider, if needed | Extracts the exact part's identity, pins, requirements, conditions and citations into structured records. Cached, supplied or reviewed records can avoid inference. Citation text is checked locally. |
+| Bind and gate | Local code | Selects validated independent fixtures, keeps untested rows visible, checks support and package evidence, and freezes the specification. A buck qualification plan is also frozen from source evidence before model generation. |
+| Build | Local code | Fills the matched implementation from cited rows, records parameter provenance and renders the candidate. It does not ask an AI to write or repair the model. |
+| Judge | LTspice and local code | Measures the applicable characteristics against frozen requirements. Missing measurements and uncovered behavior stay UNKNOWN. |
+| Save | Local code | Publishes only an authorized candidate whose bytes match its harness report and frozen spec. Records library/symbol hashes and pin order. A refusal can leave diagnostics without a model. |
+| Qualify, for buck models | LTspice and local code | Tests the exact delivered library against the separately frozen qualification plan. Four nominal tests run by default; twelve mandatory gaps remain UNKNOWN. This report does not replace the ordinary row harness or qualify the whole family. |
 
-There is no separate AI reviewer that proves the design correct. PASS covers only
-the characteristics the installed probes actually measure at their recorded conditions.
-Unsupported rows remain visible. The exact reviewed LM358 datasheet now has nominal
-gain, offset, bandwidth, slew-rate, bias-current and output-swing checks on both channels.
-Full common-mode range, temperature corners and other gaps remain untested; see
-LM358_VALIDATION.md. A successful file export alone does not establish device accuracy.
+The separate M6 publication gate is still open: confirm the package variant, symbol pin numbers
+and discrete terminal order against cited evidence and owner confirmation or an independent source.
+Present hash/pin-order checks and the TPS54331 package refusal do not complete that planned gate.
 
-Existing candidates can skip further author calls if the simulator revalidates them.
-The elapsed clock and the stage table remain visible during API waits; the stage
-detail is an application event, not a live transcript of the agent's internal work.
+The **AI authored (legacy)** engine (`--engine legacy_ai`) explicitly enables the provider
+authoring path, including full-mode AI test planning and bounded repair against the frozen
+requirements. Any enabled reinforcement belongs to that route. `--plan-tests` separately opts
+a local route into extra AI planning; it is off by default. These are visible choices, never
+automatic recovery from a refused code-built model. In the Bob edition every AI job uses IBM Bob;
+in the general edition it uses the selected HTTPS provider.
+
+**Pins only** (`--engine pin_only`) is a separate, limited interface model for supported pin
+mappings: pins, supply draw, clamps and wiring alarms. It has no device function and makes no
+electrical accuracy claim. The current shell supports one supply rail and one ground; a second
+required supply is refused. Its real LTspice viability checks do not turn it into a functional
+model. Both code-built routes require full verification.
+
+Only the legacy engine offers the optional [quick structural draft](QUICK_MODE.md), by
+unchecking **FULL VERIFICATION** beside GO. Quick checks remain electrically unverified.
+
+PASS covers only measured characteristics at their recorded conditions. The exact reviewed
+LM358 PDF has checks on both channels, but common-mode range, temperature corners and other gaps
+remain outside that evidence; see [LM358 validation](LM358_VALIDATION.md). A successful export,
+a typed design or an exact file hash does not establish universal device accuracy.
+
+The elapsed clock includes waits and cancellation cleanup and keeps the final duration.
+`run-timing.json` records stage durations and observable provider calls. General API attempts include
+retries. Bob Shell starts are counted separately; after a start, its internal provider-request
+count is unknown. Zero author turns alone is not proof of zero extraction calls. Stage messages
+describe application work, not the provider's private reasoning.
+
+Saved requests retain their recorded engine. Older requests with no engine field retain their
+historical legacy interpretation; reopening one does not silently migrate its authoring route.

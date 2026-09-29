@@ -162,6 +162,7 @@ def test_the_window_refuses_before_any_run_and_says_why(
     from boardmodeler.ui.model_maker import ModelMakerWindow
 
     window = ModelMakerWindow()
+    window.engine_combo.setCurrentIndex(window.engine_combo.findData("legacy_ai"))
     qtbot.addWidget(window)
     datasheet = tmp_path / "tps54320.pdf"
     datasheet.write_bytes(b"%PDF-1.4 fake")
@@ -201,6 +202,9 @@ def _engine_module(calls: list[object]) -> ModuleType:
         verification: str
         provider: str | None = None
         allow_remote: bool = False
+        engine: str = "legacy_ai"
+        family: str | None = None
+        plan_tests: bool = False
 
     def make_model(request: object, progress: object = None, cancel: object = None) -> _Result:
         calls.append(request)

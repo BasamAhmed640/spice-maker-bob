@@ -27,7 +27,12 @@ REJECTED = (
 def build_run(tmp_path: Path, reason: str | None):
     """A sanity-mode run with only what the publish guard reads."""
     request = engine.MakeModelRequest(
-        "TEST", "TEST", tmp_path / "fake.pdf", tmp_path / "out", verification="sanity"
+        "TEST",
+        "TEST",
+        tmp_path / "fake.pdf",
+        tmp_path / "out",
+        verification="sanity",
+        engine="legacy_ai",
     )
     run = engine._Run(request, engine._StageLog(None))
     run.workdir = Path(request.out_dir) / engine.WORK_DIRNAME

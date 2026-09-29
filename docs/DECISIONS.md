@@ -559,6 +559,9 @@ scoring, status names, providers and the interface are untouched.
 
 ## D-055 — Support gate: blocked classes on every route, unknown never supported (2026-09-28)
 
+New-run defaults and UI route selection below are superseded by D-059; the support safety rules
+remain in force.
+
 Implements the owner's scope statement recorded in D-054.
 
 1. `models/support.py::decide_support` is the one place that decides what may be claimed for a
@@ -717,3 +720,76 @@ not accepted on the strength of the buck template.
    input policy and independent test bindings are sound. A bounded matcher now reads both
    `current limit` and `current-limit`; an offline replay removes only the ILIM citation gap and
    still refuses the part for UVTH and missing independent VREF/current-limit tests.
+
+## D-059 — Freeze independent qualification, preserve reviewed columns, and bind provenance to delivery (2026-09-29)
+
+1. Buck qualification is reusable production code in `authoring/qualification.py` and
+   `authoring/buck_qualification.py`. Freeze its plan from the source requirements and spec before
+   candidate authoring. The plan records source, spec and implementation hashes, operating conditions,
+   independent circuits and acceptance references. It must not read candidate design parameters to
+   define a limit. Changing the candidate requires another observation against the same frozen plan,
+   not moving the band to make the candidate pass.
+2. The mandatory checklist has sixteen checks. The reviewed nominal slice covers VREF, slow-start
+   charge, shutdown supply current and operating supply current. Seven M2 observations and five
+   switching-frequency/UVLO/enable checks remain explicit UNKNOWN gaps until their independent
+   acceptance work is finished. Optional fault controls are synthetic and excluded from device
+   counts. Four nominal PASS rows cannot make `family_qualified` true. The supplemental report does
+   not replace or relax the ordinary row harness.
+3. Every qualification execution stages immutable candidate bytes and keeps its own plan, model,
+   simulator, deck, raw/log hashes and measurements. A changed plan implementation, candidate,
+   deck, incomplete simulator output or exceeded bound cannot earn PASS. Per-check simulation is
+   bounded to at most 120 s and raw output to 64 MiB; oversized output is retained as incomplete
+   evidence. Default qualification runs the four nominal simulations; extra controls and M2
+   diagnostic observations are explicit choices.
+4. A reviewed TPS54331 profile matches only the exact part and TI SLVS839H document hash. It records
+   a partial extraction scope, zero-based PDF pages and printed labels, verbatim verified excerpts,
+   source MIN/TYP/MAX values, and quantity/condition identity. VIN UVLO MAX 3.5 V is not a nominal
+   value. EN has TYP 1.25 V / MAX 1.35 V; ILIM has MIN 3.5 A / TYP 5.8 A. Missing table cells stay
+   absent. Supplied historical extractions and frozen bindings are not corrected in place.
+5. Bare TPS54331 does not select D or DDA packaging. Common pins 1–8 and the DDA-only PowerPAD
+   requirement are separate machine-readable evidence. An unresolved package marker survives a
+   saved-input replay and blocks every publication route; resolving numeric inputs alone cannot
+   silently omit the pad. TPS54331 remains unsupported while UVTH, package selection and independent
+   behavior coverage remain unresolved. The profile is not whole-datasheet extraction or model proof.
+6. Code-built VREF and current-limit fixture completion uses verified, active raw requirements of the
+   same part/document, qualified physical pin mappings and cited slow-start charging time. It reads
+   no candidate parameters. A ranged VIN condition is not a singleton operating point; contradictory
+   point values remain refused. Caller-supplied frozen bindings and LM358's reviewed bindings are not
+   replaced. AI planning remains explicit on local routes and cannot bypass the fixture guards.
+7. A publication records the delivered library and symbol hashes and pin order. A prior exact typed
+   design association cannot survive changed delivered library bytes after a resumed repair. Missing
+   typed provenance is explicitly unavailable; parameter-origin records describe the seed unless
+   the final library still matches it. Publication preserves the candidate's bytes and requires the
+   ordinary harness report to match both those bytes and the frozen spec. Supplemental qualification
+   receives the exact delivered library and its exact typed-design hash when available. On a reused
+   output directory, old app-owned deliverables move into `build/publication-history/`; refusal must
+   not leave an old library or card presented as the current result. These hashes establish identity,
+   not electrical PASS. Resumed buck/op-amp payloads must parse and render again, matching saved
+   schema/type/design/library hashes and current part/subcircuit/spec before retaining exact.
+   Invalid provenance must not supply an exact design hash to qualification.
+8. The CLI, window and new `MakeModelRequest` API promote `behavioral` to the new-run default.
+   Historical saved requests without an engine continue to decode
+   as `legacy_ai`. Legacy authoring and pin-only generation stay explicit choices, never fallbacks.
+   First-page device identity can refuse a blocked MCU/FPGA/CPLD/processor/SoC before a family hint
+   can classify it as supported; application examples that mention those devices do not establish
+   the identity of the modeled part. Provider accounting retains D-058's observable-attempt rule.
+9. A saved DOCUMENT row's `citation_verified` flag cannot certify itself on replay. Persist the
+   current document/page verification result before freezing new requirements or qualification
+   sources. Missing source text, failed excerpts and absent verifier results clear stale true flags;
+   non-document origins and historical input artifacts remain unchanged. Qualification must retain
+   a gap when a required current citation is unverified.
+10. This milestone does not complete M6's source-backed package/symbol confirmation gate for
+    PIN-01/02/05. Library/symbol hashes, recorded terminal order and the TPS54331 unresolved-pad
+    guard establish narrower invariants. Package selection, symbol numbering and discrete pin
+    order still require the planned evidence/confirmation gate before publication.
+11. Supplemental qualification BLOCKED is publicly BLOCKED with its refusal reason. Fixed FAIL
+    remains FAIL; fixed UNKNOWN downgrades an ordinary PASS. Incomplete or unavailable required
+    simulation cannot become PASS.
+
+Evidence: local general-edition `runs/qualification-acceptance/acceptance.json` records the same
+plan SHA-256 `548871ecfa2b5ef595b85294ed3fc0cefbc7366b9d4a78185e64a0ed1dbf8234` for clean and
+VREF=0.72-V candidates. The clean run has 4 PASS / 12 UNKNOWN; the changed candidate has 3 PASS /
+1 FAIL / 12 UNKNOWN against the unchanged 0.772–0.828-V reference band. Controls-enabled elapsed
+times were 87.497255 s and 83.232343 s. Focused source-column, missing-citation, package-replay,
+fixture, wrong-candidate, provenance and callback tests accompany the code. This is a bounded
+source-engine milestone; the remaining mandatory checks and broader family coverage are unfinished.

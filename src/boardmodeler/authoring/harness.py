@@ -38,7 +38,13 @@ from boardmodeler.simulation.ltspice import BatchResult, run_batch
 from boardmodeler.simulation.measures import diagnose
 from boardmodeler.simulation.raw import RawFile, RawFormatError, read_raw
 
-__all__ = ["HarnessReport", "ProbeOutcome", "judge_characteristic", "run_harness"]
+__all__ = [
+    "HarnessReport",
+    "ProbeOutcome",
+    "comparison_value",
+    "judge_characteristic",
+    "run_harness",
+]
 
 #: Relative slack applied to a declared limit before it is called a violation:
 #: one part per million of the limit magnitude absorbs ``.raw`` float rounding.
@@ -224,10 +230,8 @@ def _unknown_outcome(
     )
 
 
-def _judge(char: Characteristic, key: str, value: float) -> tuple[str, str, str | None]:
-    """``(status, detail, likely cause)`` for one characteristic and one measurement."""
-    label = f"{char.char_id} [{char.req_class}]"
-    judged = f"{key}={value:.6g} {char.unit}".strip()
+def comparison_value(char: Characteristic, value: float) -> float:
+    """Use the same current sign convention for judging and repair ranking."""
     source = " ".join(
         (char.statement, char.excerpt, *(str(c.get("text", "")) for c in char.conditions))
     )
@@ -246,7 +250,14 @@ def _judge(char: Characteristic, key: str, value: float) -> tuple[str, str, str 
     # unsigned supply/leakage-current limit is a magnitude; preserve the raw
     # signed observation in the report while judging its magnitude. A cited
     # direction or negative limit keeps the signed comparison.
-    compared = abs(value) if char.unit == "A" and not cited_polarity else value
+    return abs(value) if char.unit == "A" and not cited_polarity else value
+
+
+def _judge(char: Characteristic, key: str, value: float) -> tuple[str, str, str | None]:
+    """``(status, detail, likely cause)`` for one characteristic and one measurement."""
+    label = f"{char.char_id} [{char.req_class}]"
+    judged = f"{key}={value:.6g} {char.unit}".strip()
+    compared = comparison_value(char, value)
     if compared != value:
         judged += f" (magnitude {compared:.6g} {char.unit})"
     if char.has_limits:

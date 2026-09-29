@@ -1,100 +1,152 @@
-# Hand-off — engine run of 2026-09-28/29, audited 2026-09-29
+# Hand-off — engine evidence milestone, 2026-09-29
 
-Written after the prior run parked at 84 percent, short of the owner's 90 percent usage line.
-Read this first, then `docs/STATUS.md` (newest entry on top) and `docs/DECISIONS.md` (D-054 to D-058).
+Read this first, then the newest entry in `docs/STATUS.md` and decision D-059 in
+`docs/DECISIONS.md`. Older status entries are historical observations, not the current support list.
+This is source-engine work; no new installer release or universal functional coverage is claimed.
+M6's package/symbol confirmation gate remains open. Default-route timing and measured row passes
+do not establish completion of that publication gate or of the broader north-star acceptance.
 
-## Where things stand
+## Current behavior
 
-- Both repos are on `main` and pushed; the automated checks (ruff check, ruff format, the full pytest
-  step) pass on the tips. The 46-file shared core is identical across the two editions
-  (`tools/shared_core.py --check`, and `--compare ../spice-maker` from the Bob edition).
-- The engine is an evidence-to-model compiler. The AI extracts cited rows; code builds a typed design
-  and renders the SPICE; LTspice judges. Three routes, none falls back to another: `legacy_ai` (the
-  default, agent authoring), `behavioral` (code-built, only for a part the support decision marks
-  supported), `pin_only` (limited, asked for by name, never a pass).
-- Support needs a positively matched implementation, every essential input cited, and every essential
-  behaviour covered by an independent bound row. Microcontrollers, FPGAs, CPLDs, processors and SoCs are
-  refused on every route. `support-decision.json` is written for every run.
-- Built by code today: the peak-current buck (TPS54332) and the dual op amp (LM358), one part each.
+- The engine reads cited evidence, creates a typed design, renders SPICE in code and judges it in
+  LTspice. The CLI, window and new `MakeModelRequest` API default to `behavioral`. AI extraction is
+  the only default AI stage; supplied, cached or exact reviewed evidence can avoid it.
+  `legacy_ai` explicitly enables authoring, planning and repair; local-route AI planning is a
+  separate opt-in. Old saved requests without an engine keep their historical legacy interpretation.
+  `pin_only` is separately requested and
+  models no function. No route silently falls back to another.
+- The window exposes engine and optional family choices. A family hint does not create support.
+  First-page device identity participates in the MCU/FPGA/CPLD/processor/SoC refusal; incidental
+  application mentions do not classify an ordinary analog part as a microcontroller.
+- The implemented behavioral families remain the peak-current buck and eight-pin dual op amp.
+  Support means an implementation matched, essential inputs were cited and essential behaviors have
+  independent tests. It does not mean that every operating condition or whole family is qualified.
+- The one-rail pin shell refuses a second required supply terminal before rendering or simulation.
+  Its failed viability report remains inspectable when model deliverables are withheld. Do not make
+  the shell pass by treating an unpowered required rail as a valid powered-device test.
 
-## Takeover audit and correction (2026-09-29)
+## Current default-route acceptance
 
-- The saved LM5116 requirements and bindings replay offline. The old run's failed gate report was
-  lost because only successful publication wrote it. The report now survives a withheld model, while
-  the library, symbol and card remain absent. A replay with real LTspice 26 took 9.954 s, called no
-  provider, and retained the current-conservation and quiet-alarm measurements. The shell cannot
-  honestly handle several required supply pins: the saved table has VIN, VCC and HB, and it treated
-  correctly powered VCC/HB as missing ties. Such a pin table is now refused before simulation with
-  `pin_only_required_secondary_supply`; an optional auxiliary pin does not trigger that refusal.
-- `run-timing.json` now counts inference HTTP attempts at the transport call, including retries. A
-  local route with supplied evidence records zero. Bob Shell does not expose its internal vendor
-  requests: after a shell invocation the total is `null` with a reason, and its shell invocation
-  count is recorded separately. A run refused before authoring has route
-  `refused_before_authoring`, rather than `agent_authoring`.
-- The TPS54331 refusal was described incorrectly below. The cited source has an EN typical threshold
-  of 1.25 V and current-limit typical value of 5.8 A; the saved extraction misassigns table columns.
-  It also calls the VIN UVLO maximum of 3.5 V a typical value, though the datasheet says its typical
-  VIN UVLO threshold is unspecified. The missing `UVTH` input is VIN UVLO, **not** EN. A hyphen in
-  `Current-limit` also hid the row from the matcher. The old run records are historical evidence,
-  not values to edit in place. See the [TI TPS54331 Rev. H datasheet](https://www.ti.com/lit/ds/symlink/tps54331.pdf)
-  (electrical characteristics and operating description). With the bounded hyphen matcher fixed, an
-  offline replay takes 6.685 s and remains BLOCKED for `UVTH` and missing independent VREF and
-  current-limit tests; it makes zero provider calls and writes no model.
-- This remains a two-part demonstration of behavioral code building, not universal coverage of PCB
-  components. The positive support gate and the MCU/FPGA exclusions remain essential.
+Citation replay now replaces each DOCUMENT row's saved verified flag with the current page-check
+result before freezing the new requirements/qualification plan. Missing document text, failed
+matches or missing verifier results make the row unverified; source history is not rewritten.
+Do not allow replayed true flags to supply a qualification reference without that current check.
 
-## Live runs made on 2026-09-29 (general edition build, one key, opencode_go)
+Both editions retain final real-LTspice replays after citation/provenance/status hardening under `runs/engine-acceptance-opamp/`,
+`runs/engine-acceptance-buck/` and `runs/engine-acceptance-tps54331/`. Every run recorded zero
+provider calls with complete accounting. No live provider was exercised.
 
-| Part | Route | Result | Time |
-| --- | --- | --- | --- |
-| TPS54331 (second buck, cached extraction) | behavioral | refused, `unsupported_family`: recorded decision lacks ILIM/UVTH and four independent behaviours; the audit above corrects the interpretation | 9 s |
-| XD7660 (charge pump) | pin_only | UNKNOWN by design, gate 12 pass, 1 unknown, 0 fail | 158 s (extract 154.5 s) |
-| LM5116 (21-pin controller) | pin_only | BLOCKED: gate failed two checks, nothing delivered | 348 s (extract 342.4 s) |
-| TPS54331 with `--plan-tests` | behavioral | refused again, `unsupported_family`: recorded decision lacks ILIM/UVTH and independent VREF/current-limit tests (10 of 112 rows bind) | 294 s (planning call 284 s) |
+| Case | General / Bob total time | Observed result in both editions |
+| --- | --- | --- |
+| LM358 exact reviewed PDF | 26.237 / 26.158 s | PASS; 32 PASS / 10 N/A |
+| TPS54332DDA | 161.600 / 164.024 s | UNKNOWN; ordinary rows 12 PASS / 4 FAIL / 41 UNKNOWN / 49 N/A |
+| TPS54331 reviewed PDF | 4.165 / 4.272 s | BLOCKED before authoring; no model delivery |
 
-Outputs, including `run-timing.json` and `support-decision.json` per run, are under
-`C:\Users\basam\src\.smsnap\ex\` (`tps54331`, `xd7660`, `lm5116`, `tps54331_plan`, and `summary.log`).
-The runner scripts there (`run_ex.sh`, `run_plan.sh`) show the exact command: a temporary config via
-`BOARDMODELER_CONFIG` (the real one is untouched), a frozen copy of `src` on `PYTHONPATH`, one build
-at a time because there is one key.
+The LM358 delivered library hash in both editions is
+`67766c0cf0d6ce85b9042df94ce4766deb264e917988df1e45d782e9fbaabed2`.
+The buck hash is
+`21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2`, with exact design
+association and the same hash in its qualification report. Each buck qualification has 4 PASS /
+12 UNKNOWN and `family_qualified=false`. Its default four qualification simulations took
+44.520 s general and 45.164 s Bob, included in those full-run totals.
 
-## Do next, in this order
+The edition-specific frozen plan hashes and extraction/compile/simulation breakdowns are in the
+newest STATUS entry and the retained `run-timing.json` files. Their 106-row buck extraction must
+not be conflated with the frozen 19-row regression: that older input still reports TPS54332
+12 PASS / 4 FAIL / 3 UNKNOWN and LM358 19 PASS, with no changed row verdicts.
 
-1. For TPS54331, make a new reviewed extraction revision pinned to the exact document hash and
-   correct the MIN/TYP/MAX cell assignments. Do not relabel a maximum as a nominal value, and do not
-   overwrite the historical run. Use deterministic, physically loaded VREF/current-limit benches
-   with the existing soft-start guard; the optional AI planner's early measurement windows are not
-   valid substitutes. The current `UVTH` contract has no cited typical value for this datasheet.
-   Keep the part blocked until an explicit, tested corner policy or other honest design contract
-   resolves that gap. No broad AI replanning call is needed to establish these facts.
-2. Fix the pin-shell clean/open supply controls for multi-rail devices as a separate engineering
-   task if that scope is added. Keep the structural refusal until then; a green gate must not be
-   obtained by treating an unpowered rail as a valid test of a powered controller.
-3. More families need an implementation, cited inputs and independent tests each: regulators (LDO),
-   references, comparators, logic, and a single or quad op amp (the probes fix the eight-pin dual).
-4. Expose `--engine` and `--family` in the window; then the separate terminal-app refactor
-   (Setup.cmd/bootstrap in place of the Qt window and Install.exe).
-5. Local branches `engine/*` and `pin-model` are merged and can go with the owner's OK; keep
-   `wip/m4b2` parked and unmerged; leave `spice-maker-next` and `spice-maker-bob-next` alone.
+## Frozen qualification and wrong-candidate acceptance
 
-## Rules that stay in force
+`authoring/qualification.py` freezes the buck plan from source requirements and spec before the
+candidate is authored. The plan contains source/spec/implementation hashes, conditions, independent
+benches and reference bands. Candidate parameters cannot redefine its tests. Every execution stages
+immutable candidate bytes and retains its own deck/raw/log receipts. Missing checks stay UNKNOWN.
+The ordinary harness report and supplemental qualification report have different, explicit scopes.
 
-- No PASS without an observed LTspice result; never relax a limit; keys are never printed or logged
-  (environment variable names only); the app writes only inside its folder; LTspice is never searched
-  for; no telemetry; the TI PSpice model stays local; vendor PDFs are never committed.
-- Push to `main`. Report to the owner in plain words (no plan labels, no check names).
-- Run tests with the repo venv: `.venv/Scripts/python.exe -m pytest -q -m "not ltspice and not network"`
-  (this is the automated check; add `QT_QPA_PLATFORM=offscreen` for the window tests). Frozen specs under
-  `models/` are git-ignored, so tests that need them skip on a clean checkout.
-- A tool that pins the environment does it in its entry point, never at import (`tests/conftest.py`
-  refuses a run that breaks this).
-- Shell tips on this machine: Bash heredocs mangle backslashes and choke on apostrophes in big blocks;
-  put code in small files; there is no `pkill` (use PowerShell `Stop-Process`).
+Real LTspice acceptance is retained in the general checkout at
+`runs/qualification-acceptance/acceptance.json`, with immutable receipts under `clean/` and `wrong/`:
 
-## The TPS54331 `--plan-tests` run
+| Candidate | Nominal and mandatory checklist result | Elapsed with controls |
+| --- | --- | --- |
+| Clean TPS54332DDA | 4 PASS / 0 FAIL / 12 UNKNOWN; family not qualified | 87.497255 s |
+| Same candidate with VREF set to 0.72 V | 3 PASS / 1 FAIL / 12 UNKNOWN | 83.232343 s |
 
-Started 00:48:50, finished in 293.7 s (bind 284.2 s is the planning call, extract 6.7 s from the cache).
-Result: BLOCKED, `unsupported_family`, missing: cited input ILIM, cited input UVTH, independent test
-for reference voltage, independent test for current limit. 10 rows judged by probes, 102 declared not
-testable. The earlier attempt with planning ran past 11 minutes and was stopped; that is why planning
-is opt-in. Output: `C:/Users/basam/src/.smsnap/ex/tps54331_plan/`.
+The fixed plan hash is `548871ecfa2b5ef595b85294ed3fc0cefbc7366b9d4a78185e64a0ed1dbf8234`.
+The clean candidate hash is `d9b0b5e3d4729168933f1a834e49d4e25588dfb6239cf420047c00f999d913e2`;
+the changed candidate hash is `6ab382f439e8811c8560e7feb8cbdb1a669090338a92fe49b5a030020cf9a7cb`.
+Clean VREF measured 0.799932 V; the changed candidate measured 0.719933 V and failed the unchanged
+0.772–0.828-V band. The clean run's four synthetic fault controls were all rejected and each pair
+was discriminating. Synthetic controls are not counted as device passes.
+
+The default runs only four nominal simulations. An earlier observed default run took about 45 s;
+its summary receipt was not retained, so do not quote it as an archived timing record or a complete
+build time. This evidence exercises the shared simulator qualification code, not a live Bob provider
+or a final end-to-end publication. Source changes to the qualification implementation invalidate an
+old frozen plan; freeze a new plan for new runs while preserving these historical receipts.
+
+Publication provenance records the actual delivered library and symbol hashes plus pin order.
+A resumed repair must invalidate an old exact design association when library bytes change; a
+missing typed design is unavailable, not inferred from SPICE.
+Resumed buck/op-amp designs are reconstructed and rendered before retaining an exact association.
+Schema/type, design/library hashes, part, subcircuit and frozen spec must match; an edited payload
+cannot keep an exact claim merely because library bytes are unchanged. Invalid provenance supplies
+no exact design hash to qualification. Supplemental BLOCKED is publicly BLOCKED with its refusal
+reason; fixed FAIL stays FAIL, while fixed UNKNOWN downgrades an ordinary PASS.
+Publication preserves candidate bytes
+and refuses an ordinary harness report whose model hash or frozen spec digest does not match.
+Supplemental qualification receives that exact delivered library and its exact typed-design hash
+when available. Reusing an output directory archives old app-owned deliverables under
+`build/publication-history/`; a refused rerun cannot present them as current output. Corresponding
+regressions include `tests/pipeline/test_publication_provenance.py` and
+`tests/pipeline/test_qualification_publication.py`. These check identity and integration, not another
+live end-to-end acceptance or electrical verification.
+
+## TPS54331 remains blocked
+
+A new partial reviewed profile matches the exact TI SLVS839H PDF SHA-256
+`cf72dfd0ac69eec645b7b493de628dc1c3aa66f5f925a2ea9be6bb5c38260730`. It keeps source columns intact:
+VIN UVLO MAX 3.5 V with no typical value; EN TYP 1.25 V / MAX 1.35 V; current limit MIN 3.5 A /
+TYP 5.8 A with no maximum. Explicit quantity identities avoid false VREF/EN and ILIM/supply-current
+conflicts. Raw cited rows feed physically loaded VREF/current-limit fixtures; VIN ranges cannot be
+mistaken for singleton test points. Soft-start window checks remain enforced.
+
+TPS54331 has no accepted nominal UVTH policy. Bare part identity also does not select D versus DDA:
+pins 1–8 are common and the DDA package requires PowerPAD pin 9 tied to GND. The profile records the
+ambiguity, and its saved pin marker blocks publication even if later numerical tests pass. Required
+switching-frequency, soft-start and enable/UVLO coverage remains unfinished. Do not claim support.
+
+The fresh reviewed-profile receipt at `../tps54331-reviewed-takeover/replay-summary.json` is BLOCKED,
+5.034 s, zero provider calls with complete accounting and no library/symbol delivery. It predates the
+last singleton-VIN parser fix. The earlier replay using untouched historical requirements/bindings
+at `../tps54331-takeover/replay-summary.json` is also BLOCKED (6.685 s). Neither rewrites the historical
+`.smsnap/ex/tps54331_plan` extraction. Supplied frozen evidence always takes precedence.
+
+## Accounting and next work
+
+General API accounting counts inference transport attempts, including retries. Bob records Shell
+starts; after one starts, its internal provider-request count is null/incomplete with a reason.
+Zero author turns alone does not establish zero extraction or planning requests. The timing receipt
+separates read, extract, bind, gate, author, save and qualification work and records qualification time
+separately from ordinary author/harness work. Refusal is not mislabeled as agent authoring.
+
+1. Final lint/format and diff checks passed. Final hardened suites passed: general 2203 passed /
+   20 skipped / 190 deselected; Bob 1961 passed / 31 skipped / 187 deselected, with four pre-existing
+   `slow` marker warnings. Shared-core checks found 49 intact files per edition, all 49 identical.
+   Exact suite command/timing is in STATUS.
+   The default-route live simulator receipts above are complete, but are not evidence of live
+   provider behavior, universal coverage or a rebuilt installer.
+2. Complete the twelve mandatory buck qualification gaps with independent acceptance references and
+   discriminating controls. Preserve the existing TPS54332 FAIL/UNKNOWN evidence; four nominal passes
+   are not full-family qualification.
+3. Resolve TPS54331's UVTH policy and actual package before attempting support promotion. Complete
+   independent behavior coverage. Do not relabel a source maximum as a nominal value or alter old runs.
+4. Complete M6: confirm the selected package, symbol pin numbers and discrete terminal order
+   against cited evidence and the owner or an independent source before publication. Existing
+   pin-order hashes and the TPS54331 ambiguity guard are necessary narrower checks.
+5. Add further families/pinouts only with implementations, cited inputs and qualified independent
+   tests. Multi-rail pin-shell behavior and the terminal-app refactor remain separate scope.
+
+No PASS without real simulator evidence; never relax a limit or silently switch routes. Keep vendor
+PDFs and models local, never write to the LTspice installation/library, and never print credentials.
+Leave `wip/m4b2`, `spice-maker-next` and `spice-maker-bob-next` untouched. Work is on the two main
+checkouts; verify the latest commit/push state rather than assuming a previous handoff's tip.

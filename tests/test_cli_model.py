@@ -431,6 +431,8 @@ def test_the_direct_build_path_forwards_the_bob_team_id(
             "api",
             "--team-id",
             "team-x",
+            "--engine",
+            "legacy_ai",
             "--json",
         ]
     )
@@ -459,7 +461,13 @@ def test_the_engine_and_family_options_reach_the_request(
 
     cli.main(base)
     capsys.readouterr()
-    assert (calls[-1].engine, calls[-1].family) == ("legacy_ai", None)
+    assert (calls[-1].engine, calls[-1].family) == ("behavioral", None)
+    assert calls[-1].plan_tests is False
+
+    cli.main([*base, "--engine", "legacy_ai"])
+    capsys.readouterr()
+    assert calls[-1].engine == "legacy_ai"
+    assert calls[-1].plan_tests is False
 
     cli.main([*base, "--engine", "behavioral", "--family", "switching_regulator"])
     capsys.readouterr()
@@ -488,3 +496,34 @@ def test_a_bad_engine_is_refused_by_the_parser(tmp_path: Path, datasheet: Path, 
             ]
         )
     assert "invalid choice" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("engine", [None, "behavioral", "pin_only"])
+def test_spec_only_build_never_silently_falls_back_to_ai(tmp_path, monkeypatch, capsys, engine):
+    from boardmodeler.authoring import api_backend
+
+    def unexpected_provider(*args, **kwargs):
+        pytest.fail("A code-built route must not fall back to the historical AI build")
+
+    monkeypatch.setattr(api_backend, "build_api_backend", unexpected_provider)
+    args = [
+        "model",
+        "build",
+        "--part",
+        "TPS54320",
+        "--requirements",
+        str(tmp_path / "requirements.json"),
+        "--bindings",
+        str(tmp_path / "bindings.json"),
+        "--out",
+        str(tmp_path / "out"),
+        "--json",
+    ]
+    if engine is not None:
+        args += ["--engine", engine]
+    assert cli.main(args) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "BLOCKED"
+    assert "requires --datasheet" in result["detail"]
+    assert "explicit --engine legacy_ai" in result["detail"]
+    assert not (tmp_path / "out").exists()
