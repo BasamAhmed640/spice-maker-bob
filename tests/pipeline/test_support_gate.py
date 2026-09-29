@@ -26,19 +26,44 @@ def _neutral_requirements(tmp_path: Path, wording: str) -> Path:
     raw = json.loads(helpers.REQUIREMENTS.read_text(encoding="utf-8"))
     for index, row in enumerate(raw["requirements"]):
         row["statement"] = f"{wording} item {index}"
-        if not helpers.DATASHEET.is_file():
-            row["origin"] = "TEST_FIXTURE"
-            for evidence in row["evidence"]:
-                evidence["extraction"] = "synthetic_fixture"
+        row["origin"] = "TEST_FIXTURE"
+        for evidence in row["evidence"]:
+            evidence["extraction"] = "synthetic_fixture"
     path = tmp_path / "neutral-requirements.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
     return path
 
 
-def _run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, wording: str, **overrides: object):
+NEUTRAL_HEAD = "TEST_FIXTURE: a first page that says nothing about the part"
+
+
+def _datasheet(tmp_path: Path, head: str) -> Path:
+    """A stand-in datasheet whose first page says only ``head``, with the fixture page count."""
+    from reportlab.pdfgen import canvas
+
+    pages = json.loads(helpers.REQUIREMENTS.read_text(encoding="utf-8"))["document"]["page_count"]
+    path = tmp_path / "gate_datasheet.pdf"
+    sheet = canvas.Canvas(str(path))
+    for page in range(pages):
+        sheet.drawString(30, 810, head if page == 0 else f"page {page + 1}")
+        sheet.showPage()
+    sheet.save()
+    return path
+
+
+def _run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    wording: str,
+    head: str = NEUTRAL_HEAD,
+    **overrides: object,
+):
     backend = helpers.use_backend(monkeypatch, ScriptedBackend(helpers.template_script()))
     request = helpers.make_request(
-        tmp_path, requirements_json=_neutral_requirements(tmp_path, wording), **overrides
+        tmp_path,
+        requirements_json=_neutral_requirements(tmp_path, wording),
+        datasheet=_datasheet(tmp_path, head),
+        **overrides,
     )
     result = make_model(request)
     return result, backend
@@ -62,7 +87,9 @@ def test_an_unclassified_part_is_refused_on_every_engine_before_any_agent_turn(
 def test_the_behavioral_route_refuses_a_part_with_no_implementation_and_never_falls_back(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    result, backend = _run(tmp_path, monkeypatch, "Operational amplifier", engine="behavioral")
+    result, backend = _run(
+        tmp_path, monkeypatch, "Input offset voltage and slew rate", engine="behavioral"
+    )
     assert result.status == "BLOCKED"
     assert result.detail.startswith("unsupported_part: unsupported_family:")
     assert backend.turns == 0
@@ -74,7 +101,9 @@ def test_the_behavioral_route_refuses_a_part_with_no_implementation_and_never_fa
 def test_pin_only_is_a_separate_limited_route_that_never_becomes_the_agent_route(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    result, backend = _run(tmp_path, monkeypatch, "Operational amplifier", engine="pin_only")
+    result, backend = _run(
+        tmp_path, monkeypatch, "Input offset voltage and slew rate", engine="pin_only"
+    )
     assert result.status == "BLOCKED"
     assert result.detail.startswith("pin_only_unavailable:")
     assert backend.turns == 0
@@ -143,3 +172,41 @@ def test_the_behavioral_route_builds_a_supported_part_with_no_agent_and_no_netwo
     design = json.loads((tmp_path / "out" / engine.DESIGN_RECORD_NAME).read_text(encoding="utf-8"))
     assert design["association"] == "exact"
     assert result.counts["FAIL"] == 4, "the known FAIL rows stay visible"
+
+
+def test_the_first_page_names_the_family_when_the_rows_and_the_title_do_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, backend = _run(
+        tmp_path,
+        monkeypatch,
+        "A voltage",
+        head="LM358 Industry-Standard Dual Operational Amplifiers",
+        engine="behavioral",
+    )
+    assert result.status == "BLOCKED"
+    assert result.detail.startswith("unsupported_part: unsupported_family:")
+    assert backend.turns == 0
+    record = json.loads((tmp_path / "out" / engine.SUPPORT_RECORD_NAME).read_text(encoding="utf-8"))
+    assert record["family"] == "amplifier_comparator"
+    assert "first page" in record["identified_from"]
+
+
+def test_a_family_named_by_the_operator_is_recorded_and_still_never_supported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, backend = _run(
+        tmp_path, monkeypatch, "A voltage", engine="behavioral", family="linear_regulator"
+    )
+    assert result.status == "BLOCKED"
+    assert result.detail.startswith("unsupported_part: unsupported_family:")
+    assert backend.turns == 0
+    record = json.loads((tmp_path / "out" / engine.SUPPORT_RECORD_NAME).read_text(encoding="utf-8"))
+    assert record["family"] == "linear_regulator"
+    assert record["identified_from"] == "declared by the operator"
+    assert record["state"] == "unsupported_family"
+
+
+def test_an_unknown_family_option_is_rejected_up_front(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="family must be one of"):
+        make_model(helpers.make_request(tmp_path, family="quantum_widget"))

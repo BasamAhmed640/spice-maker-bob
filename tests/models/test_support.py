@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from tests.models import test_peak_current_buck as peak_tests
+from tests.models.op_amp_spec import synthetic_dual_op_amp_spec
 
 from boardmodeler.authoring.spec import load_tps54320_spec
 from boardmodeler.models.support import (
@@ -15,7 +16,9 @@ from boardmodeler.models.support import (
     ROUTES,
     Implementation,
     decide_support,
+    family_ids,
     identify_family,
+    identify_family_scored,
 )
 
 BLOCKED_PARTS = [
@@ -244,3 +247,118 @@ def test_the_frozen_tps54332_spec_is_represented_and_independently_tested() -> N
     decision = decide_support("TPS54332DDA", title="TPS54332 3.5-A Step-Down Converter", spec=spec)
     assert decision.state == "supported", decision.missing
     assert decision.implementation == "peak_current_buck"
+
+
+# --------------------------------------------------------------------------- #
+# Reading what kind of part it is: number and title, first page, cited rows.
+
+
+@pytest.mark.parametrize(
+    ("part", "title", "head", "statements", "family", "source"),
+    [
+        ("LM358", "Dual Operational Amplifier", "", (), "amplifier_comparator", "title"),
+        (
+            "LM358",
+            "lm358_datasheet",
+            "LM358 Industry-Standard Dual Operational Amplifiers Features",
+            (),
+            "amplifier_comparator",
+            "first page",
+        ),
+        (
+            "LM358",
+            "lm358_datasheet",
+            "",
+            ("Input offset voltage magnitude", "Typical gain bandwidth product"),
+            "amplifier_comparator",
+            "cited rows",
+        ),
+        ("XYZ1", "3.5-A Step-Down Converter", "", (), "switching_regulator", "title"),
+        (
+            "XYZ1",
+            "xyz1_datasheet",
+            "Low dropout linear regulator; power-good output",
+            (),
+            "linear_regulator",
+            "first page",
+        ),
+    ],
+)
+def test_the_family_is_read_from_the_title_the_first_page_or_two_row_signals(
+    part: str, title: str, head: str, statements: tuple[str, ...], family: str, source: str
+) -> None:
+    found = identify_family_scored(part=part, title=title, head=head, statements=statements)
+    assert found is not None
+    assert found[0] == family
+    assert source in found[2]
+
+
+@pytest.mark.parametrize(
+    "statements",
+    [
+        (),
+        ("Input offset voltage magnitude",),  # one signal proves nothing
+        ("Use a 10 kohm resistor and a 1 uF capacitor with the inductor",),  # generic words
+        ("A voltage", "The device latches", "There is a timer"),
+    ],
+)
+def test_weak_or_generic_row_wording_identifies_nothing(statements: tuple[str, ...]) -> None:
+    assert identify_family_scored(part="XYZ1", title="xyz1", statements=statements) is None
+
+
+def test_the_title_outweighs_a_stray_word_on_the_first_page() -> None:
+    found = identify_family_scored(
+        part="XYZ1",
+        title="Step-Down Converter",
+        head="an optional watchdog and a power-good flag",
+    )
+    assert found is not None and found[0] == "switching_regulator"
+
+
+def test_the_op_amp_rows_are_a_supported_dual_op_amp_read_from_the_rows_alone() -> None:
+    spec = synthetic_dual_op_amp_spec()
+    decision = decide_support(spec.part, title="lm358_datasheet", spec=spec)
+    assert decision.state == "supported"
+    assert decision.implementation == "dual_op_amp"
+    assert decision.family == "amplifier_comparator"
+    assert decision.missing == ()
+    assert all(decision.allows(route) for route in ROUTES)
+
+
+def test_an_amplifier_with_no_matching_pinout_is_identified_but_not_supported() -> None:
+    spec = synthetic_dual_op_amp_spec()
+    single = dataclasses.replace(spec, pin_map=spec.pin_map[:5])
+    decision = decide_support(spec.part, title="lm358_datasheet", spec=single)
+    assert decision.state == "unsupported_family"
+    assert decision.family == "amplifier_comparator"
+    assert "cited rows" in decision.identified_from
+    assert decision.allows("legacy_ai") and not decision.allows("behavioral")
+
+
+def test_a_declared_family_names_an_unidentified_part_but_never_supports_it() -> None:
+    decision = decide_support("XYZ123", declared_family="linear_regulator")
+    assert decision.state == "unsupported_family"
+    assert decision.family == "linear_regulator"
+    assert "declared by the operator" in decision.identified_from
+    assert decision.allows("legacy_ai") and not decision.allows("behavioral")
+
+
+def test_a_declared_family_cannot_unblock_a_class() -> None:
+    decision = decide_support("STM32F407VGT6", declared_family="linear_regulator")
+    assert decision.state == "blocked_class"
+    assert not any(decision.allows(route) for route in ROUTES)
+
+
+def test_a_declared_family_that_disagrees_with_the_evidence_says_so() -> None:
+    decision = decide_support(
+        "LM358", title="Dual Operational Amplifier", declared_family="passive"
+    )
+    assert decision.family == "passive"
+    assert "operator" in decision.identified_from
+    assert "amplifier" in decision.identified_from
+
+
+def test_only_a_written_family_can_be_declared() -> None:
+    with pytest.raises(ValueError, match="family must be one of"):
+        decide_support("XYZ123", declared_family="quantum_widget")
+    assert set(family_ids()) == {family_id for family_id, _label, _phrases in ORDINARY_FAMILIES}

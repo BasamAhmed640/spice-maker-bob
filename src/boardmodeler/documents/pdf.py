@@ -100,6 +100,13 @@ def read_pdf(path: str | Path, *, max_pages: int | None = None) -> PdfDocument:
             raise exc from None
 
 
+def read_pdf_pdfium(path: str | Path, *, max_pages: int | None = None) -> PdfDocument:
+    """``path`` read with pdfium only: an independent second reading of the same file."""
+    if max_pages is not None and max_pages < 1:
+        raise ValueError(f"max_pages must be >= 1 or None, got {max_pages}")
+    return _read_with_pdfium(Path(path), max_pages)
+
+
 def _read_with_pypdf(source: Path, max_pages: int | None) -> PdfDocument:
     reader = PdfReader(str(source))
     page_count = len(reader.pages)

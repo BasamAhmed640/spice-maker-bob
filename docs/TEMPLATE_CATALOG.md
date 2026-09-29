@@ -34,6 +34,12 @@ Each family, before it can be called built, needs:
    family-specific checks in the table are the minimum checklist to design, not
    already passing checks.
 
+Registered behavioural implementations (`models/support.py`, D-055 and D-056): the peak-current
+buck (family 1) and the dual op amp (family 8), each with one demonstrated part (TPS54332, LM358).
+By the third criterion above neither family is built until a second compatible part has evidence;
+a part is still only supported when its own rows cite every essential input and independently
+test every essential behavior.
+
 The general pin model precedes family templates and is a foundation for ordinary components and never a substitute for a component's essential behavior. It checks
 absolute maximum ratings, required connections, floating inputs, back-power through
 I/O, and overloaded outputs using `PinDefinition` records and existing primitives.

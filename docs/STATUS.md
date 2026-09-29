@@ -1,3 +1,53 @@
+## 2026-09-28 — engine step 3: a second family built by code, the pin shell merged, family read by points (D-056)
+
+The pin-shell work (viability gate, pin shell, in-model alarms, datasheet digest) is merged into the
+engine branch, and the behavioural route now builds a second, materially different family from cited
+rows: a dual op amp, the LM358 (analog signal chain, against the buck converter of step 1). Its design
+is typed and read from cited rows only, rendered on the pin shell, and judged by the op-amp probes in
+real LTspice; no agent, no provider call, no network. `--engine` and `--family` are on the command
+line. Support is still not a pass, and this does not establish universal coverage: two families, one
+part each, are built by code.
+
+| Check | Result |
+| --- | --- |
+| Real build, LM358, `engine="behavioral"`, real LTspice 26, agent backend construction and socket connect made to fail the test | passed in 34.1 s with zero author turns: 32 measured rows PASS, 0 FAIL, 10 rows outside the tested scope with a reason (the general edition split its 31.5 s as read 6.5 s, extract 7.4 s with the two-reader citation check, bind 0.02 s, gate 0.01 s, author 17.5 s all LTspice judging, save 0.06 s). The earlier agent-authored LM358 runs took 216 to 356 s |
+| Real build, TPS54332 buck, same route | 139.9 s in the test (122.1 s at step 2); 12 PASS, 4 FAIL, 41 UNKNOWN, 49 NOT_APPLICABLE as before. The second PDF reading costs 0.5 s, so the spread is not that; not yet explained |
+| Viability gate on the rendered LM358 | no failing check, 12 PASS, 1 UNKNOWN (the short-circuit limit: the rows carry no such number), 17.4 s |
+| New tests | `tests/models/test_op_amp.py` 13 (12 offline on a built-in stand-in spec: cited inputs, purity, exact provenance, tamper refusals, withdrawal of the claim, unverified rows, pinout, inconsistent values; and the viability gate in real LTspice), `tests/pipeline/test_behavioral_op_amp.py` 1 (the real build above, local frozen rows and PDF), and more cases in the support, gate, command-line and citation tests |
+| Fast suite, Bob | 1550 passed, 49 failed, 20 skipped, 277 deselected; the 49 are the same test ids as the untouched baseline (internet access is off in the local config) |
+| Hygiene | `ruff check .` passes; `ruff format --check` clean on every changed file (nine other files were already unformatted on main); shared core 46 files intact and identical across editions |
+
+What changed, in order of importance.
+
+- `models/op_amp.py` (new): `OpAmpDesign`, `design_from_spec`, `render_library`, `OpAmpSeed`,
+  registered as `dual_op_amp`. Essential inputs are cited typical values of probe-bound rows; the output
+  current limit and resistance are labelled defaults. The claim is withdrawn by removing one typical
+  value or one bound row (tests).
+- The behavioural route seeds from the implementation the support decision named
+  (`Implementation.seed`, `template`, `heading`); the provenance file, model-card heading and timing
+  route name follow it. The agent route is unchanged.
+- The family is read by points (part number and title, then the head of the first page, then two or
+  more distinct row signals) instead of by the first phrase found, after a scan of the frozen specs on
+  disk showed a PWM controller labelled passive and a buck labelled supervisor, and the LM358 rows
+  unclassified under a file-name title. `--family` names it when the evidence does not.
+- Citation verification accepts a page when either of two PDF readers contains the excerpt (D-056).
+  Without it every frozen LM358 citation failed to verify and the gate correctly refused the part.
+
+Not done, stated plainly:
+
+- One part per family. A second buck or op amp, and a third family, need extracted rows for a
+  datasheet other than the two TI ones on this machine; that extraction is an AI step and was not run.
+- `pin_only` still refuses (`pin_only_unavailable`); the open-drain, per-rail and digit-first-name
+  fixes to the shell and the judge that the universality battery needed are still open.
+- The op-amp probes fix the eight-pin dual pinout, so a single or quad op amp is outside `behavioral`.
+- The window does not expose `--engine` or `--family`; provider calls are not counted in the timing
+  record; no live provider call was made.
+
+- The LM358 rows for the real build are the general edition frozen ones (git-ignored, copied to
+  `models/L1-lm358/spec` here, no PDF); the offline tests use a built-in stand-in spec. One Bob test
+  fixture (a zero-coverage spec in `tests/pipeline/test_make_model.py`) now names its family with the
+  new option, since nothing in the fixture does and the gate refuses a part nothing identifies.
+
 ## 2026-09-28 — engine step 2: the support gate, blocked classes on every route (D-055)
 
 Second step of the engine review the owner named the north star. One decision now sits in

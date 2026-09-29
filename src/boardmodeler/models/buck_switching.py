@@ -167,6 +167,9 @@ class BuckDesign:
     def pins(self) -> PinMatch:
         return match_pins(self.ports)
 
+    def record(self, delivered: bytes | None) -> dict[str, Any]:
+        return design_record_payload(self, delivered)
+
     def payload(self) -> dict[str, Any]:
         pins = self.pins
         return {

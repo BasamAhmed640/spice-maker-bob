@@ -339,6 +339,12 @@ class _Verifier:
         )
 
 
+#: Separates independent readings of one page inside a lookup result. Two PDF readers can
+#: space the same printed text differently ("VC M" against "V C M"), so a lookup may
+#: return both readings and an excerpt verifies when any single reading contains it.
+READING_BREAK = chr(12)
+
+
 def _excerpt_in(page_text: str, excerpt: str) -> bool:
     """Whether ``excerpt`` appears in ``page_text`` after citation normalization.
 
@@ -346,17 +352,22 @@ def _excerpt_in(page_text: str, excerpt: str) -> bool:
     the first :data:`EXCERPT_MAX_CHARS` characters are compared, typography and
     whitespace are folded, and both sides are additionally tried with printed
     line-break hyphenation joined, because PDF extraction keeps the line breaks.
-    An empty needle or an empty page never matches.
+    An empty needle or an empty page never matches. ``page_text`` may hold several
+    readings of the page separated by :data:`READING_BREAK`; the excerpt is compared with
+    each reading on its own, never across the break.
     """
     needle = normalize_for_citation(excerpt[:EXCERPT_MAX_CHARS])
     if not needle:
         return False
-    haystack = normalize_for_citation(page_text)
-    if not haystack:
-        return False
     variants = {needle, _HYPHEN_BREAK.sub("", needle)}
-    texts = {haystack, _HYPHEN_BREAK.sub("", haystack)}
-    return any(variant in text for variant in variants for text in texts)
+    for reading in page_text.split(READING_BREAK):
+        haystack = normalize_for_citation(reading)
+        if not haystack:
+            continue
+        texts = {haystack, _HYPHEN_BREAK.sub("", haystack)}
+        if any(variant in text for variant in variants for text in texts):
+            return True
+    return False
 
 
 def _label(excerpt: str) -> str:

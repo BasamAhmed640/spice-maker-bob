@@ -686,3 +686,21 @@ def test_review_outcome_is_frozen() -> None:
 
     with pytest.raises(FrozenInstanceError):
         outcome.coverage = 1.0  # type: ignore[misc]
+
+
+def test_an_excerpt_verifies_when_any_one_reading_of_the_page_contains_it() -> None:
+    from boardmodeler.requirements.review import READING_BREAK, _excerpt_in
+
+    spaced = "Input offset voltage VS = 5 V; V C M = 0 V; V O = 1.4 V"
+    tight = "Input offset voltage VS = 5 V; VC M = 0 V; VO = 1.4 V"
+    excerpt = "Input offset voltage VS = 5 V; VC M = 0 V; VO = 1.4 V"
+    assert not _excerpt_in(spaced, excerpt)
+    assert _excerpt_in(spaced + READING_BREAK + tight, excerpt)
+    assert _excerpt_in(tight + READING_BREAK + spaced, excerpt)
+
+
+def test_an_excerpt_is_never_matched_across_the_break_between_two_readings() -> None:
+    from boardmodeler.requirements.review import READING_BREAK, _excerpt_in
+
+    assert not _excerpt_in("alpha beta" + READING_BREAK + "gamma delta", "beta gamma")
+    assert not _excerpt_in("", "beta") and not _excerpt_in(READING_BREAK, "beta")

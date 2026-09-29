@@ -236,6 +236,22 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="local structural checks only; no simulation test planning",
     )
+    model_build.add_argument(
+        "--engine",
+        choices=("legacy_ai", "behavioral", "pin_only"),
+        default="legacy_ai",
+        help="which route builds the model: legacy_ai (an agent authors it; the default), "
+        "behavioral (built by code from the cited rows, no AI, only for a part marked "
+        "supported) or pin_only (reserved; refuses until a confirmed pin table exists). "
+        "No route falls back to another",
+    )
+    model_build.add_argument(
+        "--family",
+        default=None,
+        help="what kind of part this is, when neither the number, the datasheet title, its "
+        "first page nor the cited rows say; it never unblocks a refused class or makes a "
+        "part supported (see docs/DECISIONS.md D-055 for the accepted names)",
+    )
     model_build.add_argument("--json", action="store_true")
     model_build.add_argument(
         "--strict", action="store_true", help="exit 1 when the outcome is not PASS"
@@ -1078,6 +1094,8 @@ def _cmd_model_build_from_datasheet(args: argparse.Namespace, *, subckt: str, em
         reinforce=False if args.no_reinforce else None,
         requirements_json=args.requirements,
         bindings_json=args.bindings,
+        engine=args.engine,
+        family=args.family,
     )
     quiet = args.json
 
@@ -1086,7 +1104,21 @@ def _cmd_model_build_from_datasheet(args: argparse.Namespace, *, subckt: str, em
             counts = f" {event.counts}" if getattr(event, "counts", None) else ""
             print(f"  {event.stage:8} {event.status:8} {event.detail}{counts}"[:160], flush=True)
 
-    result = make_model(request, progress=on_stage)
+    try:
+        result = make_model(request, progress=on_stage)
+    except ValueError as exc:  # a request the pipeline refuses up front, e.g. a bad option pair
+        return emit(
+            {
+                "tool": "boardmodeler",
+                "command": "model build",
+                "status": "BLOCKED",
+                "detail": str(exc),
+                "history": [],
+                "probes": [],
+                "files": [],
+            },
+            2,
+        )
     payload = json.loads(result.to_json())
     payload.update({"tool": "boardmodeler", "command": "model build"})
     payload["rows"] = [

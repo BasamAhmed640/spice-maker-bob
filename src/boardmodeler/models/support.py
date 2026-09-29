@@ -19,15 +19,22 @@ This module decides; it builds nothing and judges nothing.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from boardmodeler.authoring.part_class import classify
 from boardmodeler.authoring.spec import SpecSet
-from boardmodeler.models.buck_switching import BuckDesign, TemplateSeedError, design_from_spec
+from boardmodeler.models import op_amp
+from boardmodeler.models.buck_switching import (
+    BuckDesign,
+    TemplateSeedError,
+    design_from_spec,
+    seed_from_spec,
+)
 
 __all__ = [
+    "FAMILY_SIGNALS",
     "IMPLEMENTATIONS",
     "ORDINARY_FAMILIES",
     "ROUTES",
@@ -37,7 +44,9 @@ __all__ = [
     "State",
     "SupportDecision",
     "decide_support",
+    "family_ids",
     "identify_family",
+    "identify_family_scored",
 ]
 
 Route = Literal["behavioral", "pin_only", "legacy_ai"]
@@ -252,6 +261,118 @@ ORDINARY_FAMILIES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 )
 
 
+#: Phrases of the electrical-characteristics rows that mostly one kind of part has. They are
+#: read from the cited row statements only, and never on their own name a device: a family
+#: is read from rows only when two distinct signals of it appear and no other family has as
+#: many. Generic words (resistor, capacitor, timer, latch) are deliberately not signals.
+FAMILY_SIGNALS: dict[str, tuple[str, ...]] = {
+    "switching_regulator": (
+        "switching frequency",
+        "oscillator frequency",
+        "high-side",
+        "current limit",
+        "soft-start",
+        "soft start",
+        "minimum on-time",
+        "maximum duty",
+        "peak current",
+        "feedback voltage",
+        "error amplifier",
+        "transconductance",
+    ),
+    "linear_regulator": (
+        "dropout voltage",
+        "line regulation",
+        "load regulation",
+        "output noise",
+        "power supply rejection",
+        "psrr",
+    ),
+    "charge_pump_pmic": (
+        "voltage conversion efficiency",
+        "power efficiency",
+        "output source resistance",
+        "flying capacitor",
+        "output resistance",
+    ),
+    "supervisor": (
+        "reset threshold",
+        "reset timeout",
+        "reset delay",
+        "threshold voltage",
+        "watchdog timeout",
+        "power-good threshold",
+    ),
+    "reference_monitor": (
+        "reference voltage",
+        "cathode current",
+        "reference input current",
+        "temperature coefficient",
+        "initial accuracy",
+    ),
+    "amplifier_comparator": (
+        "input offset voltage",
+        "input bias current",
+        "input offset current",
+        "gain bandwidth",
+        "slew rate",
+        "common-mode rejection",
+        "open-loop gain",
+        "large-signal",
+        "unity-gain",
+        "input common-mode",
+        "output voltage swing",
+    ),
+    "data_converter": (
+        "integral nonlinearity",
+        "differential nonlinearity",
+        "signal-to-noise",
+        "effective number of bits",
+        "sampling rate",
+        "conversion time",
+    ),
+    "analog_routing": ("charge injection", "off isolation", "crosstalk", "on-resistance flatness"),
+    "clock_timing": ("output frequency", "frequency stability", "jitter", "phase noise"),
+    "digital_glue": (
+        "propagation delay",
+        "high-level output voltage",
+        "low-level output voltage",
+        "high-level input voltage",
+        "low-level input voltage",
+        "input capacitance",
+    ),
+    "memory_id": ("write cycle time", "endurance", "data retention", "page write"),
+    "wired_interface": (
+        "differential output voltage",
+        "receiver input threshold",
+        "driver output",
+        "dominant",
+        "recessive",
+    ),
+    "isolation": (
+        "isolation voltage",
+        "common-mode transient immunity",
+        "creepage",
+        "working voltage",
+    ),
+    "load_driver": ("gate drive", "peak output current", "dead time", "bootstrap"),
+    "power_path": ("turn-on delay", "reverse leakage", "thermal shutdown", "fault flag"),
+    "protection": ("clamping voltage", "breakdown voltage", "standoff voltage", "peak pulse"),
+    "discrete_semiconductor": (
+        "drain-source",
+        "gate threshold",
+        "forward voltage",
+        "reverse recovery",
+        "collector-emitter",
+    ),
+}
+
+
+def family_ids() -> tuple[str, ...]:
+    """The ids an operator may declare."""
+    return tuple(family_id for family_id, _label, _phrases in ORDINARY_FAMILIES)
+
+
 @dataclass(frozen=True)
 class RouteVerdict:
     """Whether one generation route may run for a part, and the sentence that says why."""
@@ -271,6 +392,7 @@ class SupportDecision:
     reason: str
     missing: tuple[str, ...]
     routes: Mapping[Route, RouteVerdict] = field(default_factory=dict)
+    identified_from: str = ""
 
     @property
     def supported(self) -> bool:
@@ -324,6 +446,45 @@ def identify_family(text: str) -> tuple[str, str] | None:
     return None
 
 
+def _hits(text: str, phrases: Sequence[str]) -> int:
+    return sum(1 for phrase in phrases if _mentions(text, phrase))
+
+
+def identify_family_scored(
+    *, part: str = "", title: str = "", head: str = "", statements: Sequence[str] = ()
+) -> tuple[str, str, str] | None:
+    """The ordinary family the evidence names, as (id, label, where it was read), else None.
+
+    Sources, strongest first: the part number and datasheet title (6 points per phrase), the
+    head of the datasheet first page (2 points per phrase, at most 4) and the family signals
+    in the cited rows (1 point each, at most 4, and only when at least two distinct signals
+    of that family appear, since a row can mention anything). So a title always outweighs
+    what a features list happens to mention. The family with the most points wins; a tie
+    goes to the earlier family in the table. Below 2 points nothing is identified.
+    """
+    named = " ".join(f"{part} {title}".split()).casefold()
+    front = " ".join(head.split()).casefold()
+    rows = " ".join(" ".join(statements).split()).casefold()
+    best: tuple[int, int, str, str, str] | None = None
+    for order, (family_id, label, phrases) in enumerate(ORDINARY_FAMILIES):
+        by_name, by_front = _hits(named, phrases), _hits(front, phrases)
+        by_rows = _hits(rows, FAMILY_SIGNALS.get(family_id, ()))
+        points = 6 * by_name + 2 * min(by_front, 2) + (min(by_rows, 4) if by_rows >= 2 else 0)
+        if points < 2:
+            continue
+        if by_name:
+            where = "the part number or datasheet title"
+        elif by_front:
+            where = "the first page of the datasheet"
+        else:
+            where = "the cited rows"
+        if best is None or (points, -order) > (best[0], best[1]):
+            best = (points, -order, family_id, label, where)
+    if best is None:
+        return None
+    return best[2], best[3], best[4]
+
+
 @dataclass(frozen=True)
 class Implementation:
     """A behavioural implementation and the three questions that make it a support claim.
@@ -340,6 +501,13 @@ class Implementation:
     matches: Callable[[SpecSet, Collection[str]], object | None]
     uncited: Callable[[object], tuple[str, ...]]
     untested: Callable[[SpecSet], tuple[str, ...]]
+    #: Builds the starting candidate the behavioural route judges: an object with write(path),
+    #: payload() and design (whose record(delivered_bytes) ties it to the delivered file).
+    #: Raises ValueError for a spec it cannot render faithfully.
+    seed: Callable[[SpecSet, Collection[str]], Any] | None = None
+    #: Provenance names: the file and route label, and the heading on the model card.
+    template: str = ""
+    heading: str = ""
 
 
 # Inputs without which the first-order behaviour of the buck would be a template default.
@@ -376,7 +544,27 @@ def _bound_gaps(spec: SpecSet, behaviours: tuple[tuple[str, str], ...]) -> tuple
     )
 
 
-# The behavioural implementations registered so far. One family, deliberately.
+def _match_op_amp(spec: SpecSet, unverified: Collection[str]) -> object | None:
+    try:
+        return op_amp.design_from_spec(spec, unverified=unverified)
+    except op_amp.OpAmpDesignError:
+        return None
+
+
+def _op_amp_uncited(design: object) -> tuple[str, ...]:
+    assert isinstance(design, op_amp.OpAmpDesign)
+    origin = {item.name: item.origin for item in design.parameters}
+    return tuple(name for name in op_amp.ESSENTIAL_INPUTS if origin[name] == "template_default")
+
+
+def _op_amp_untested(spec: SpecSet) -> tuple[str, ...]:
+    bound = {row.probe for row in spec.characteristics if row.probe}
+    return tuple(
+        label for label, probes in op_amp.BEHAVIOURS if not all(probe in bound for probe in probes)
+    )
+
+
+# The behavioural implementations registered so far, one per family that has independent tests.
 IMPLEMENTATIONS: tuple[Implementation, ...] = (
     Implementation(
         name="peak_current_buck",
@@ -385,6 +573,20 @@ IMPLEMENTATIONS: tuple[Implementation, ...] = (
         matches=_match_buck,
         uncited=_buck_uncited,
         untested=lambda spec: _bound_gaps(spec, _BUCK_BEHAVIOURS),
+        seed=lambda spec, unverified: seed_from_spec(spec, unverified=unverified),
+        template="buck_template",
+        heading="Buck template",
+    ),
+    Implementation(
+        name="dual_op_amp",
+        family="amplifier_comparator",
+        label="dual op amp",
+        matches=_match_op_amp,
+        uncited=_op_amp_uncited,
+        untested=_op_amp_untested,
+        seed=lambda spec, unverified: op_amp.seed_from_spec(spec, unverified=unverified),
+        template="op_amp_template",
+        heading="Op amp template",
     ),
 )
 
@@ -393,9 +595,11 @@ def decide_support(
     part: str,
     *,
     title: str = "",
+    head: str = "",
     spec: SpecSet | None = None,
     unverified: Collection[str] = (),
     registry: tuple[Implementation, ...] = IMPLEMENTATIONS,
+    declared_family: str | None = None,
 ) -> SupportDecision:
     """Decide what may be claimed for a part and which routes may run.
 
@@ -404,6 +608,8 @@ def decide_support(
     behaviours have independent bound tests. A part nothing identifies is unclassified and
     is refused on every route; a part identified as an ordinary family without an
     implementation is unsupported_family, open only to the explicit limited routes.
+    The operator may declare the family (declared_family) when the evidence names none; that
+    can never unblock a class, and it never makes a part supported.
     """
     blocked = classify(part, text=title)
     if not blocked.supported:
@@ -411,6 +617,8 @@ def decide_support(
         return SupportDecision(
             part, state, blocked.kind, None, blocked.detail, (), _routes(state, blocked.detail)
         )
+    if declared_family is not None and declared_family not in family_ids():
+        raise ValueError(f"family must be one of {family_ids()}, got {declared_family!r}")
     if spec is not None:
         for impl in registry:
             design = impl.matches(spec, unverified)
@@ -432,24 +640,35 @@ def decide_support(
                 )
                 state = "supported"
             return SupportDecision(
-                part, state, impl.family, impl.name, reason, missing, _routes(state, reason)
+                part,
+                state,
+                impl.family,
+                impl.name,
+                reason,
+                missing,
+                _routes(state, reason),
+                "the cited rows",
             )
-    corpus = f"{part} {title}"
-    if spec is not None:
-        # a metadata title is often missing or meaningless ("untitled"), so the first cited
-        # rows are read too; they can only identify an ordinary family, never unblock a class
-        corpus += " " + " ".join(row.statement for row in spec.characteristics[:40])
-    family = identify_family(corpus)
-    if family is None:
+    statements = () if spec is None else tuple(row.statement for row in spec.characteristics[:60])
+    found = identify_family_scored(part=part, title=title, head=head, statements=statements)
+    if declared_family is not None:
+        family_id = declared_family
+        label = next(text for fid, text, _ in ORDINARY_FAMILIES if fid == declared_family)
+        where = "declared by the operator"
+        if found is not None and found[0] != declared_family:
+            where += f" (the evidence reads as {found[1]})"
+    elif found is not None:
+        family_id, label, where = found
+    else:
         reason = (
-            "nothing identifies the part as an ordinary component family (its number and "
-            "datasheet title match no written family) and no behavioural implementation matches"
+            "nothing identifies the part as an ordinary component family: its number, "
+            "datasheet title and first page name none, and no behavioural implementation "
+            "matches; say what it is with the family option (" + ", ".join(family_ids()) + ")"
         )
         state = "unclassified"
         return SupportDecision(
             part, state, None, None, reason, ("a family",), _routes(state, reason)
         )
-    family_id, label = family
     reason = f"the part reads as a {label}, and no behavioural implementation is registered for it"
     state = "unsupported_family"
     return SupportDecision(
@@ -460,4 +679,5 @@ def decide_support(
         reason,
         ("a behavioural implementation",),
         _routes(state, reason),
+        where,
     )
