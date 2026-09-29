@@ -633,3 +633,41 @@ rows) read as unclassified and a scan of the frozen specs on disk labelled a PWM
 Limits: one part per family is demonstrated, because the only extracted specs on this machine are
 TI's TPS54332 and LM358. The op-amp probes fix the eight-pin dual pinout, so a single or quad op amp
 stays outside `behavioral` until the probes take their ports from the pin roles.
+
+## D-057 — Pin-only mode, open-drain pins in the gate, a wider block list, and a coverage record (2026-09-29)
+
+1. `--engine pin_only` is a real route, requested by name and never chosen for the caller.
+   `models/pin_only.py` turns the extracted pin table into a model on the pin shell: kinds come from
+   the pin directions (power to supply, ground to ground, an exposed-pad name to pad); one rail and
+   one ground (a table with two supply domains is refused as `pin_only_multiple_rails`); the rail is
+   the supply pin of the named domain or one named like VIN/VCC/VDD; a power pin named like an
+   output (VOUT, SW, PH) is an inert output; a required exposed pad or second ground gets the
+   missing-connection alarm. It models no function: outputs stay high impedance until an instance
+   parameter commands them and no datasheet row is judged, so the status is UNKNOWN, never PASS, every
+   row reads UNKNOWN or not applicable, and the model card carries the limits and the choices the pin
+   table did not settle. The pin table is the one thing it cannot check, so the card says where it
+   came from and asks for it to be confirmed against the datasheet pinout.
+2. The viability gate judges it (benches for current conservation, floating inputs, shorts, supply
+   draw, and each claimed alarm proven both ways). A gate failure withholds the model
+   (`pin_only_model_not_viable`) and no other route runs. It is refused, not replaced, without a
+   pin table, without a ground or supply pin, with two supply domains, or without LTspice.
+3. The gate now exercises open-drain pins. `GatePin.open_drain` pulls the pin low into a short to
+   the supply (and releases it into a short to ground), so its overload alarm can be proven. Before,
+   the only bench drove a commanded pin high into a short to ground, which an open-drain pin can
+   never do, so every part with a power-good or interrupt pin failed the gate on an alarm nothing could
+   trip. A test proves the alarm both ways.
+4. The block list gained the families a scan of 61 typed part numbers found unrecognised (they were
+   refused as unidentified, not blocked): Xilinx XC9500 CPLDs, Lattice ECP/ECP2/ECP3/ispMACH,
+   Atmel/Microchip programmable logic, PolarFire, SmartFusion2, ProASIC3, Raspberry Pi SoCs, Rockchip,
+   Qualcomm, Samsung and NVIDIA application SoCs, Sitara AM6 and OMAP, Kinetis, S32K, i.MX RT, AT89,
+   AT91, AT32, XMEGA, and WCH, Nuvoton, STC, Puya, Padauk and 8051 microcontrollers, and hyphen
+   tolerant wording (field-programmable gate array, complex programmable logic device, programmable
+   logic device, microcomputer, system on a chip). Prefixes are written as narrowly as the lookalikes
+   need: MAX3232, TDA2030, CH340, AM26LS31, XC9504, BCM43438 and others stay allowed, with tests.
+5. `tools/coverage_matrix.py` writes `COVERAGE.md` and `coverage.json` (the support decision for 61
+   parts with its milliseconds, and the real behavioural builds with every stage timed) under
+   `docs/evidence/2026-09-28-engine-steps/`. Rows typed in the tool use a typed title and say so.
+
+Limits: pin-only models one rail and one ground and uses shell defaults for drive, quiescent current
+and leakage (labelled on the card). Two parts (TPS54332, LM358) are built by behaviour; every other
+family reaches at most the limited routes until its rows are extracted and an implementation exists.

@@ -111,6 +111,9 @@ class GatePin:
     alarms: tuple[str, ...] = ()
     #: for an "abs" claim: the voltage above the ground pin that is past the limit
     abs_fault_v: float | None = None
+    #: output pins: the pin only pulls down (its command is 1 = pull low, 0 = released), so the
+    #: short benches pull it low into a short to the supply and release it into one to ground
+    open_drain: bool = False
 
     def __post_init__(self) -> None:
         if self.kind not in PIN_KINDS:
@@ -446,8 +449,13 @@ def _plan_runs(spec: GateSpec, ports: Sequence[str]) -> list[_Run]:
                 patterns.append((f"hot_{port}", {**uniform("low"), port: "high"}))
                 patterns.append((f"cold_{port}", {**uniform("high"), port: "low"}))
         for short in ("gnd", "vcc"):
-            # a commanded pin sources into a short to ground and sinks from one to supply
-            params = {name: (1.0 if short == "gnd" else 0.0) for name in commanded}
+            # a commanded push-pull pin sources into a short to ground and sinks from one to
+            # supply; an open-drain pin can only sink, so it is pulled low into the short to supply
+            params = {}
+            for pin in spec.pins:
+                if pin.force and pin.port in ports:
+                    into_ground = short == "gnd"
+                    params[pin.force] = 1.0 if into_ground != pin.open_drain else 0.0
             for label, states in patterns:
                 runs.append(_Run(f"short_{short}_{label}", states, short, params))
     for pin in spec.pins:

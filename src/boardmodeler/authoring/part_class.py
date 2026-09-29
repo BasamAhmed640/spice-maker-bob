@@ -186,6 +186,101 @@ _FAMILIES: Final[tuple[_Family, ...]] = (
     ),
     _family("Intel Stratix, Arria and Agilex", _FPGA, prefixes=("stratix", "arria", "agilex")),
     _family("AMD Zynq", _UNSUPPORTED, prefixes=("zynq",)),
+    # Added after a coverage scan of typed part numbers found these unrecognised. XC95xx is
+    # written out number by number: Torex sells XC9504 and XC9104 step-down regulators, so no
+    # shorter prefix is safe. The same care applies to TDA, MAX32 and CH3xx, which are left out.
+    _family(
+        "Xilinx XC9500 CPLDs",
+        _FPGA,
+        prefixes=("xc9536", "xc9572", "xc95108", "xc95144", "xc95216", "xc95288"),
+    ),
+    _family(
+        "Lattice ECP, ECP2, ECP3, CrossLink and ispMACH",
+        _FPGA,
+        prefixes=("lfxp", "lfec", "lfe[23]", "lifcl", "lc4[0-9][0-9][0-9]", "ispmach"),
+    ),
+    _family(
+        "Atmel/Microchip programmable logic",
+        _FPGA,
+        prefixes=(
+            "atf15[0-9][0-9]",
+            "atf16v8",
+            "atf22v10",
+            "atf750",
+            "gal16v8",
+            "gal22v10",
+            "gal20v8",
+        ),
+    ),
+    _family(
+        "Microchip/Microsemi PolarFire, SmartFusion2, IGLOO2 and ProASIC3",
+        _FPGA,
+        prefixes=("mpf[0-9]", "m2s[0-9]", "m2gl[0-9]", "a3p[0-9]", "agl[0-9]"),
+    ),
+    _family(
+        "Broadcom Raspberry Pi SoCs", _UNSUPPORTED, prefixes=("bcm27[0-9][0-9]", "bcm28[0-9][0-9]")
+    ),
+    _family(
+        "Rockchip, Qualcomm, Samsung and NVIDIA application SoCs",
+        _UNSUPPORTED,
+        prefixes=(
+            "rk3[0-9][0-9][0-9]",
+            "rk35",
+            "exynos",
+            "snapdragon",
+            "tegra",
+            "msm8",
+            "sdm[0-9]",
+        ),
+    ),
+    _family(
+        "Texas Instruments Sitara AM6 and OMAP processors",
+        _UNSUPPORTED,
+        prefixes=("am6[2-9]", "omap"),
+    ),
+    _family(
+        "NXP Kinetis, S32K, i.MX RT and PowerPC MCUs",
+        _MICROCONTROLLER,
+        prefixes=(
+            "mk[0-9][0-9][a-z]",
+            "mkl[0-9]",
+            "mke[0-9]",
+            "mkv[0-9]",
+            "mkw[0-9]",
+            "mimx",
+            "s32k",
+            "mc9s",
+            "mc56f",
+            "mpc5[5-7]",
+        ),
+    ),
+    _family(
+        "Atmel AT89, AT91, AT32 and XMEGA",
+        _MICROCONTROLLER,
+        prefixes=("at89", "at91", "at32", "atxmega", "avr[0-9]"),
+    ),
+    _family(
+        "WCH, Nuvoton, STC, Puya, Padauk and Silicon Labs 8051 MCUs",
+        _MICROCONTROLLER,
+        prefixes=(
+            "ch32",
+            "ch55[0-9]",
+            "ch57[0-9]",
+            "ch58[0-9]",
+            "nuc[0-9]",
+            "n76e",
+            "ms51",
+            "stc8",
+            "stc12",
+            "stc15",
+            "stc89",
+            "py32",
+            "pms[0-9]",
+            "pfs[0-9]",
+            "c8051",
+            "efm8",
+        ),
+    ),
 )
 
 #: Digital-only words in the document's own text (its title/keywords). Each is a
@@ -200,6 +295,26 @@ _TEXT_RULES: Final[tuple[tuple[re.Pattern[str], PartKind, str], ...]] = (
         "a microcontroller",
     ),
     (re.compile(r"(?<![a-z0-9])fpgas?(?![a-z0-9])"), _FPGA, "an FPGA"),
+    (
+        re.compile("(^|[^a-z0-9])field[- ]programmable gate arrays?($|[^a-z0-9])"),
+        _FPGA,
+        "an FPGA",
+    ),
+    (
+        re.compile("(^|[^a-z0-9])complex programmable logic devices?($|[^a-z0-9])"),
+        _FPGA,
+        "a CPLD",
+    ),
+    (
+        re.compile("(^|[^a-z0-9])programmable logic devices?($|[^a-z0-9])"),
+        _FPGA,
+        "a programmable logic device",
+    ),
+    (
+        re.compile("(^|[^a-z0-9])micro-?computers?($|[^a-z0-9])"),
+        _MICROCONTROLLER,
+        "a microcomputer",
+    ),
     (re.compile(r"(?<![a-z0-9])cplds?(?![a-z0-9])"), _FPGA, "a CPLD"),
     (re.compile(r"(?<![a-z0-9])socs?(?![a-z0-9])"), _UNSUPPORTED, "a SoC"),
     (
@@ -208,7 +323,7 @@ _TEXT_RULES: Final[tuple[tuple[re.Pattern[str], PartKind, str], ...]] = (
         "a processor core",
     ),
     (
-        re.compile("(^|[^a-z0-9])system[- ]on[- ](chip|module)s?($|[^a-z0-9])"),
+        re.compile("(^|[^a-z0-9])systems?[- ]on[- ](a[- ])?(chip|module)s?($|[^a-z0-9])"),
         _UNSUPPORTED,
         "a system-on-chip or system-on-module",
     ),

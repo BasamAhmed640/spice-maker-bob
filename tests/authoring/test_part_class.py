@@ -198,3 +198,97 @@ def test_the_datasheets_own_title_refuses_an_unrecognised_part_number(
         "unsupported_part_class: microcontroller: the document text describes a microcontroller"
     )
     assert built == [] and backend.turns == 0
+
+
+# --------------------------------------------------------------------------- #
+# families added after the coverage scan of typed part numbers
+
+
+@pytest.mark.parametrize(
+    ("part", "kind"),
+    [
+        ("XC9572XL", "fpga"),
+        ("XC95144XL", "fpga"),
+        ("LFE3-35EA", "fpga"),
+        ("LC4064V", "fpga"),
+        ("ATF1502AS", "fpga"),
+        ("GAL22V10", "fpga"),
+        ("MPF300T", "fpga"),
+        ("M2S025", "fpga"),
+        ("BCM2711", "unsupported"),
+        ("BCM2837", "unsupported"),
+        ("RK3399", "unsupported"),
+        ("Exynos 4412", "unsupported"),
+        ("AM6254", "unsupported"),
+        ("MK64FN1M0VLL12", "microcontroller"),
+        ("MKL25Z128VLK4", "microcontroller"),
+        ("S32K144", "microcontroller"),
+        ("AT89C51", "microcontroller"),
+        ("ATxmega128A1", "microcontroller"),
+        ("CH32V003", "microcontroller"),
+        ("STC89C52", "microcontroller"),
+        ("NUC123", "microcontroller"),
+        ("C8051F320", "microcontroller"),
+    ],
+)
+def test_the_added_families_are_refused(part: str, kind: str) -> None:
+    classified = classify(part)
+
+    assert classified.kind == kind
+    assert classified.supported is False
+
+
+@pytest.mark.parametrize(
+    "part",
+    [
+        # near misses of the prefixes above that are ordinary analogue or interface parts
+        "MAX3232",
+        "MAX3232E",
+        "TDA2030",
+        "TDA7293",
+        "CH340G",
+        "AM26LS31",
+        "AM26C32",
+        "XC9504",
+        "XC9104",
+        "XC6206P332MR",
+        "BCM43438",
+        "MK1584",
+        "LC709203F",
+        "GAL",
+        "PMS",
+        "TPS62130",
+        "ATA5782",
+    ],
+)
+def test_lookalike_analogue_parts_stay_supported_after_the_additions(part: str) -> None:
+    assert classify(part).supported is True
+
+
+@pytest.mark.parametrize(
+    ("text", "kind"),
+    [
+        ("Field Programmable Gate Array Family Overview", "fpga"),
+        ("Field-programmable gate arrays", "fpga"),
+        ("Complex Programmable Logic Device datasheet", "fpga"),
+        ("GAL16V8 Programmable Logic Device", "fpga"),
+        ("One-chip Microcomputer", "microcontroller"),
+        ("A System on a Chip for cameras", "unsupported"),
+        ("Systems-on-chip overview", "unsupported"),
+    ],
+)
+def test_more_wordings_of_the_digital_classes_are_recognised(text: str, kind: str) -> None:
+    assert classify("XYZ-1", text=text).kind == kind
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Microprocessor Supervisory Circuit",
+        "Low-Dropout Regulator for powering processors",
+        "Programmable Gain Amplifier",
+        "Programmable Current Source",
+    ],
+)
+def test_analogue_titles_that_mention_processors_or_programming_stay_supported(text: str) -> None:
+    assert classify("XYZ-1", text=text).supported is True

@@ -1271,6 +1271,8 @@ def _checked(request: MakeModelRequest) -> MakeModelRequest:
 
         if request.family not in family_ids():
             raise ValueError(f"family must be one of {family_ids()}, got {request.family!r}")
+    if request.engine == "pin_only" and request.verification != "full":
+        raise ValueError("the pin_only route judges with LTspice and needs verification=full")
     if request.engine == "behavioral" and request.verification != "full":
         raise ValueError("the behavioral route judges with LTspice and needs verification=full")
     if request.max_iterations is not None and request.max_iterations < 1:
@@ -1473,6 +1475,7 @@ class _Run:
         self.template_seed: dict[str, Any] | None = None
         self.template_seed_bytes: bytes | None = None
         self.template_design: Any = None
+        self.pin_only_info: dict[str, Any] | None = None
         self.template_name = "buck_template"
         self.template_heading = "Buck template"
         self.support: Any = None
@@ -2067,14 +2070,108 @@ class _Run:
         self.report = seed_report
         self.log.emit("author", "ok", "code-built candidate judged; zero agent turns", {"turns": 0})
 
+    def _author_pin_only(self, cancel: threading.Event | None) -> None:
+        """Build the limited pin-only model from the pin table and judge it with the gate.
+
+        No function is modelled and no datasheet row is judged, so the result is never a
+        pass; a model the viability gate finds unusable is not delivered.
+        """
+        from boardmodeler.authoring.viability import GatePin, GateSpec, run_gate
+        from boardmodeler.models.pin_only import PinOnlyRefusal, build_pin_only
+        from boardmodeler.models.pin_shell import level_param
+        from boardmodeler.models.symbolism import symbol_text
+
+        try:
+            built = build_pin_only(self.request.part, self.request.subckt, self.pin_map)
+        except PinOnlyRefusal as exc:
+            raise _Stop("author", Status.BLOCKED.value, str(exc)) from exc
+        install = locate()
+        if install is None:
+            self.log.emit("author", "failed", LTSPICE_MISSING)
+            self.status, self.detail = Status.BLOCKED.value, LTSPICE_MISSING
+            return
+        prepare_workdir(spec=self.spec, subckt=self.request.subckt, workdir=self.workdir)
+        path = model_file(self.workdir, self.request.subckt)
+        path.write_text(built.library_text, encoding="utf-8", newline="\n")
+        asy = path.with_suffix(".asy")
+        asy.write_text(
+            symbol_text(self.request.subckt, list(built.ports), model_file=path.name),
+            encoding="utf-8",
+        )
+        claimed = built.claimed_alarms()
+        gate_spec = GateSpec(
+            self.request.part,
+            self.request.subckt,
+            tuple(
+                GatePin(
+                    pin.port,
+                    pin.kind,
+                    pin.number,
+                    alarms=claimed.get(pin.port, ()),
+                    open_drain=pin.topology == "open_drain",
+                    force=level_param(pin.port) if pin.kind in ("output", "io") else None,
+                )
+                for pin in built.pins
+            ),
+        )
+        self.log.emit("author", "running", "judging the pin-only model with the viability gate")
+        started = time.monotonic()
+        gate = run_gate(path, gate_spec, install.path, self.workdir / "pin-only-gate", asy_path=asy)
+        seconds = time.monotonic() - started
+        failing = [c for c in gate.checks if c.status in (Status.FAIL, Status.BLOCKED)]
+        unknown = [c for c in gate.checks if c.status is Status.UNKNOWN]
+        passed = len(gate.checks) - len(failing) - len(unknown)
+        self.pin_only_info = {
+            "schema_version": 1,
+            "record_kind": "pin_only_report",
+            "part": self.request.part,
+            "rail": built.rail,
+            "ground": built.ground,
+            "ports": list(built.ports),
+            "notes": list(built.notes),
+            "gate_status": gate.status.value,
+            "gate_benches": gate.runs,
+            "gate_seconds": round(seconds, 2),
+            "gate_checks": [check.as_dict() for check in gate.checks],
+            "verdict": "UNJUDGED",
+            "verdict_note": "Pins, supply draw, clamps and alarms only; no function and no "
+            "datasheet row was judged.",
+        }
+        self.report = HarnessReport(
+            part=self.request.part,
+            model_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            spec_digest=self.spec.digest(),
+            outcomes=(),
+        )
+        if failing:
+            names = ", ".join(check.id for check in failing)
+            detail = (
+                f"pin_only_model_not_viable: the viability gate failed {names}; nothing was "
+                "delivered and no other route was used instead"
+            )
+            path.unlink(missing_ok=True)
+            status = Status.BLOCKED.value
+        else:
+            status = Status.UNKNOWN.value
+            detail = (
+                "pin_only: pins, supply draw, clamps and alarms only; no function is modelled "
+                "and no datasheet row was judged, so this is never a pass. Viability gate: "
+                f"{passed} checks pass, {len(unknown)} unknown, 0 fail ({gate.runs} benches, "
+                f"{seconds:.0f} s). Confirm the pin table against the datasheet pinout."
+            )
+        self.outcome = BuildOutcome(
+            status=status,
+            iterations=0,
+            report=self.report,
+            history=("pin-only model built from the pin table and judged by the viability gate",),
+            detail=detail,
+        )
+        self.log.emit("author", "ok" if not failing else "failed", detail[:160], {"turns": 0})
+
     def author(self, cancel: threading.Event | None) -> None:
         if self.request.engine == "pin_only":
-            raise _Stop(
-                "author",
-                Status.BLOCKED.value,
-                "pin_only_unavailable: the pin-only builder needs a confirmed pin table and "
-                "is not built yet; nothing was authored and the agent route was not used instead",
-            )
+            self._author_pin_only(cancel)
+            return
         if self.request.engine == "behavioral":
             self._author_behavioral(cancel)
             return
@@ -2503,6 +2600,44 @@ class _Run:
                 self.card_path.read_text(encoding="utf-8") + "".join(provenance),
             )
             notes.append(f"saved {self.template_name.replace(chr(95), chr(32))} parameter origins")
+        if self.pin_only_info is not None and self.lib_path is not None:
+            info = self.pin_only_info
+            self._write_text(
+                self.out_dir / "pin-only-report.json",
+                json.dumps(info, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+            )
+            checks = info["gate_checks"]
+            summary = ", ".join(f"{c['id']} {c['status']}" for c in checks)
+            source = (
+                "the supplied extraction result"
+                if request.requirements_json is not None
+                else "the extraction from the datasheet"
+            )
+            section = [
+                "## Pin-only model (limited)",
+                "",
+                "This model was requested as pin-only. It has the package pins, the supply draw, "
+                "input clamps, finite output stages and wiring alarms, and it models no function: "
+                "outputs stay high impedance until an instance parameter commands them, and no "
+                "datasheet row was judged, so every row above is UNKNOWN or not applicable. It is "
+                "not a substitute for a behavioural model.",
+                "",
+                f"Pin table: taken from {source}; confirm it against the datasheet pinout. "
+                f"Rail: {info['rail']}. Ground: {info['ground']}.",
+                "",
+            ]
+            section += [f"- {note}" for note in info["notes"]]
+            section += [
+                "",
+                f"Viability gate ({info['gate_benches']} benches, {info['gate_seconds']} s): "
+                f"{summary}. Details are in `pin-only-report.json`.",
+                "",
+            ]
+            self._write_text(
+                self.card_path,
+                self.card_path.read_text(encoding="utf-8") + "\n" + "\n".join(section),
+            )
+            notes.append("saved the pin-only report")
         if request.verification == "sanity":
             from boardmodeler.authoring.sanity import write_card
 
@@ -2716,6 +2851,10 @@ _NETWORK_BACKENDS = frozenset({"", "api", "bob"})
 
 
 def _author_needs_network(request: MakeModelRequest) -> bool:
+    if request.engine in ("behavioral", "pin_only"):
+        # no agent author runs on these routes; extraction, when the rows are not supplied,
+        # refuses on its own with the reason if it needs the network and the switch is off
+        return False
     return str(request.backend_name or "").strip().lower() in _NETWORK_BACKENDS
 
 
@@ -2794,7 +2933,9 @@ def make_model(
         timing = ledger.payload(
             part=request.part,
             status=status,
-            route=f"{run.template_name}_seed"
+            route="pin_only_shell"
+            if run.pin_only_info is not None
+            else f"{run.template_name}_seed"
             if run.template_seed is not None
             else "agent_authoring",
             template_seed_judge_seconds=(

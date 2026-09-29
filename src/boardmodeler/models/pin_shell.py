@@ -151,12 +151,15 @@ def render_shell(
     core: str = "",
     drives: Mapping[str, str] | None = None,
     title: str = "",
+    rail: str | None = None,
 ) -> str:
     """The model text for ``pins`` (in that port order) with an optional function ``core``.
 
     ``drives`` maps an output/io port to an expression for the *level it should drive*
     (volts above the ground pin; for an open-drain pin, 0..1 where 1 pulls low). The shell
-    clamps the level to the rails and wraps it in the pin's finite-drive output stage. An
+    clamps the level to the rails and wraps it in the pin's finite-drive output stage. ``rail``
+    names the supply pin every clamp, default and output refers to (default: the first supply
+    pin), for a part whose first supply pin is not its main rail. An
     output with no entry stays high impedance.
     """
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", name):
@@ -168,7 +171,10 @@ def render_shell(
     ground = next((p.port for p in pins if p.kind == "ground"), None)
     if ground is None:
         raise ShellError("the pin table has no ground pin to reference the model to")
-    rail = next((p.port for p in pins if p.kind == "supply"), None)
+    supplies = [p.port for p in pins if p.kind == "supply"]
+    if rail is not None and rail not in supplies:
+        raise ShellError(f"rail {rail!r} is not a supply pin of this part")
+    rail = rail or next(iter(supplies), None)
     by_port = {p.port: p for p in pins}
     for port in drives:
         if port not in by_port or by_port[port].kind not in ("output", "io"):

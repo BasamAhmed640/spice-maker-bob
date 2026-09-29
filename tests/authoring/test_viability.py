@@ -258,3 +258,49 @@ def test_a_switching_part_gets_a_finer_solver_step_and_a_longer_bench() -> None:
     fine = _tran(Spec("X", "X", SPEC.pins, tstop=1.5e-3, tmax=20e-9)).card()
     assert plain.startswith(".tran ") and plain.count(" ") == 2  # tstep tstop only
     assert fine.split()[2:] == ["0.0015", "0", "2e-08"]
+
+
+# --------------------------------------------------------------------------- #
+# an open-drain output can only sink, so its overload alarm is proven by pulling it low into a
+# short to the supply; the push-pull bench (drive high into a short to ground) never trips it
+
+
+@pytest.mark.ltspice
+@pytest.mark.parametrize("declared_open_drain", [True, False])
+def test_an_open_drain_overload_alarm_is_proven_only_when_the_pin_is_pulled_low_into_a_short(
+    ltspice_exe: Path, tmp_path: Path, declared_open_drain: bool
+) -> None:
+    from boardmodeler.models.pin_shell import ShellPin, level_param, render_shell
+
+    pins = (
+        ShellPin("VDD", "supply", "1", iq=1e-6),
+        ShellPin("GND", "ground", "2"),
+        ShellPin("IN", "input", "3"),
+        ShellPin("PG", "output", "4", topology="open_drain", r_out=50, i_sink=10e-3),
+    )
+    lib = tmp_path / "ODX.lib"
+    lib.write_text(render_shell("ODX", pins), encoding="utf-8")
+    gate = GateSpec(
+        "ODX",
+        "ODX",
+        (
+            GatePin("VDD", "supply", "1"),
+            GatePin("GND", "ground", "2"),
+            GatePin("IN", "input", "3"),
+            GatePin(
+                "PG",
+                "output",
+                "4",
+                alarms=("ovl",),
+                force=level_param("PG"),
+                open_drain=declared_open_drain,
+            ),
+        ),
+    )
+    report = run_gate(lib, gate, ltspice_exe, tmp_path / "gate")
+    checks = {c.id: c.status for c in report.checks}
+    if declared_open_drain:
+        assert checks["alarm_ovl_fires_on_fault"] is Status.PASS
+        assert not [c for c in report.checks if c.status is Status.FAIL], report.as_dict()
+    else:
+        assert checks["alarm_ovl_fires_on_fault"] is Status.FAIL

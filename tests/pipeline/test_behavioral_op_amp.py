@@ -102,3 +102,51 @@ def test_the_behavioral_route_builds_a_dual_op_amp_with_no_agent_and_no_network(
     assert record["delivered_library_sha256"] == delivered
     card = (out / "MODEL_CARD.md").read_text(encoding="utf-8")
     assert "Op amp template parameter origins" in card
+
+
+def test_the_local_routes_do_not_need_the_agent_network_switch() -> None:
+    def request(engine: str) -> MakeModelRequest:
+        return MakeModelRequest(
+            part="LM358",
+            subckt="LM358",
+            datasheet=Path("x.pdf"),
+            out_dir=Path("out"),
+            engine=engine,
+        )
+
+    assert engine._author_needs_network(request("legacy_ai")) is True
+    assert engine._author_needs_network(request("behavioral")) is False
+    assert engine._author_needs_network(request("pin_only")) is False
+
+
+@pytest.mark.ltspice
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not (Path(os.environ.get("SPICE_MAKER_DATASHEET_DIR", ".")) / "lm358_datasheet.pdf").is_file(),
+    reason="needs SPICE_MAKER_DATASHEET_DIR with the TI lm358_datasheet.pdf",
+)
+def test_the_lm358_datasheet_alone_builds_with_the_network_switched_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ltspice_exe: Path
+) -> None:
+    """Datasheet PDF and part number in, judged model out: no rows supplied, no agent, no network."""
+
+    def no_socket(*args: object, **kwargs: object) -> None:
+        raise AssertionError("the local route must not touch the network")
+
+    monkeypatch.setattr(engine, "internet_allowed", lambda: False)
+    monkeypatch.setattr(engine, "locate", lambda explicit=None: LtspiceInstall(ltspice_exe, "test"))
+    monkeypatch.setattr(socket.socket, "connect", no_socket)
+    result = make_model(
+        MakeModelRequest(
+            part="LM358",
+            subckt="LM358",
+            datasheet=Path(os.environ["SPICE_MAKER_DATASHEET_DIR"]) / "lm358_datasheet.pdf",
+            out_dir=tmp_path / "out",
+            timeout_s=120.0,
+            engine="behavioral",
+        )
+    )
+    assert result.status == "PASS", result.detail
+    assert result.counts["PASS"] == 32 and result.counts["FAIL"] == 0
+    timing = json.loads((tmp_path / "out" / engine.TIMING_NAME).read_text(encoding="utf-8"))
+    assert timing["author_turns"] == 0 and timing["route"] == "op_amp_template_seed"

@@ -21,7 +21,7 @@ FROZEN_DIR = Path(__file__).resolve().parents[2] / "models" / "T1-tps54332" / "s
 FROZEN_SW_LIBRARY = "21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2"
 
 
-def _neutral_requirements(tmp_path: Path, wording: str) -> Path:
+def _neutral_requirements(tmp_path: Path, wording: str, pins: list | None = None) -> Path:
     """The reviewed fixture with every statement reworded, so only the wording identifies it."""
     raw = json.loads(helpers.REQUIREMENTS.read_text(encoding="utf-8"))
     for index, row in enumerate(raw["requirements"]):
@@ -29,6 +29,8 @@ def _neutral_requirements(tmp_path: Path, wording: str) -> Path:
         row["origin"] = "TEST_FIXTURE"
         for evidence in row["evidence"]:
             evidence["extraction"] = "synthetic_fixture"
+    if pins is not None:
+        raw["pin_map"] = pins
     path = tmp_path / "neutral-requirements.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
     return path
@@ -56,12 +58,13 @@ def _run(
     monkeypatch: pytest.MonkeyPatch,
     wording: str,
     head: str = NEUTRAL_HEAD,
+    pins: list | None = None,
     **overrides: object,
 ):
     backend = helpers.use_backend(monkeypatch, ScriptedBackend(helpers.template_script()))
     request = helpers.make_request(
         tmp_path,
-        requirements_json=_neutral_requirements(tmp_path, wording),
+        requirements_json=_neutral_requirements(tmp_path, wording, pins),
         datasheet=_datasheet(tmp_path, head),
         **overrides,
     )
@@ -98,16 +101,81 @@ def test_the_behavioral_route_refuses_a_part_with_no_implementation_and_never_fa
     assert record["routes"]["pin_only"]["allowed"] is True
 
 
-def test_pin_only_is_a_separate_limited_route_that_never_becomes_the_agent_route(
+AMPLIFIER_WORDING = "Input offset voltage and slew rate"
+
+
+def _pin(name: str, direction: str, number: int, **extra: object) -> dict:
+    return {
+        "part_id": "X1",
+        "physical_pin": str(number),
+        "name": name,
+        "function": "test pin",
+        "polarity": "not_applicable",
+        "direction": direction,
+        "output_topology": extra.pop("topology", "unknown"),
+        "connection_requirement": extra.pop("requirement", "optional"),
+        **extra,
+    }
+
+
+PIN_TABLE = [
+    _pin("VIN", "power", 1),
+    _pin("GND", "ground", 2),
+    _pin("EN", "input", 3),
+    _pin("PG", "output", 4, topology="open_drain"),
+    _pin("EP", "ground", 5, requirement="required"),
+]
+
+
+def test_pin_only_without_a_pin_table_is_refused_and_no_other_route_takes_over(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    result, backend = _run(
-        tmp_path, monkeypatch, "Input offset voltage and slew rate", engine="pin_only"
-    )
+    result, backend = _run(tmp_path, monkeypatch, AMPLIFIER_WORDING, engine="pin_only")
     assert result.status == "BLOCKED"
-    assert result.detail.startswith("pin_only_unavailable:")
+    assert result.detail.startswith("pin_only_no_pin_table:")
     assert backend.turns == 0
     assert result.lib_path is None
+
+
+def test_pin_only_refuses_a_pin_table_with_two_supply_domains(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pins = [
+        _pin("VCCA", "power", 1, supply_domain="A side"),
+        _pin("VCCB", "power", 2, supply_domain="B side"),
+        _pin("GND", "ground", 3),
+    ]
+    result, backend = _run(tmp_path, monkeypatch, AMPLIFIER_WORDING, pins=pins, engine="pin_only")
+    assert result.status == "BLOCKED"
+    assert result.detail.startswith("pin_only_multiple_rails:")
+    assert backend.turns == 0 and result.lib_path is None
+
+
+def test_pin_only_without_ltspice_is_blocked_and_never_replaced_by_the_agent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(engine, "locate", lambda explicit=None: None)
+    result, backend = _run(
+        tmp_path, monkeypatch, AMPLIFIER_WORDING, pins=PIN_TABLE, engine="pin_only"
+    )
+    assert result.status == "BLOCKED"
+    assert result.detail == engine.LTSPICE_MISSING
+    assert backend.turns == 0 and result.lib_path is None
+
+
+def test_the_other_engines_never_write_a_pin_only_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(engine, "locate", lambda explicit=None: None)
+    for name in ("behavioral", "legacy_ai"):
+        sub = tmp_path / name
+        sub.mkdir()
+        result, _backend = _run(
+            sub, monkeypatch, AMPLIFIER_WORDING, pins=PIN_TABLE, engine=name, family=None
+        )
+        out = sub / "out"
+        assert not (out / "pin-only-report.json").exists()
+        assert result.detail is not None and not result.detail.startswith("pin_only:")
 
 
 def test_the_gate_and_its_seconds_are_recorded_even_when_the_run_is_refused(
@@ -210,3 +278,31 @@ def test_a_family_named_by_the_operator_is_recorded_and_still_never_supported(
 def test_an_unknown_family_option_is_rejected_up_front(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="family must be one of"):
         make_model(helpers.make_request(tmp_path, family="quantum_widget"))
+
+
+@pytest.mark.ltspice
+def test_pin_only_builds_a_limited_model_that_is_judged_by_the_gate_and_is_never_a_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ltspice_exe: Path
+) -> None:
+    monkeypatch.setattr(engine, "locate", lambda explicit=None: LtspiceInstall(ltspice_exe, "test"))
+    result, backend = _run(
+        tmp_path, monkeypatch, AMPLIFIER_WORDING, pins=PIN_TABLE, engine="pin_only"
+    )
+    out = tmp_path / "out"
+    assert result.status == "UNKNOWN", result.detail
+    assert result.detail.startswith("pin_only:")
+    assert backend.turns == 0
+    assert result.counts["PASS"] == 0 and result.counts["FAIL"] == 0
+    assert result.lib_path is not None and result.lib_path.is_file()
+    report = json.loads((out / "pin-only-report.json").read_text(encoding="utf-8"))
+    statuses = {check["id"]: check["status"] for check in report["gate_checks"]}
+    assert "FAIL" not in statuses.values() and "BLOCKED" not in statuses.values()
+    assert statuses["alarm_tie_fires_on_fault"] == "PASS", "the exposed-pad alarm is proven"
+    assert statuses["alarm_ovl_fires_on_fault"] == "PASS"
+    assert report["verdict"] == "UNJUDGED" and report["rail"] == "VIN"
+    card = (out / "MODEL_CARD.md").read_text(encoding="utf-8")
+    assert "## Pin-only model (limited)" in card and "models no function" in card
+    timing = json.loads((out / engine.TIMING_NAME).read_text(encoding="utf-8"))
+    assert timing["route"] == "pin_only_shell" and timing["author_turns"] == 0
+    support = json.loads((out / engine.SUPPORT_RECORD_NAME).read_text(encoding="utf-8"))
+    assert support["engine"] == "pin_only" and support["routes"]["pin_only"]["allowed"]
