@@ -29,6 +29,8 @@ def test_qualification_freezes_before_publish_and_judges_delivered_bytes(
         engine="behavioral",
     )
     run = engine._Run(request, engine._StageLog(None))
+    # TEST_FIXTURE: this test isolates publication identity, not source pinout approval.
+    run._check_pinout_publication = lambda library, symbol, model_file: None
     run.spec = spec
     run.support = SimpleNamespace(implementation="peak_current_buck")
     requirements = run.spec_dir / engine.REQUIREMENTS_NAME

@@ -1,10 +1,11 @@
-# Hand-off — engine evidence milestone, 2026-09-29
+# Hand-off — scoped M6 pinout publication gate, 2026-09-29
 
-Read this first, then the newest entry in `docs/STATUS.md` and decision D-059 in
-`docs/DECISIONS.md`. Older status entries are historical observations, not the current support list.
-This is source-engine work; no new installer release or universal functional coverage is claimed.
-M6's package/symbol confirmation gate remains open. Default-route timing and measured row passes
-do not establish completion of that publication gate or of the broader north-star acceptance.
+Read this first, then the newest entry in `docs/STATUS.md`, D-063 in `docs/DECISIONS.md` and the
+[M6 evidence report](evidence/2026-09-29-m6-pinout/REPORT.md). Older status entries are historical
+observations, not the current support list. This is source-engine work; no new installer release
+or universal functional coverage is claimed. The scoped M6 gate is implemented for TPS54332DDA
+and the LM358 eight-pin group; completion receipts are in the M6 report's 2026-09-30 section.
+Other package mappings/discrete terminal orders and the twelve buck qualification gaps remain open.
 
 ## Current behavior
 
@@ -25,6 +26,20 @@ do not establish completion of that publication gate or of the broader north-sta
   Its failed viability report remains inspectable when model deliverables are withheld. Do not make
   the shell pass by treating an unpowered required rail as a valid powered-device test.
 
+## Source-backed publication boundary
+
+The engine freezes `spec/pinout-contract.json` before authoring and retains `pinout-report.json`
+even when delivery is refused. `SOURCE_CONFIRMED` alone cannot publish. Every final publication,
+including repair/resume, rechecks the source, spec, live extracted map and frozen contract against
+application-owned reviewed evidence, then verifies physical number, ordered model position and
+symbol `SpiceOrder`. The confirmed receipt names the exact delivered library and symbol hashes.
+Old app-owned deliverables and receipts are archived when the output directory is reused.
+
+TPS54332DDA includes separate PowerPAD9 with its external GND7 tie. LM358 uses only the
+pinout-equivalent D / DGK / P / PS / PW eight-pin group; no package body or PCB footprint is
+selected. PIN-01/02 confirmation is scoped to those reviewed mappings, and PIN-05 is not applicable
+to those ICs. TPS54331 and unreviewed discrete primitive/wrapper orders remain blocked.
+
 ## Current default-route acceptance
 
 Citation replay now replaces each DOCUMENT row's saved verified flag with the current page-check
@@ -32,26 +47,30 @@ result before freezing the new requirements/qualification plan. Missing document
 matches or missing verifier results make the row unverified; source history is not rewritten.
 Do not allow replayed true flags to supply a qualification reference without that current check.
 
-Both editions retain final real-LTspice replays after citation/provenance/status hardening under `runs/engine-acceptance-opamp/`,
-`runs/engine-acceptance-buck/` and `runs/engine-acceptance-tps54331/`. Every run recorded zero
-provider calls with complete accounting. No live provider was exercised.
+Both editions retain the current M6 acceptance receipts under `runs/engine-acceptance-opamp/`,
+`runs/engine-acceptance-buck/` and `runs/engine-acceptance-tps54331/`. The new LM358 and TPS54331
+runs recorded zero provider calls with complete accounting. No live provider was exercised.
+The new M6 buck replay and final full-suite receipts are pending; older results below remain
+historical until explicitly replaced.
 
 | Case | General / Bob total time | Observed result in both editions |
 | --- | --- | --- |
-| LM358 exact reviewed PDF | 26.237 / 26.158 s | PASS; 32 PASS / 10 N/A |
-| TPS54332DDA | 161.600 / 164.024 s | UNKNOWN; ordinary rows 12 PASS / 4 FAIL / 41 UNKNOWN / 49 N/A |
-| TPS54331 reviewed PDF | 4.165 / 4.272 s | BLOCKED before authoring; no model delivery |
+| LM358 exact reviewed PDF, M6 replay | 27.247 / 27.783 s | PASS; 32 PASS / 10 N/A; exact pinout CONFIRMED |
+| TPS54332DDA | Pending | New M6 replay pending; see prior evidence below |
+| TPS54331 reviewed PDF, M6 replay | 4.692 / 4.620 s | BLOCKED before source confirmation; no model delivery |
 
 The LM358 delivered library hash in both editions is
 `67766c0cf0d6ce85b9042df94ce4766deb264e917988df1e45d782e9fbaabed2`.
-The buck hash is
+Its pinout-contract hash is
+`2f024e6bfdd674424a984c42dbc424b677dc913a24b7db2f1fd93094abaa29c0` in both editions.
+The historical pre-M6 buck hash is
 `21b3c7f1f9ed14b0d4247d291b7ba6342fecfdf19acdef59ca699c603fdb2ae2`, with exact design
 association and the same hash in its qualification report. Each buck qualification has 4 PASS /
 12 UNKNOWN and `family_qualified=false`. Its default four qualification simulations took
 44.520 s general and 45.164 s Bob, included in those full-run totals.
 
 The edition-specific frozen plan hashes and extraction/compile/simulation breakdowns are in the
-newest STATUS entry and the retained `run-timing.json` files. Their 106-row buck extraction must
+corresponding STATUS entries and retained `run-timing.json` files. Their 106-row buck extraction must
 not be conflated with the frozen 19-row regression: that older input still reports TPS54332
 12 PASS / 4 FAIL / 3 UNKNOWN and LM358 19 PASS, with no changed row verdicts.
 
@@ -129,20 +148,18 @@ Zero author turns alone does not establish zero extraction or planning requests.
 separates read, extract, bind, gate, author, save and qualification work and records qualification time
 separately from ordinary author/harness work. Refusal is not mislabeled as agent authoring.
 
-1. Final lint/format and diff checks passed. Final hardened suites passed: general 2203 passed /
-   20 skipped / 190 deselected; Bob 1961 passed / 31 skipped / 187 deselected, with four pre-existing
-   `slow` marker warnings. Shared-core checks found 49 intact files per edition, all 49 identical.
-   Exact suite command/timing is in STATUS.
-   The default-route live simulator receipts above are complete, but are not evidence of live
-   provider behavior, universal coverage or a rebuilt installer.
+1. Finish recording M6 validation: the new buck replays, final offline suites and exact focused
+   check receipts are pending in the newest STATUS entry and M6 report. The observed LM358 and
+   TPS54331 runs above are complete; they do not establish live provider behavior, universal
+   coverage or a rebuilt installer.
 2. Complete the twelve mandatory buck qualification gaps with independent acceptance references and
    discriminating controls. Preserve the existing TPS54332 FAIL/UNKNOWN evidence; four nominal passes
    are not full-family qualification.
 3. Resolve TPS54331's UVTH policy and actual package before attempting support promotion. Complete
    independent behavior coverage. Do not relabel a source maximum as a nominal value or alter old runs.
-4. Complete M6: confirm the selected package, symbol pin numbers and discrete terminal order
-   against cited evidence and the owner or an independent source before publication. Existing
-   pin-order hashes and the TPS54331 ambiguity guard are necessary narrower checks.
+4. Extend reviewed pinout coverage only with a confirmed complete numbered map, package scope,
+   and owner confirmation or a distinct authoritative source. The implemented M6 gate must keep
+   unreviewed packages and discrete primitive/wrapper orders blocked; do not infer them from names.
 5. Add further families/pinouts only with implementations, cited inputs and qualified independent
    tests. Multi-rail pin-shell behavior remains separate scope. The terminal setup (`Setup.cmd`,
    `Start.cmd`, `Boardmodeler.cmd`, a text menu instead of the window) was merged into `main` on

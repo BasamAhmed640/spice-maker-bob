@@ -312,18 +312,63 @@ def write_symbol(path: object, *args: object, **kwargs: object) -> object:
     return target
 
 
-_PIN_NAME_RE = re.compile(r"^\s*PINATTR\s+PinName\s+(\S+)\s*$", re.MULTILINE)
-_PIN_ORDER_RE = re.compile(r"^\s*PINATTR\s+SpiceOrder\s+(\d+)\s*$", re.MULTILINE)
+_PIN_LINE_RE = re.compile(r"^\s*PIN(?:\s|$)")
+_PIN_NAME_RE = re.compile(r"^\s*PINATTR\s+PinName\s+(\S+)\s*$")
+_PIN_ORDER_RE = re.compile(r"^\s*PINATTR\s+SpiceOrder\s+(\d+)\s*$")
 _SPICEMODEL_RE = re.compile(r"^\s*SYMATTR\s+SpiceModel\s+(\S+)\s*$", re.MULTILINE)
+
+
+def _pin_records(asy_text: str) -> tuple[list[tuple[str, int]], list[str]]:
+    """Parse each PIN and its attributes as one record.
+
+    LTspice associates ``PINATTR`` lines with the immediately preceding ``PIN``
+    block.  Pairing all names and orders globally lets an attacker move an order
+    between blocks while preserving the totals, so malformed records are returned
+    as explicit errors for the validator.
+    """
+    records: list[tuple[str, int]] = []
+    errors: list[str] = []
+    current: dict[str, list[object]] | None = None
+
+    def finish() -> None:
+        nonlocal current
+        if current is None:
+            return
+        names = current["names"]
+        orders = current["orders"]
+        if len(names) != 1:
+            errors.append("pin block must contain exactly one PinName")
+        if len(orders) != 1:
+            errors.append("pin block must contain exactly one SpiceOrder")
+        if len(names) == 1 and len(orders) == 1:
+            records.append((str(names[0]), int(orders[0])))
+        current = None
+
+    for line in asy_text.splitlines():
+        if _PIN_LINE_RE.match(line):
+            finish()
+            current = {"names": [], "orders": []}
+            continue
+        if line.lstrip().startswith("PINATTR"):
+            if current is None:
+                errors.append("PINATTR outside a PIN block")
+                continue
+            name = _PIN_NAME_RE.match(line)
+            order = _PIN_ORDER_RE.match(line)
+            if name:
+                current["names"].append(name.group(1))
+            elif order:
+                current["orders"].append(int(order.group(1)))
+            elif re.match(r"^\s*PINATTR\s+(?:PinName|SpiceOrder)(?:\s|$)", line):
+                errors.append("malformed PinName or SpiceOrder attribute")
+    finish()
+    return records, errors
 
 
 def symbol_pin_orders(asy_text: str) -> list[tuple[str, int]]:
     """``(pin name, SpiceOrder)`` pairs in file order."""
-    names = _PIN_NAME_RE.findall(asy_text)
-    orders = [int(value) for value in _PIN_ORDER_RE.findall(asy_text)]
-    if len(names) != len(orders):
-        return list(zip(names, orders, strict=False))
-    return list(zip(names, orders, strict=True))
+    records, _errors = _pin_records(asy_text)
+    return records
 
 
 def validate_symbol(
@@ -345,9 +390,19 @@ def validate_symbol(
             raise ValueError("validate_symbol needs either subckt_text or ports")
         ports = subckt_ports(subckt_text)
     expected = list(ports)
-    pairs = symbol_pin_orders(asy_text)
+    pairs, pin_errors = _pin_records(asy_text)
     names = [name for name, _order in pairs]
     orders = [order for _name, order in pairs]
+
+    if pin_errors:
+        findings.append(
+            Finding(
+                code=SYMBOL_CODE_ORDER_MISMATCH,
+                status=Status.FAIL,
+                message="; ".join(pin_errors),
+                detail={"errors": "; ".join(pin_errors)},
+            )
+        )
 
     if set(names) != set(expected) or len(names) != len(expected):
         findings.append(
@@ -385,17 +440,16 @@ def validate_symbol(
             )
         )
     if model_file is not None:
-        match = _SPICEMODEL_RE.search(asy_text)
-        if match is None or match.group(1) != model_file:
+        models = _SPICEMODEL_RE.findall(asy_text)
+        if len(models) != 1 or models[0] != model_file:
             findings.append(
                 Finding(
                     code=SYMBOL_CODE_SPICEMODEL,
                     status=Status.FAIL,
                     message=(
-                        f"the symbol must reference model file {model_file!r}; observed "
-                        f"{match.group(1) if match else None!r}"
+                        f"the symbol must reference model file {model_file!r}; observed {models!r}"
                     ),
-                    detail={"expected": model_file},
+                    detail={"expected": model_file, "observed": ",".join(models)},
                 )
             )
     return findings

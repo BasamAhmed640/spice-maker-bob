@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = Path("src") / "boardmodeler"
 MANIFEST = ROOT / "shared_core.json"
-CORE_DIRS = ("authoring", "documents", "requirements", "simulation", "verification")
+CORE_DIRS = ("authoring", "documents", "models", "requirements", "simulation", "verification")
 #: Edition-specific modules inside the core directories (provider wiring and loop glue).
 EDITION_SPECIFIC = {
     "authoring/api_backend.py",
@@ -39,12 +39,18 @@ EDITION_SPECIFIC = {
 
 def core_files(root: Path = ROOT) -> list[str]:
     package = root / PACKAGE
-    return sorted(
+    python_files = {
         path.relative_to(package).as_posix()
         for folder in CORE_DIRS
         for path in (package / folder).glob("*.py")
         if path.relative_to(package).as_posix() not in EDITION_SPECIFIC
-    )
+    }
+    # Reviewed renderer/pinout data is executable policy. Keep it in the same
+    # cross-edition parity check as the code that consumes it.
+    model_data = {
+        path.relative_to(package).as_posix() for path in (package / "models").glob("*.json")
+    }
+    return sorted(python_files | model_data)
 
 
 def digest(root: Path, relative: str) -> str:

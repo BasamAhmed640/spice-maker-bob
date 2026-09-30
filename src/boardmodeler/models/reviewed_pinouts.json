@@ -1,0 +1,383 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    {
+      "profile_id": "ti-tps54332-pinout-v1",
+      "parts": [
+        "TPS54332",
+        "TPS54332DDA"
+      ],
+      "primary_document_sha256": "af3d92b2c6656a1088a4f192a13165590a797427a0b7350abb8c64e50ad58a4a",
+      "packages": [
+        "DDA"
+      ],
+      "package_resolution": "exact_package",
+      "selected_package": "DDA",
+      "pins": [
+        {
+          "number": "1",
+          "name": "BOOT",
+          "aliases": [
+            "BST"
+          ],
+          "spice_order": 1
+        },
+        {
+          "number": "2",
+          "name": "VIN",
+          "aliases": [],
+          "spice_order": 2
+        },
+        {
+          "number": "3",
+          "name": "EN",
+          "aliases": [],
+          "spice_order": 3
+        },
+        {
+          "number": "4",
+          "name": "SS",
+          "aliases": [],
+          "spice_order": 4
+        },
+        {
+          "number": "5",
+          "name": "VSENSE",
+          "aliases": [
+            "VSNS",
+            "FB"
+          ],
+          "spice_order": 5
+        },
+        {
+          "number": "6",
+          "name": "COMP",
+          "aliases": [],
+          "spice_order": 6
+        },
+        {
+          "number": "7",
+          "name": "GND",
+          "aliases": [],
+          "spice_order": 7
+        },
+        {
+          "number": "8",
+          "name": "PH",
+          "aliases": [
+            "SW"
+          ],
+          "spice_order": 8
+        },
+        {
+          "number": "9",
+          "name": "PowerPAD",
+          "aliases": [
+            "POWERPAD",
+            "PWPD",
+            "PWRPAD",
+            "PAD",
+            "EP",
+            "EPAD",
+            "DAP",
+            "THERMAL_PAD",
+            "EXPOSED_PAD"
+          ],
+          "spice_order": 9
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "tps54332_datasheet",
+          "url": "https://www.ti.com/lit/ds/symlink/tps54332.pdf",
+          "document_sha256": "af3d92b2c6656a1088a4f192a13165590a797427a0b7350abb8c64e50ad58a4a",
+          "revision": "SLVS875D; September 2023",
+          "pdf_page": 2,
+          "location": "Figure 5-1 and Table 5-1",
+          "page_image_sha256": "bb2fe38288bd99edcce33f62e87f950d61bd50b1efcec787b7a7a76f88f36972",
+          "pins": [
+            [
+              "1",
+              "BOOT"
+            ],
+            [
+              "2",
+              "VIN"
+            ],
+            [
+              "3",
+              "EN"
+            ],
+            [
+              "4",
+              "SS"
+            ],
+            [
+              "5",
+              "VSENSE"
+            ],
+            [
+              "6",
+              "COMP"
+            ],
+            [
+              "7",
+              "GND"
+            ],
+            [
+              "8",
+              "PH"
+            ],
+            [
+              "9",
+              "PowerPAD"
+            ]
+          ],
+          "method": "reviewed_table_and_figure"
+        },
+        {
+          "source_id": "tps54332_evm",
+          "url": "https://www.ti.com/lit/pdf/SLVU276",
+          "document_sha256": "f9860fdaa989d20b54591543b98cac94fd769e0472a4b0aa0a3b695f4809ed9a",
+          "revision": "SLVU276A; October 2021",
+          "pdf_page": 12,
+          "location": "Figure 4-1, U1 TPS54332DDA",
+          "page_image_sha256": "9a0e4181c6e94bd18743f2a855f8646ce2eda9c304bed711198ff92f2acfdb72",
+          "pins": [
+            [
+              "1",
+              "BOOT"
+            ],
+            [
+              "2",
+              "VIN"
+            ],
+            [
+              "3",
+              "EN"
+            ],
+            [
+              "4",
+              "SS"
+            ],
+            [
+              "5",
+              "VSNS"
+            ],
+            [
+              "6",
+              "COMP"
+            ],
+            [
+              "7",
+              "GND"
+            ],
+            [
+              "8",
+              "PH"
+            ],
+            [
+              "9",
+              "PwPd"
+            ]
+          ],
+          "method": "reviewed_figure"
+        }
+      ],
+      "confirmation_method": "two_independent_sources",
+      "confirmation_reference": "Independently reviewed TI datasheet pin-function table and separately authored EVM schematic; these are distinct documents, not independent manufacturers.",
+      "scope": "TPS54332 DDA only, eight leads plus exposed pad9. Required external pad9 to GND7 connection remains separate; no footprint geometry or electrical qualification.",
+      "device_kind": "integrated_circuit",
+      "required_external_connections": [
+        [
+          "9",
+          "7"
+        ]
+      ]
+    },
+    {
+      "profile_id": "ti-lm358-pinout-v1",
+      "parts": [
+        "LM358"
+      ],
+      "primary_document_sha256": "58c89c68aff6b6025555f3b8bad9af6a825288cd96631deadc1c616a6062af46",
+      "packages": [
+        "D",
+        "DGK",
+        "P",
+        "PS",
+        "PW"
+      ],
+      "package_resolution": "pinout_equivalent_group",
+      "selected_package": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "OUT1",
+          "aliases": [
+            "1OUT"
+          ],
+          "spice_order": 1
+        },
+        {
+          "number": "2",
+          "name": "IN1-",
+          "aliases": [
+            "IN1M",
+            "1IN-"
+          ],
+          "spice_order": 2
+        },
+        {
+          "number": "3",
+          "name": "IN1+",
+          "aliases": [
+            "IN1P",
+            "1IN+"
+          ],
+          "spice_order": 3
+        },
+        {
+          "number": "4",
+          "name": "V-",
+          "aliases": [
+            "VEE",
+            "VM",
+            "GND"
+          ],
+          "spice_order": 4
+        },
+        {
+          "number": "5",
+          "name": "IN2+",
+          "aliases": [
+            "IN2P",
+            "2IN+"
+          ],
+          "spice_order": 5
+        },
+        {
+          "number": "6",
+          "name": "IN2-",
+          "aliases": [
+            "IN2M",
+            "2IN-"
+          ],
+          "spice_order": 6
+        },
+        {
+          "number": "7",
+          "name": "OUT2",
+          "aliases": [
+            "2OUT"
+          ],
+          "spice_order": 7
+        },
+        {
+          "number": "8",
+          "name": "V+",
+          "aliases": [
+            "VCC",
+            "VP"
+          ],
+          "spice_order": 8
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "lm358_datasheet",
+          "url": "https://www.ti.com/lit/ds/symlink/lm358.pdf",
+          "document_sha256": "58c89c68aff6b6025555f3b8bad9af6a825288cd96631deadc1c616a6062af46",
+          "revision": "SLOS068AB; October 2024",
+          "pdf_page": 2,
+          "location": "Figure 4-1 and Table 4-1; package applicability on printed page 1",
+          "page_image_sha256": "f9374c48d3954437cb89236af215da5c15f1211f3744090a15e0919e8dffa0ba",
+          "pins": [
+            [
+              "1",
+              "OUT1"
+            ],
+            [
+              "2",
+              "IN1-"
+            ],
+            [
+              "3",
+              "IN1+"
+            ],
+            [
+              "4",
+              "V-"
+            ],
+            [
+              "5",
+              "IN2+"
+            ],
+            [
+              "6",
+              "IN2-"
+            ],
+            [
+              "7",
+              "OUT2"
+            ],
+            [
+              "8",
+              "V+"
+            ]
+          ],
+          "method": "reviewed_table_and_figure"
+        },
+        {
+          "source_id": "lm358_application",
+          "url": "https://www.ti.com/lit/an/slva313/slva313.pdf",
+          "document_sha256": "1daf7b25be48c3cc4fdaefc72bda3df408e37f0192965c31d781fcd85104bf9f",
+          "revision": "SLVA313; December 2008",
+          "pdf_page": 4,
+          "location": "Figure 6, U1 LM358",
+          "page_image_sha256": "2627cf57c709eca680f907cfafc5592eb96df365106203aea30d91862703c196",
+          "pins": [
+            [
+              "1",
+              "1OUT"
+            ],
+            [
+              "2",
+              "1IN-"
+            ],
+            [
+              "3",
+              "1IN+"
+            ],
+            [
+              "4",
+              "GND"
+            ],
+            [
+              "5",
+              "2IN+"
+            ],
+            [
+              "6",
+              "2IN-"
+            ],
+            [
+              "7",
+              "2OUT"
+            ],
+            [
+              "8",
+              "VCC"
+            ]
+          ],
+          "method": "reviewed_figure"
+        }
+      ],
+      "confirmation_method": "two_independent_sources",
+      "confirmation_reference": "Independently reviewed TI SLOS068AB pin-function table and SLVA313 application schematic. SLOS068AB page1 establishes base LM358 membership in exactly the five package rows; page3 establishes their common pin numbering. Distinct documents, not independent manufacturers.",
+      "scope": "TI base LM358 eight-pin electrical pinout shared by D/DGK/P/PS/PW. No package suffix, physical footprint, or package geometry is selected. Does not cover LM358B/BA, LM158, JG/FK/DDF or other manufacturers.",
+      "device_kind": "integrated_circuit",
+      "required_external_connections": []
+    }
+  ]
+}

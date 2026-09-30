@@ -138,6 +138,12 @@ class BuckDesign:
     mode: BuckMode
 
     def __post_init__(self) -> None:
+        if not isinstance(self.part, str) or not self.part.strip():
+            raise TemplateSeedError("buck_design_part")
+        if not isinstance(self.spec_digest, str) or not re.fullmatch(
+            r"[0-9a-f]{64}", self.spec_digest
+        ):
+            raise TemplateSeedError("buck_design_spec_digest")
         if self.mode not in ("SW", "AVG"):
             raise TemplateSeedError(f"buck_template_invalid_mode: {self.mode!r}")
         if not isinstance(self.subckt, str) or not _SUBCKT_NAME.fullmatch(self.subckt):
@@ -151,6 +157,7 @@ class BuckDesign:
             raise TemplateSeedError(f"buck_design_pins: {pins.reason}")
         if tuple(item.name for item in self.parameters) != _PARAMETER_NAMES:
             raise TemplateSeedError("buck_design_parameter_set")
+        expected_units = {entry["name"]: entry["unit"] for entry in _load_contract()["parameters"]}
         for item in self.parameters:
             if isinstance(item.value, bool) or not isinstance(item.value, int | float):
                 raise TemplateSeedError(f"buck_design_value_type: {item.name}")
@@ -158,6 +165,8 @@ class BuckDesign:
                 raise TemplateSeedError(f"buck_design_nonfinite: {item.name}")
             if item.origin not in _ORIGINS:
                 raise TemplateSeedError(f"buck_design_origin: {item.name}: {item.origin!r}")
+            if item.unit != expected_units[item.name]:
+                raise TemplateSeedError(f"buck_design_unit: {item.name}")
             sourced = item.row_id is not None and item.page is not None and bool(item.excerpt)
             if (item.origin in _CITED_ORIGINS) != sourced:
                 raise TemplateSeedError(f"buck_design_provenance: {item.name}")

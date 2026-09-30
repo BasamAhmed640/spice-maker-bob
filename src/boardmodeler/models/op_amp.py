@@ -196,6 +196,7 @@ class OpAmpDesign:
             raise OpAmpDesignError("op_amp_design_pins: expected the eight dual-amplifier pins")
         if tuple(item.name for item in self.parameters) != _NAMES:
             raise OpAmpDesignError("op_amp_design_parameter_set")
+        expected_units = {name: unit for name, unit, *_rest in _PARAMETERS}
         for item in self.parameters:
             if isinstance(item.value, bool) or not isinstance(item.value, int | float):
                 raise OpAmpDesignError(f"op_amp_design_value_type: {item.name}")
@@ -203,6 +204,8 @@ class OpAmpDesign:
                 raise OpAmpDesignError(f"op_amp_design_nonfinite: {item.name}")
             if item.origin not in _ORIGINS:
                 raise OpAmpDesignError(f"op_amp_design_origin: {item.name}: {item.origin!r}")
+            if item.unit != expected_units[item.name]:
+                raise OpAmpDesignError(f"op_amp_design_unit: {item.name}")
             sourced = item.row_id is not None and item.page is not None and bool(item.excerpt)
             if (item.origin in _CITED_ORIGINS) != sourced:
                 raise OpAmpDesignError(f"op_amp_design_provenance: {item.name}")

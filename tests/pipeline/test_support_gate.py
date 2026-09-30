@@ -63,6 +63,7 @@ def _run(
     pins: list | None = None,
     **overrides: object,
 ):
+    helpers.stub_pinout_confirmation(monkeypatch)
     backend = helpers.use_backend(monkeypatch, ScriptedBackend(helpers.template_script()))
     request = helpers.make_request(
         tmp_path,

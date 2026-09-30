@@ -201,7 +201,7 @@ commits may record those IDs afterward.
 | M5b | Pin shell (`models/pin_shell.py`): every package pin by kind; LM358 rebuilt on it keeps all 32 frozen rows; pin-only MCU8 passes the gate | DONE (branch `pin-model`) | 2026-09-28 | same | `7c83a4b` | `9ae8cf2` |
 | M5c | Alarms inside the model (abs, overload, undefined level, required tie), each proven by a clean and a fault bench | DONE (branch `pin-model`) | 2026-09-28 | same | `85fa9d5` | `9ae8cf2` |
 | M5d | Datasheet digest (`documents/digest.py`): table columns from character positions; TPS54332 golden rows | DONE (branch `pin-model`) | 2026-09-28 | same | `bb4dbdc` | `9ae8cf2` |
-| M6 | Package and symbol pinout evidence and confirmation gate for PIN-01/02/05 before model publication | TODO | — | — | — | — |
+| M6 | Source-backed package/model/symbol confirmation gate; reviewed TPS54332DDA and LM358 eight-pin group, other mappings and discrete orders blocked | IMPLEMENTED (scoped gate; final validation pending) | 2026-09-29 | `docs/evidence/2026-09-29-m6-pinout/REPORT.md` | pending | pending |
 | M7 | Default code-built SPICE model path, timed TPS54331/TPS54332/LM358 runs, and release checkpoint | TODO | — | — | — | — |
 | M8 | Reference-card board runs, board checker, and findings report | REMOVED (D-052; model-only scope) | 2026-09-26 | `docs/DECISIONS.md` D-052 | — | — |
 | M9+ | One SPICE model family per run in catalog order; contract, aliases, electrical checklist, second-part evidence | TODO | — | — | — | — |
@@ -228,7 +228,7 @@ LTspice measurement. Unmeasured or unsupported behavior remains `UNKNOWN` or
 `NOT_APPLICABLE` with reasons. The vendor TPS54332 library remains local and
 is never committed.
 
-## This run: M5, the pin model (hour 1, 2026-09-28, branch `pin-model`)
+## Historical M5 run (hour 1, 2026-09-28, branch `pin-model`)
 
 The owner's purpose is models a user drops into their own system-level simulation, so the
 first thing built is the judge of that, then the one mechanism that gives every pin of any IC
@@ -248,3 +248,16 @@ fitted to the misread limits). Informational gate results for the buck are in th
 Next: M6 (pin table from the digest, confirmed by the owner or a second source), the default
 build path (M7) that routes any part, microcontrollers included, to the shell, and function cores
 for regulators.
+
+## Current M6 scope (2026-09-29)
+
+The publication gate is implemented for the reviewed TPS54332DDA and LM358 pinout-equivalent
+D / DGK / P / PS / PW eight-pin group. LM358 package-body/footprint selection is deliberately
+unresolved; only the common electrical pinout is confirmed. Source-only confirmation never
+permits publication until the exact model and symbol pass the final numbered-map check.
+TPS54331, unreviewed packages and unqualified discrete terminal orders remain blocked.
+Final validation is tracked in the [M6 report](evidence/2026-09-29-m6-pinout/REPORT.md).
+
+The historical M5 next-step paragraph above is not the current routing policy. Behavioral is the
+default only for eligible implemented families; explicit `pin_only` and `legacy_ai` routes remain
+separate, and unsupported devices do not silently fall back. M4b2/M4b3 remain unfinished.

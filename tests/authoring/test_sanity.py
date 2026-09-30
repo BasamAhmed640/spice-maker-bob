@@ -16,6 +16,7 @@ from boardmodeler.domain.records import Requirement
 from boardmodeler.pipeline import make_model as engine
 from boardmodeler.simulation import ltspice as ltspice_mod
 from boardmodeler.simulation.ltspice import BatchResult, LtspiceLockTimeout
+from tests.pipeline.test_make_model import stub_pinout_confirmation
 
 PINS = (
     {"name": "IN", "physical_pin": "1", "direction": "input"},
@@ -391,6 +392,7 @@ def test_cancellation_during_cached_load_keeps_receipt_and_never_reauthors(tmp_p
 def test_quick_pipeline_skips_planner_simulator_and_never_claims_accuracy(
     tmp_path, monkeypatch, write_model
 ):
+    stub_pinout_confirmation(monkeypatch)
     from boardmodeler.authoring import test_planner
 
     backend = Backend(VALID if write_model else None)
@@ -451,6 +453,7 @@ def test_quick_pipeline_records_the_one_load_check_and_publishes(tmp_path, monke
     The numerical harness (``build_model``) must stay untouched: this is a parse/solve
     check, not an electrical-accuracy run, and the receipt must say so.
     """
+    stub_pinout_confirmation(monkeypatch)
     from boardmodeler.authoring import test_planner
 
     backend = Backend(VALID)

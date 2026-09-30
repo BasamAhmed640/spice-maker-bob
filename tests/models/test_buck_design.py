@@ -68,6 +68,31 @@ TPS_VALUES = {
     "FOLD4": 0.4,
     "FOLD2": 0.2,
 }
+TPS_UNITS = {
+    "VREF": "V",
+    "FSW": "Hz",
+    "TONMIN": "s",
+    "DMAX": "ratio",
+    "ILIM": "A",
+    "GMCS": "A/V",
+    "VECO": "V",
+    "ECO_I": "A",
+    "EAGM": "S",
+    "EAI": "A",
+    "ISS": "A",
+    "SSOFS": "V",
+    "ENTH": "V",
+    "ENHYS": "V",
+    "UVTH": "V",
+    "UVHYS": "V",
+    "IQOP": "A",
+    "IQSD_BASE": "A",
+    "EN_PULLUP": "A",
+    "RON": "ohm",
+    "FOLD6": "V",
+    "FOLD4": "V",
+    "FOLD2": "V",
+}
 
 
 def _specs() -> dict:
@@ -97,7 +122,8 @@ def _changed(design: BuckDesign, name: str, **changes) -> BuckDesign:
 
 def _tps_design(mode: str) -> BuckDesign:
     parameters = tuple(
-        ParameterOrigin(name, value, "-", "template_default") for name, value in TPS_VALUES.items()
+        ParameterOrigin(name, value, TPS_UNITS[name], "template_default")
+        for name, value in TPS_VALUES.items()
     )
     return BuckDesign(
         contract_id="peak_current_buck_v1",
@@ -197,6 +223,21 @@ def test_a_saved_design_that_was_altered_or_is_incomplete_is_refused() -> None:
             BuckDesign.from_payload(broken)
     with pytest.raises(TemplateSeedError, match="incomplete"):
         BuckDesign.from_payload({k: v for k, v in good.items() if k != "ports"})
+
+
+@pytest.mark.parametrize(
+    "edit, reason",
+    [
+        (lambda payload: payload["parameters"][0].update(unit="not-a-unit"), "unit"),
+        (lambda payload: payload.update(part=""), "part"),
+        (lambda payload: payload.update(spec_digest="not-a-digest"), "spec_digest"),
+    ],
+)
+def test_design_metadata_has_canonical_units_and_identity(edit, reason: str) -> None:
+    payload = json.loads(_design().to_json())
+    edit(payload)
+    with pytest.raises(TemplateSeedError, match=reason):
+        BuckDesign.from_payload(payload)
 
 
 def test_a_design_from_another_renderer_or_contract_is_not_rendered() -> None:

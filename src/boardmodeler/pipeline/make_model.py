@@ -80,6 +80,7 @@ import time
 import uuid
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
@@ -153,6 +154,8 @@ TIMING_NAME = "run-timing.json"
 SUPPORT_RECORD_NAME = "support-decision.json"
 QUALIFICATION_REPORT_NAME = "qualification-report.json"
 QUALIFICATION_PLAN_NAME = "qualification-plan.json"
+PINOUT_REPORT_NAME = "pinout-report.json"
+PINOUT_CONTRACT_NAME = "pinout-contract.json"
 ENGINES = ("legacy_ai", "behavioral", "pin_only")
 DESIGN_RECORD_NAME = "model-design.json"
 EXAMPLE_NAME = "EXAMPLE.cir"
@@ -171,7 +174,30 @@ _CAP_PREFIX = "max_iterations="
 
 #: One process runs one model build at a time; a second concurrent call is
 #: reported rather than interleaving the builds' authoring work.
-_BUILD_LOCK = threading.Lock()
+_BUILD_LOCK = threading.RLock()
+
+
+def _exclusive_model_build(function):
+    """Serialize the complete build, including output withdrawal and local routes."""
+
+    @wraps(function)
+    def wrapped(request, progress=None, cancel=None):
+        checked = _checked(request)
+        if not _BUILD_LOCK.acquire(blocking=False):
+            detail = (
+                "build_in_progress: another model build is running in this process; "
+                "wait for it to finish and re-run"
+            )
+            log = _StageLog(progress)
+            log.emit("read", "failed", detail)
+            return _empty_result(checked, log, detail)
+        try:
+            return function(checked, progress=progress, cancel=cancel)
+        finally:
+            _BUILD_LOCK.release()
+
+    return wrapped
+
 
 _SUBCKT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -1462,6 +1488,8 @@ class _Run:
         self.qualification_report: dict[str, Any] | None = None
         self.previous_publication_dir: Path | None = None
         self.publication_problem: str | None = None
+        self.pinout_contract: Any = None
+        self.pinout_report: dict[str, Any] | None = None
 
     def _get_backend(self) -> AuthorBackend:
         """Keep one backend so extraction, planning and authoring share one meter."""
@@ -1517,9 +1545,28 @@ class _Run:
 
             try:
                 saved = json.loads(Path(request.requirements_json).read_text(encoding="utf-8"))
+                saved_pins = saved.get("pin_map", [])
+                # Our exact reviewed LM358 snapshot intentionally records only sourced
+                # names/numbers. Replaying it must not invent electrical pin semantics.
+                from boardmodeler.models.pinout import resolve_reviewed_profile
+
+                minimal_reviewed = False
+                if saved_pins and all(
+                    isinstance(pin, dict) and set(pin) <= {"name", "physical_pin"}
+                    for pin in saved_pins
+                ):
+                    try:
+                        profile = resolve_reviewed_profile(
+                            request.part, hashlib.sha256(datasheet.read_bytes()).hexdigest()
+                        )
+                        minimal_reviewed = profile.profile_id == "ti-lm358-pinout-v1"
+                    except ValueError:
+                        pass
                 self.pin_map = tuple(
-                    PinDefinition.model_validate(pin).model_dump(mode="json")
-                    for pin in saved.get("pin_map", [])
+                    dict(pin)
+                    if minimal_reviewed
+                    else PinDefinition.model_validate(pin).model_dump(mode="json")
+                    for pin in saved_pins
                 )
             except (ValueError, TypeError) as exc:
                 raise _Stop("read", "BLOCKED", f"saved pin map is invalid: {exc}") from exc
@@ -2114,6 +2161,114 @@ class _Run:
         if not decision.allows(route):
             raise _Stop("author", Status.BLOCKED.value, decision.refusal(route))
 
+    def _pinout_source_hash(self) -> str:
+        from boardmodeler.models.pinout import PinoutError
+
+        if self.record is None:
+            raise PinoutError("pinout_source_unavailable: no registered datasheet")
+        path = (
+            self.store.original_path(self.record.doc_id)
+            if self.store is not None
+            else Path(self.request.datasheet)
+        )
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        if actual != self.record.file_hash:
+            raise PinoutError("pinout_source_changed: registered document bytes changed")
+        return actual
+
+    def _save_pinout_report(self) -> None:
+        if self.pinout_report is not None:
+            self._write_text(
+                self.out_dir / PINOUT_REPORT_NAME,
+                json.dumps(self.pinout_report, indent=2, sort_keys=True, ensure_ascii=True) + "\n",
+            )
+
+    def freeze_pinout(self) -> None:
+        """Confirm package evidence before spending an author or simulator turn."""
+        from boardmodeler.models.pinout import (
+            freeze_pinout,
+            pinout_report,
+            resolve_reviewed_profile,
+        )
+
+        source_hash = "" if self.record is None else self.record.file_hash
+        try:
+            if self.spec is None:
+                raise ValueError("pinout_spec_missing")
+            source_hash = self._pinout_source_hash()
+            profile = resolve_reviewed_profile(self.request.part, source_hash)
+            if self.pin_map != self.spec.pin_map:
+                raise ValueError("pinout_live_map_changed: extracted and frozen maps differ")
+            self.pinout_contract = freeze_pinout(profile, self.spec, source_hash)
+            self._write_text(self.spec_dir / PINOUT_CONTRACT_NAME, self.pinout_contract.to_json())
+            self.pinout_report = pinout_report(
+                part=self.request.part,
+                document_sha256=source_hash,
+                spec_digest=self.spec.digest(),
+                contract=self.pinout_contract,
+            )
+            self._save_pinout_report()
+        except (OSError, ValueError, TypeError) as exc:
+            self.pinout_report = pinout_report(
+                part=self.request.part,
+                document_sha256=source_hash,
+                spec_digest="" if self.spec is None else self.spec.digest(),
+                contract=self.pinout_contract,
+                reason=str(exc),
+            )
+            raise _Stop("gate", Status.BLOCKED.value, f"pinout_not_confirmed: {exc}") from exc
+        self.log.emit(
+            "gate", "ok", "source-confirmed package pinout frozen; publication check pending"
+        )
+
+    def _check_pinout_publication(self, library: bytes, symbol: bytes, model_file: str) -> None:
+        """Check the current source/map and the exact staged output bytes, on every route."""
+        from boardmodeler.models.pinout import (
+            check_publication,
+            pinout_report,
+            resolve_reviewed_profile,
+        )
+
+        source_hash = "" if self.record is None else self.record.file_hash
+        try:
+            if self.spec is None or self.pinout_contract is None:
+                raise ValueError("pinout_confirmation_missing: no frozen pinout contract")
+            if self.pin_map != self.spec.pin_map:
+                raise ValueError("pinout_live_map_changed: extracted and frozen maps differ")
+            saved = self.spec_dir / PINOUT_CONTRACT_NAME
+            if (
+                not saved.is_file()
+                or json.loads(saved.read_text(encoding="utf-8")) != self.pinout_contract.payload()
+            ):
+                raise ValueError("pinout_contract_changed: saved contract differs")
+            source_hash = self._pinout_source_hash()
+            approved = resolve_reviewed_profile(self.request.part, source_hash)
+            if approved != self.pinout_contract.profile:
+                raise ValueError(
+                    "pinout_contract_profile_changed: application-owned approval differs"
+                )
+            self.pinout_report = check_publication(
+                self.pinout_contract,
+                spec=self.spec,
+                document_sha256=source_hash,
+                library=library,
+                symbol=symbol,
+                model_file=model_file,
+            )
+        except (OSError, ValueError, TypeError) as exc:
+            self.pinout_report = pinout_report(
+                part=self.request.part,
+                document_sha256=source_hash,
+                spec_digest="" if self.spec is None else self.spec.digest(),
+                contract=self.pinout_contract,
+                reason=str(exc),
+                library=library,
+                symbol=symbol,
+            )
+        self._save_pinout_report()
+        if not self.pinout_report["publication_allowed"]:
+            raise ValueError(f"pinout_not_confirmed: {self.pinout_report['reason']}")
+
     def _author_behavioral(self, cancel: threading.Event | None) -> None:
         """Judge a code-built candidate with the LTspice harness: no agent turn, no fallback."""
         install = locate()
@@ -2572,7 +2727,7 @@ class _Run:
             TIMING_NAME,
         }
         if include_diagnostics:
-            names.update((SUPPORT_RECORD_NAME, "reviewed-extraction.json"))
+            names.update((SUPPORT_RECORD_NAME, "reviewed-extraction.json", PINOUT_REPORT_NAME))
         # A reused output directory can switch subcircuit names. Only recorded
         # direct-child libraries/symbols count; a results file cannot name outsiders.
         try:
@@ -2610,6 +2765,14 @@ class _Run:
                 (history / SPEC_DIRNAME).mkdir(parents=True, exist_ok=True)
                 prior_plan.rename(history / SPEC_DIRNAME / QUALIFICATION_PLAN_NAME)
                 moved = True
+        if include_diagnostics or (
+            self.pinout_contract is None and self.status == Status.BLOCKED.value
+        ):
+            prior_pinout = self.spec_dir / PINOUT_CONTRACT_NAME
+            if prior_pinout.is_file():
+                (history / SPEC_DIRNAME).mkdir(parents=True, exist_ok=True)
+                prior_pinout.rename(history / SPEC_DIRNAME / PINOUT_CONTRACT_NAME)
+                moved = True
         if moved and self.previous_publication_dir is None:
             self.previous_publication_dir = history
         self.lib_path = self.asy_path = self.card_path = None
@@ -2617,6 +2780,15 @@ class _Run:
     def save(self) -> None:
         self.log.emit("save", "running", f"publishing deliverables into {self.out_dir}")
         notes: list[str] = []
+        if self.pinout_report is None:
+            from boardmodeler.models.pinout import pinout_report
+
+            self.pinout_report = pinout_report(
+                part=self.request.part,
+                document_sha256="" if self.record is None else self.record.file_hash,
+                spec_digest="" if self.spec is None else self.spec.digest(),
+                reason="pinout_not_checked: this build did not reach source confirmation",
+            )
         try:
             self._archive_deliverables()
         except OSError as exc:
@@ -2662,6 +2834,10 @@ class _Run:
                 notes.append(f"the model could not be published: {type(exc).__name__}: {exc}")
                 refusal = f"model_not_published: {exc}"
                 self.publication_problem = refusal
+                if self.pinout_report is not None:
+                    self.pinout_report.update(
+                        status="BLOCKED", publication_allowed=False, reason=refusal
+                    )
                 prior_detail = self.detail or (self.outcome.detail if self.outcome else "")
                 self.detail = f"{prior_detail}; {refusal}".strip("; ")
                 try:
@@ -2677,6 +2853,10 @@ class _Run:
             )
             notes.append(f"no model file was written, so {remaining} describe this run")
         published = [path for path in (self.lib_path, self.asy_path, self.card_path) if path]
+        try:
+            self._save_pinout_report()
+        except OSError as exc:
+            notes.append(f"pinout report unavailable: {exc}")
         self.log.emit(
             "save",
             "ok" if self.lib_path is not None else "skipped",
@@ -2848,10 +3028,22 @@ class _Run:
         if source.read_bytes() != delivered:
             raise ValueError("publication_model_mismatch: candidate changed during publication")
         lib_target = self.out_dir / f"{request.subckt}.lib"
+        staged_symbol, note = self._publish_symbol(
+            ports,
+            lib_target.name,
+            destination=self.workdir / "publish-check" / f"{request.subckt}.asy",
+        )
+        symbol_bytes = staged_symbol.read_bytes()
+        self._check_pinout_publication(delivered, symbol_bytes, lib_target.name)
+        if source.read_bytes() != delivered or staged_symbol.read_bytes() != symbol_bytes:
+            raise ValueError(
+                "publication_pinout_artifact_changed: staged bytes changed after confirmation"
+            )
         lib_target.parent.mkdir(parents=True, exist_ok=True)
         lib_target.write_bytes(delivered)
         self.lib_path = lib_target
-        symbol, note = self._publish_symbol(ports, lib_target.name)
+        symbol = self.out_dir / f"{request.subckt}.asy"
+        symbol.write_bytes(symbol_bytes)
         self.asy_path = symbol
         self._publish_design_record(lib_target.read_bytes(), symbol=symbol, ports=ports)
         notes.append(note)
@@ -2935,7 +3127,8 @@ class _Run:
                 "datasheet row was judged, so every row above is UNKNOWN or not applicable. It is "
                 "not a substitute for a behavioural model.",
                 "",
-                f"Pin table: taken from {source}; confirm it against the datasheet pinout. "
+                f"Pin table: taken from {source}; the independent source confirmation is "
+                "recorded in `pinout-report.json`. "
                 f"Rail: {info['rail']}. Ground: {info['ground']}.",
                 "",
             ]
@@ -2988,10 +3181,20 @@ class _Run:
         )
         if (
             lib_target.read_bytes() != delivered
+            or symbol.read_bytes() != symbol_bytes
             or hashlib.sha256(delivered).hexdigest() != self.report.model_sha256
             or self.report.spec_digest != self.spec.digest()
         ):
             raise ValueError("publication_evidence_changed: delivered bytes or frozen spec changed")
+        self._check_pinout_publication(delivered, symbol_bytes, lib_target.name)
+        self._write_text(
+            self.card_path,
+            self.card_path.read_text(encoding="utf-8")
+            + "\n## Package pinout confirmation\n\n"
+            + "The source-confirmed physical pin numbers, terminal names and symbol SpiceOrder "
+            + "are recorded with exact library/symbol hashes in `pinout-report.json`. "
+            + "This is a model-symbol mapping check, not a PCB footprint or electrical qualification.\n",
+        )
 
     def _publish_design_record(
         self, delivered: bytes, *, symbol: Path, ports: Sequence[str]
@@ -3109,9 +3312,11 @@ class _Run:
             )
         )
 
-    def _publish_symbol(self, ports: Sequence[str], lib_name: str) -> tuple[Path, str]:
+    def _publish_symbol(
+        self, ports: Sequence[str], lib_name: str, *, destination: Path | None = None
+    ) -> tuple[Path, str]:
         subckt = self.request.subckt
-        target = self.out_dir / f"{subckt}.asy"
+        target = destination or self.out_dir / f"{subckt}.asy"
         # Appearance is always application-owned, including cached builds. Pin-map
         # directions affect placement only; the .subckt defines electrical order.
         directions = {
@@ -3325,6 +3530,7 @@ def _author_needs_network(request: MakeModelRequest) -> bool:
     return str(request.backend_name or "").strip().lower() in _NETWORK_BACKENDS
 
 
+@_exclusive_model_build
 def make_model(
     request: MakeModelRequest,
     progress: Callable[[StageEvent], None] | None = None,
@@ -3369,6 +3575,8 @@ def make_model(
             run.bind(cancel)
         with ledger.stage("gate"):
             run.support_gate()
+        with ledger.stage("pinout"):
+            run.freeze_pinout()
         with ledger.stage("qualification_plan"):
             run.freeze_qualification()
         with ledger.stage("author"):

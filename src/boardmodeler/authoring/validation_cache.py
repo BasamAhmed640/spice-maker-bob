@@ -61,9 +61,15 @@ def validation_key(model: Path, spec, simulator: Path, timeout_s: float) -> str 
     else:
         engine = {
             str(path.relative_to(package)): digest_file(path)
-            for folder in ("authoring", "simulation", "domain")
+            for folder in ("authoring", "simulation", "domain", "models")
             for path in sorted((package / folder).glob("*.py"))
         }
+        engine.update(
+            {
+                str(path.relative_to(package)): digest_file(path)
+                for path in sorted((package / "models").glob("*.json"))
+            }
+        )
     return sha256_bytes(
         canonical_json_bytes(
             {

@@ -832,3 +832,39 @@ reverted first.
 The owner's installation goal: the application self-contained in its folder, with the window, and no
 Windows warning when the download is first run. That warning comes from Windows for any unsigned
 program marked as downloaded from the internet; the application does not produce it.
+
+## D-063 — Require source-backed pinout confirmation before model publication (2026-09-30)
+
+1. Publication must compare the selected package or explicitly equivalent pinout group and every
+   physical pin number/name against confirmed evidence, then compare that ordered mapping with
+   the subcircuit ports and symbol `SpiceOrder`. A self-consistent library/symbol pair does not
+   establish agreement with the device. Missing, ambiguous or conflicting evidence blocks
+   publication and must leave a reason.
+2. The initial reviewed scope is TPS54332DDA and the base LM358 eight-pin electrical pinout.
+   TPS54332DDA uses DDA pins 1–8 plus PowerPAD 9; the pad-to-GND7 connection stays external.
+   LM358's D, DGK, P, PS and PW packages form an explicitly identified pinout-equivalent group.
+   Confirming that group does not select a package body, PCB footprint or package variant outside
+   the group. Aliases are accepted only through the reviewed role mapping.
+3. The reviewed profiles use two distinct TI primary documents per part: its datasheet and an
+   application or EVM schematic. They are independent documents from one manufacturer. Record
+   revision, URL, printed and zero-based PDF page, figure/table, complete PDF SHA-256 and reviewed
+   page-image SHA-256; do not confuse two renderings of one document with two sources.
+4. TPS54331 remains blocked until the actual D/DDA package and its complete required terminals
+   are resolved. Discrete devices without reviewed terminal-order confirmation remain blocked.
+   This initial scope does not establish all-family or all-package M6 coverage. Historical outputs
+   remain historical evidence; reopening them must not fabricate confirmation for a new publication.
+5. Pinout confirmation establishes wiring identity only. It cannot create an electrical PASS,
+   relax frozen test limits or complete M4b2/M4b3. Measured results must still refer to the exact
+   delivered candidate, and required external ties must remain external.
+
+6. Freeze `spec/pinout-contract.json` before authoring. A source-only receipt is
+   `SOURCE_CONFIRMED` with `publication_allowed=false`; only the final exact library/symbol
+   check may produce `CONFIRMED` and permit publication. Require physical number, ordered model
+   position and symbol `SpiceOrder` to agree. Recheck the source, spec, extracted map and saved
+   contract on repair/resume as well as first publication. Archive previous app-owned receipts
+   when a new build starts; retain a current BLOCKED `pinout-report.json` when no model is delivered.
+
+Evidence: [M6 report](evidence/2026-09-29-m6-pinout/REPORT.md) records the exact primary documents,
+image hashes, implementation boundary and observed acceptance. Both editions' new LM358 runs
+retain 32 PASS / 10 N/A with confirmed exact artifacts; TPS54331 remains BLOCKED before source
+confirmation and delivers no model. Final buck replay and full-suite evidence are pending.

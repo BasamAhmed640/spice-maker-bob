@@ -105,6 +105,10 @@ a = Analysis(
             os.fspath(REPO / "src" / "boardmodeler" / "models" / "peak_current_buck.json"),
             "boardmodeler/models",
         ),
+        (
+            os.fspath(REPO / "src" / "boardmodeler" / "models" / "reviewed_pinouts.json"),
+            "boardmodeler/models",
+        ),
     ],
     hiddenimports=hiddenimports,
     hookspath=[],

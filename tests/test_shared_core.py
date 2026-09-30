@@ -25,6 +25,10 @@ def test_the_convergence_and_extraction_core_is_part_of_the_shared_manifest() ->
         "authoring/convergence.py",
         "authoring/harness.py",
         "documents/relevance.py",
+        "models/buck_switching.py",
+        "models/op_amp.py",
+        "models/pinout.py",
+        "models/reviewed_pinouts.json",
         "requirements/extract.py",
         "verification/engine.py",
     ):

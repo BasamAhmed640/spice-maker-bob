@@ -22,6 +22,8 @@ def publish_run(tmp_path, family="buck"):
         spec.part, spec.subckt, tmp_path / "unused.pdf", tmp_path / "out"
     )
     run = engine._Run(request, engine._StageLog(None))
+    # TEST_FIXTURE: this test isolates publication identity, not source pinout approval.
+    run._check_pinout_publication = lambda library, symbol, model_file: None
     run.spec = spec
     seed = seed_from_spec(spec) if family == "buck" else op_amp.seed_from_spec(spec)
     assert seed is not None

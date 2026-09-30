@@ -1,3 +1,22 @@
+## 2026-09-30 — resumed M6 delivery boundary (D-063)
+
+Recovered the saved engine guide and preserved local changes, then fast-forwarded to the current
+GitHub `main` without discarding either edition's work. The desktop-window decision D-062 stays
+in force. M6 now has both buck replay receipts and its adversarial/concurrent-build checks.
+See [completion evidence](evidence/2026-09-29-m6-pinout/REPORT.md#completion-receipts-2026-09-30).
+
+Focused pinout/design/shared-core tests: **92 passed, 2 skipped, 1 deselected per edition**.
+Both buck libraries remain byte-identical, pinout CONFIRMED, with 4 independent PASS / 12 UNKNOWN
+and ordinary 12 PASS / 4 FAIL / 41 UNKNOWN / 49 N/A. Bob's resumed measured run took 163.994 s;
+General's completed run took 164.950 s. Fresh General LM358: 47.803 s, 32 PASS / 10 N/A.
+All these default builds recorded zero provider calls. This source milestone does not rebuild
+the old installer or establish full buck/family qualification.
+
+The newly reported UCC28251 failure came from the installed 1.7.0 runtime: extraction succeeded,
+but legacy AI test planning consumed about 20 minutes and timed out before authoring/simulation.
+The extracted source and installed wheel/frozen executable disagree. PWM support, the GUI refresh
+and a rebuilt/current download are separate follow-up work; no successful PWM result is claimed yet.
+
 ## 2026-09-30 — install steps without the Windows warning, checked before the installer runs
 
 The README now opens with **Install on Windows**. It downloads the ZIP with `curl.exe` over HTTPS
@@ -34,6 +53,48 @@ hard rule 10 in `AGENTS.md` and a line in the hand-off. The terminal work stays 
 Known limit: `Install.exe` is the Bob 1.6.0 build of 2026-09-25. The 17 later source commits
 (the code-built engine, the support gate, pin-only mode, the frozen buck qualification) are in the
 source, not inside `Install.exe`, until it is rebuilt.
+
+## 2026-09-29 — M6 source-backed pinout publication gate (D-063)
+
+The scoped M6 gate is implemented in both editions. Reviewed TI datasheet and application/EVM
+sources confirm TPS54332DDA and the LM358 eight-pin group; exact source and reviewed page-image
+hashes are in [`docs/evidence/2026-09-29-m6-pinout/REPORT.md`](evidence/2026-09-29-m6-pinout/REPORT.md).
+These are distinct primary documents from the same manufacturer, not independent manufacturers.
+
+The engine freezes `spec/pinout-contract.json` before authoring and writes `pinout-report.json`
+for successful and refused builds. Source confirmation alone is `SOURCE_CONFIRMED`, with
+publication disallowed. Publication rechecks the source, frozen spec/map/contract, ordered model
+ports and symbol `SpiceOrder` against the reviewed numbered mapping, then binds the confirmed
+receipt to the exact delivered library and symbol hashes. Physical pin number, model position and
+`SpiceOrder` must agree; a jointly permuted library/symbol pair cannot confirm itself. Repair and
+resumed publication run the same check. A rerun archives prior app-owned deliverables and receipts.
+
+TPS54332DDA includes PowerPAD 9 and its required external connection to GND7. LM358 is limited
+to the pinout-equivalent **D / DGK / P / PS / PW eight-pin package group**; no physical package
+body or PCB footprint is selected. PIN-01/02 are confirmed only within the reviewed scope;
+PIN-05 is not applicable to these ICs. TPS54331's D/DDA ambiguity, unreviewed package mappings
+and unqualified discrete terminal orders remain blocked. This completes the scoped publication
+mechanism, not all package coverage or the twelve missing buck qualification checks.
+
+Observed default-route acceptance in **both editions**:
+
+| Case | General / Bob total time | Result |
+| --- | --- | --- |
+| LM358 exact reviewed PDF | 27.247 / 27.783 s | PASS; 32 PASS / 10 N/A; pinout CONFIRMED |
+| TPS54331 exact reviewed PDF | 4.692 / 4.620 s | BLOCKED before source-confirmation stage; no library/symbol delivery |
+| TPS54332DDA | Pending | New M6 live replay pending; no result claimed yet |
+
+All four completed runs recorded zero provider calls with complete accounting. LM358 retains
+library SHA-256 `67766c0cf0d6ce85b9042df94ce4766deb264e917988df1e45d782e9fbaabed2` and
+pinout-contract SHA-256 `2f024e6bfdd674424a984c42dbc424b677dc913a24b7db2f1fd93094abaa29c0`
+in both editions. Its extract / compile / simulate times were **5.600 / 0.001 / 16.446 s** General
+and **5.793 / 0.001 / 16.692 s** Bob. TPS54331 retains a BLOCKED pinout receipt with
+`pinout_not_checked: this build did not reach source confirmation`; this is not a completed
+physical-map comparison or a simulator run.
+
+Validation pending: final full offline suites, the new buck replays and their exact evidence are
+still being collected. Focused checks and final commands/counts will be recorded once supplied.
+No broader electrical qualification or installer release is claimed.
 
 ## 2026-09-29 — support-gate identity and bench eligibility safeguards (D-060)
 

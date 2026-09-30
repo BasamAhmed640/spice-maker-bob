@@ -94,6 +94,7 @@ def test_a_saved_design_reads_back_and_an_altered_one_is_refused(
     for edit in (
         lambda p: p["parameters"][3].update(value=-1.0),
         lambda p: p["parameters"][3].update(value=float("nan")),
+        lambda p: p["parameters"][3].update(unit="not-a-unit"),
         lambda p: p["parameters"][0].update(origin="template_default"),
         lambda p: p["parameters"][1].update(row_id=None),
         lambda p: p["pin_roles"].update(VCC="ground"),

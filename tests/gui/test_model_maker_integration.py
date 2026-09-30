@@ -1,7 +1,8 @@
 """End to end: the engine's real output, judged by real LTspice, shown in the window.
 
 This is the test that decides whether the window is finished. It does not stub the
-engine or the simulator: it runs the TPS54320 fixtures through ``make_model`` with the
+author/harness or simulator. It isolates source pinout approval for the synthetic
+fixture and runs the TPS54320 fixtures through ``make_model`` with the
 scripted author (which writes the bundled template library), lets the probe harness
 measure the model in real LTspice runs, and then feeds the result object into the window
 to prove the table, the status line and the buttons reflect what was actually measured.
@@ -42,12 +43,14 @@ def _cell(window: ModelMakerWindow, row: int, column: int) -> str:
     return item.text()
 
 
-def test_a_real_build_reaches_the_window(qtbot, tmp_path: Path) -> None:
-    from tests.pipeline.test_make_model import make_request
+def test_a_real_build_reaches_the_window(qtbot, tmp_path: Path, monkeypatch) -> None:
+    from tests.pipeline.test_make_model import make_request, stub_pinout_confirmation
 
     from boardmodeler.pipeline.make_model import make_model
     from boardmodeler.simulation.ltspice import locate
 
+    # Synthetic fixture approval keeps this test focused on measured GUI results.
+    stub_pinout_confirmation(monkeypatch)
     install = locate()
     if install is None:
         pytest.skip("LTspice is not installed")

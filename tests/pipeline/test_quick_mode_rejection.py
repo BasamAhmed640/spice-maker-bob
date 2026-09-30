@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 import pytest
+from tests.pipeline.test_make_model import stub_pinout_confirmation
 
 from boardmodeler.authoring.backends import AuthorResult
 from boardmodeler.pipeline import make_model as engine
@@ -47,6 +48,7 @@ class Backend:
 def test_a_model_the_real_simulator_rejects_is_never_published(
     tmp_path, monkeypatch, ltspice_exe: Path
 ):
+    stub_pinout_confirmation(monkeypatch)
     from boardmodeler.authoring import test_planner
     from boardmodeler.domain.records import Requirement
 

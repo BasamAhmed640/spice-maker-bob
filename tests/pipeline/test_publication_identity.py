@@ -20,6 +20,8 @@ LIBRARY = b"* TEST_FIXTURE\r\n.subckt TEST IN OUT\r\nR1 IN OUT 1k\r\n.ends TEST\
 def _run(tmp_path):
     request = engine.MakeModelRequest("TEST", "TEST", tmp_path / "unused.pdf", tmp_path / "out")
     run = engine._Run(request, engine._StageLog(None))
+    # TEST_FIXTURE: this test isolates publication identity, not source pinout approval.
+    run._check_pinout_publication = lambda library, symbol, model_file: None
     run.spec = SpecSet("TEST", "TEST", "synthetic-doc", (), ())
     source = model_file(run.workdir, "TEST")
     source.parent.mkdir(parents=True, exist_ok=True)
@@ -64,6 +66,8 @@ def test_blocked_rerun_with_old_candidate_withdraws_all_old_deliverables(
     )
     monkeypatch.setattr(engine._Run, "read", lambda self: None)
     monkeypatch.setattr(engine._Run, "extract", lambda self, cancel: None)
+    # Isolate the selected refusal stage from package evidence for this synthetic part.
+    monkeypatch.setattr(engine._Run, "freeze_pinout", lambda self: None)
 
     def bind(self, cancel):
         self.spec, self.report = previous.spec, previous.report
@@ -147,7 +151,7 @@ def test_partial_publication_failure_withdraws_new_library_and_old_success(tmp_p
     run, _source = _run(tmp_path)
     _stale_outputs(run)
 
-    def failed(ports, lib_name):
+    def failed(ports, lib_name, **kwargs):
         raise OSError("synthetic symbol writer failure")
 
     monkeypatch.setattr(run, "_publish_symbol", failed)
