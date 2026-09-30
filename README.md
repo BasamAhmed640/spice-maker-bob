@@ -5,8 +5,78 @@ cards, and verification tests. It has no board checker, board/CAD import, or
 user-facing board findings report. Existing board-layer helpers are internal
 test code only; see [D-052](docs/DECISIONS.md).
 
-Source and checked-in installer version: **1.6.0**. Check `SHA256SUMS.txt`
-against the installer in the ZIP you download.
+Source and checked-in installer version: **1.6.0**. Install it with the
+[checked steps](#install-on-windows) below.
+
+## Install on Windows
+
+<!-- install-steps:start -->
+Windows shows a blue **Windows protected your PC** box when you start a program that came from
+the internet without a paid code-signing certificate. `Install.exe` is not signed, so starting it
+from an ordinary browser download shows that box. The steps below avoid the box without switching
+off any Windows protection: you download only from this GitHub repository, and you check
+`Install.exe` against the checksum published here before you run it. Microsoft Defender still
+scans the files.
+
+**Recommended: download with PowerShell.** Open **PowerShell** from the Start menu and run these
+lines one at a time. Files downloaded this way carry no "came from the internet" mark, so the box
+does not appear.
+
+1. Go to your Downloads folder. If a `spice-maker-bob-main` folder is already there from an earlier
+   install, rename it first (for example to `spice-maker-bob-old`) so old and new files do not mix.
+
+   ```powershell
+   cd ~\Downloads
+   ```
+
+2. Download this repository's ZIP. `--proto =https` refuses anything but HTTPS.
+
+   ```powershell
+   curl.exe --fail --location --proto =https -o spice-maker-bob.zip https://github.com/BasamAhmed640/spice-maker-bob/archive/refs/heads/main.zip
+   ```
+
+3. Extract it.
+
+   ```powershell
+   tar -xf spice-maker-bob.zip
+   ```
+
+4. Check the installer. It must print **OK**. If it prints **STOP**, delete `spice-maker-bob.zip` and the
+   `spice-maker-bob-main` folder and run nothing from them.
+
+   ```powershell
+   if ((Get-FileHash .\spice-maker-bob-main\Install.exe -Algorithm SHA256).Hash -eq '0b44f3b9976b66821f7654bdc066791dd69ee12ce5e4ce90a205b05b4509921b') { 'OK: Install.exe matches the published checksum' } else { 'STOP: Install.exe does not match the published checksum' }
+   ```
+
+5. Start the installer.
+
+   ```powershell
+   .\spice-maker-bob-main\Install.exe
+   ```
+
+**Or download with your browser.** Choose **Code → Download ZIP** on this page. Before you
+extract it, right-click the ZIP → **Properties** → tick **Unblock** → **OK**; do this only for the
+ZIP you downloaded from this page. Then right-click the ZIP → **Extract All**. Open the folder
+that contains `Install.exe`, right-click an empty spot → **Open in Terminal** (Windows 10:
+Shift + right-click → **Open PowerShell window here**), and run the check from step 4 with
+`.\Install.exe` in place of `.\spice-maker-bob-main\Install.exe`. Double-click `Install.exe` only after
+the check prints **OK**. If you forgot to unblock and the box appears, choose
+**More info → Run anyway** only after the check has printed **OK**.
+
+Keep it safe:
+
+- Download only from `https://github.com/BasamAhmed640/spice-maker-bob`. Never run a copy that someone
+  sends you or that comes from another site.
+- The checksum proves the file is the one published in this repository. It cannot prove who
+  built it, because `Install.exe` is not signed.
+- Do not turn off SmartScreen or Microsoft Defender, and do not change PowerShell's execution
+  policy. None of these steps needs that.
+- After installing, start the app from the **Spice Maker** shortcut or `Start.cmd` in the same
+  folder. The installer creates those files itself, so they carry no mark and do not show the box.
+
+Installer version **1.6.0**, built 2026-09-25. SHA-256 of `Install.exe`:
+`0b44f3b9976b66821f7654bdc066791dd69ee12ce5e4ce90a205b05b4509921b`, the same value as in `SHA256SUMS.txt`.
+<!-- install-steps:end -->
 
 ## Current source engine
 
@@ -65,8 +135,8 @@ measured template may still be delivered with its FAIL and UNKNOWN rows visible.
 Other device classes continue through Bob authoring. Template parameters are
 provenance, not verification; PASS still requires an observed simulator artifact.
 
-**This build is portable.** Extract the GitHub **Code > Download ZIP** archive and run
-**Install.exe** inside it. The animated installer puts the app in `app/` in that same
+**This build is portable.** Install it with the [checked steps](#install-on-windows).
+The animated installer puts the app in `app/` in that same
 folder. Open `Start.cmd` next time. First launch asks you to choose LTspice and a model
 folder inside this extracted folder, and enter your key. It never restores settings
 or keys from an older installation. [Storage and fresh-start instructions](docs/PORTABLE_STORAGE.md).
@@ -85,11 +155,12 @@ LM358 now has reviewed datasheet extraction and real dual-amplifier checks. See
 GO now shows a continuously updating **ELAPSED HH:MM:SS** clock, preserving the
 final duration. See [what the agents and simulator do](docs/AGENT_WORKFLOW.md).
 
-## Install on Windows
+## After installing
 
-On the **main** branch, choose **Code → Download ZIP**, extract the archive and run
-**Install.exe** beside this README. The checked-in 1.6.0 installer retains the animated
-pepper setup. INSTALL.txt contains instructions; SHA256SUMS.txt authenticates the installer.
+Install with the [checked steps](#install-on-windows) at the top of this page. The checked-in
+1.6.0 installer retains the animated pepper setup. INSTALL.txt contains instructions;
+SHA256SUMS.txt records the installer's checksum, which catches a damaged or altered download
+but cannot prove who built it.
 Python is bundled. LTspice and IBM Bob Shell are separate prerequisites. This build is unsigned.
 
 The installer carries CPython 3.14, hash-checked wheels and its generated
@@ -192,4 +263,6 @@ AI catalog or author transport ships in this repository.
 Rebuild with `installer/build.ps1 -Version 1.6.0`. The build checks the frozen GUI before
 packaging and refreshes Install.exe, INSTALL.txt and SHA256SUMS.txt at the repository
 root. These generated files must be committed for Code → Download ZIP to update.
+After a rebuild, put the new version and checksum into [Install on Windows](#install-on-windows);
+`tests/test_install_instructions.py` fails until they match.
 See [installer details](installer/README.md) and [current status](docs/STATUS.md).
