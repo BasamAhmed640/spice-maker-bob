@@ -1,10 +1,7 @@
 """Edition-scoped collection for this checkout; the shared test set starts under ``tests/``.
 
-Three *shared* test modules (copied verbatim from the main edition, which is their source
-of truth) assert facts that this edition's own contract contradicts. A shared file may not
-be forked in this checkout, so the scope is expressed here, in an edition-owned file, and
-every exclusion is conditional on the edition data that makes it true — each one cancels
-itself automatically if this build stops being Bob-only or the main file name comes back.
+Shared tests that assert provider catalog facts incompatible with this edition are scoped
+here. Each exclusion is conditional on the edition data that makes it true.
 
 1. ``tests/authoring/test_key_http.py`` verifies HTTP API keys for the providers the main
    edition ships (``opencode_go``, ``anthropic``, ``google``) and imports
@@ -16,14 +13,7 @@ itself automatically if this build stops being Bob-only or the main file name co
    ``not hasattr(api_backend, "_decoded_chat_stream")`` — and this module has no such
    guard, so it is not collected while this build has no HTTP provider to verify.
 
-2. ``tests/test_portable_storage.py`` asserts the credential file is ``data/credentials.json``.
-   This edition keeps ``data/credentials.bob.json`` for edition separation
-   (``security/credentials.py`` derives that name from ``build_flavor.BOB_ONLY``); the two
-   assertions that name the main file are skipped, with the reason shown in the report.
-   The module's other tests — config/profile isolation, relative paths, the write guard —
-   still run here.
-
-3. ``tests/authoring/test_reinforce.py`` has three assertions that name
+2. ``tests/authoring/test_reinforce.py`` has three assertions that name
    ``api-docs.deepseek.com`` as "this build's catalog documentation host". This build's
    catalog declares ``bob.ibm.com``, so those three are skipped by name; the allowlist
    behaviour itself is still covered by the module's provenance-based tests, which pass.
@@ -37,22 +27,9 @@ from __future__ import annotations
 import pytest
 
 from boardmodeler import agent_providers
-from boardmodeler.security import credentials
-
-#: The main edition's credential file name; this edition's differs (edition separation).
-_MAIN_CREDENTIAL_FILE = "credentials.json"
 
 #: The main edition's catalog documentation host, named by the three allowlist assertions.
 _MAIN_VENDOR_DOC_HOST = "api-docs.deepseek.com"
-
-#: Shared assertions that hard-code the main edition's credential file name.
-_MAIN_CREDENTIAL_TESTS = frozenset(
-    {
-        "tests/test_portable_storage.py"
-        "::test_profile_and_config_override_never_restore_old_settings",
-        "tests/test_portable_storage.py::test_saved_key_stays_in_this_copy_and_does_not_cross_copies",
-    }
-)
 
 #: Shared assertions that hard-code the main edition's catalog documentation host.
 _MAIN_VENDOR_HOST_TESTS = frozenset(
@@ -95,15 +72,6 @@ collect_ignore: list[str] = (
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Skip the shared assertions that state main-edition facts, naming the reason."""
     reasons: list[tuple[frozenset[str], str]] = []
-    if credentials.credential_path().name != _MAIN_CREDENTIAL_FILE:
-        reasons.append(
-            (
-                _MAIN_CREDENTIAL_TESTS,
-                "this edition stores its key as data/credentials.bob.json "
-                "(edition separation); the shared assertion names the main edition's "
-                f"data/{_MAIN_CREDENTIAL_FILE}",
-            )
-        )
     if _MAIN_VENDOR_DOC_HOST not in _catalog_hosts():
         reasons.append(
             (

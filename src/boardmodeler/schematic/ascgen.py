@@ -50,7 +50,7 @@ __all__ = [
 
 #: LTspice's placement grid.
 GRID = 16
-#: Default sheet size used by the GUI.
+#: Default sheet size for generated schematic fixtures.
 DEFAULT_SHEET: tuple[int, int] = (880, 680)
 #: Where directive text is placed when the spec does not say.
 _DIRECTIVE_ORIGIN = (32, 48)

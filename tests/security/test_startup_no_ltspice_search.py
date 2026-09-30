@@ -50,7 +50,7 @@ def _run_internal(root: Path, *mode: str) -> dict:
     return result
 
 
-def test_startup_doctor_settings_and_ui_import_never_touch_ltspice(tmp_path_factory) -> None:
+def test_startup_doctor_settings_and_terminal_import_never_touch_ltspice(tmp_path_factory) -> None:
     root = tmp_path_factory.mktemp("clean-root")
     assert "ltspice" not in str(root).lower()
     result = _run_internal(root, "startup-probe")
@@ -68,9 +68,10 @@ def test_startup_doctor_settings_and_ui_import_never_touch_ltspice(tmp_path_fact
     assert result["config_ltspice_path"] is None
     assert result["settings_ltspice_path"] is None
     assert result["locate_reason"] == "unset"
-    assert {"app", "model_maker", "setup_dialog"} <= set(result["ui_imported"])
-    assert result["ui_import_errors"] == {}
-    assert result["qt_application_created"] is False
+    assert {"boardmodeler.setup_wizard", "boardmodeler.terminal_menu"} <= set(
+        result["terminal_imported"]
+    )
+    assert result["terminal_import_errors"] == {}
     assert _tool().probe_verdict(result)[0]
 
 

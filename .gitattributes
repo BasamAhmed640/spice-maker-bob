@@ -2,6 +2,7 @@
 # generated .cir decks and the exported model libraries are all content-hashed by
 # the pipeline, so a CRLF-only difference must not change a hash.
 * text=auto eol=lf
+*.cmd text eol=crlf
 
 *.png binary
 *.pdf binary

@@ -1,16 +1,56 @@
 # Spice Maker Bob
 
-Spice Maker Bob creates LTspice `.lib` models, `.asy` symbols, cited model
-cards, and verification tests. It has no board checker, board/CAD import, or
-user-facing board findings report. Existing board-layer helpers are internal
-test code only; see [D-052](docs/DECISIONS.md).
+Spice Maker Bob turns a part number and datasheet PDF into an LTspice `.lib` model, `.asy` symbol, model card, and verification results. IBM Bob Shell proposes the model; LTspice runs the checks. A PASS applies only to a measured datasheet row at its recorded conditions. Unmeasured behavior stays UNKNOWN.
 
-Source and checked-in installer version: **1.6.0**. Check `SHA256SUMS.txt`
-against the installer in the ZIP you download.
+## Get started on Windows
+
+1. On GitHub, choose **Code → Download ZIP** and extract the whole ZIP to a folder you can edit.
+2. Double-click **Setup.cmd** in the extracted folder. Read its opening summary and answer its questions.
+3. Double-click **Start.cmd** for the text menu. **Boardmodeler.cmd** runs flag commands.
+
+Setup needs Windows 10 or 11 on x64 or ARM64. It looks for a real CPython 3.14 without running a `python` command from PATH. If none is found, it asks before downloading the pinned Python 3.14.7 installer from python.org, checking its SHA-256, and installing it for the current user without administrator rights or a PATH change. Declining stops setup. The installer and exact hashes are listed in [`tools/python-install-pins.txt`](tools/python-install-pins.txt).
+
+**IBM Bob is the only AI in this edition, in both the menu and the application source.** Bob is a CLI provider, so it declares no HTTP endpoint: an HTTP destination is refused for it rather than guessed. Bob extracts datasheet records when local evidence is unavailable. Model authoring,
+AI test planning and repair require the explicit legacy route or a planning opt-in. A model card records measured behavior and every uncovered requirement.
+
+**Full electrical verification is the default.** A quick structural draft is available only on the explicit legacy engine (`model build --engine legacy_ai --sanity`); its electrical accuracy remains unverified. Setup has one **Internet** setting for Bob and the part vendor's supporting-material site. With it off, the app refuses Bob runs and key checks before launching Bob Shell. [Modes and limitations](docs/QUICK_MODE.md).
+
+Setup creates `.venv` in this folder and downloads eight pinned Python packages from PyPI. It checks every package hash before installation, installs wheels only, and honors `HTTPS_PROXY`. It does not download LTspice, IBM Bob Shell, a datasheet, or a vendor model. Install [IBM Bob Shell](https://bob.ibm.com/docs/shell/getting-started/install-and-setup) separately and open it once to review and accept IBM's license. Setup asks you to paste the path to an existing LTspice executable, runs a real smoke test, asks for a model folder inside this copy, and saves the Internet setting and your Bob API key. Bob Shell is the only provider in this edition, so the key prompt says **BOB API KEY**. The key prompt is hidden. The key is a plain local file at `data/credentials.bob.json`: anyone who can read this folder can read it. Keep the folder private, and do not share `data/`.
+
+Setup offers an optional **Spice Maker** Desktop shortcut that runs `Start.cmd`. It asks before creating it. Re-running setup refreshes it; `Setup.cmd --remove` removes it. The shortcut is optional, so a locked-down Desktop does not prevent the app from working.
+
+Windows may show a security prompt when you launch a script extracted from a downloaded ZIP. Check the source and contents of `Setup.cmd` before choosing to run it. If setup stops, its window stays open and prints what to fix. Use a short, writable extraction path; all app-owned data remains inside it.
+
+To uninstall, run `Setup.cmd --remove` if you created the shortcut, then delete the extracted folder. If Setup installed Python for you, remove **Python 3.14** separately in **Windows Settings → Installed apps**. Deleting this copy does not uninstall LTspice or Bob Shell.
+
+| Platform | Support | Observed verification |
+| --- | --- | --- |
+| Windows 11 x64 | Targeted | Full source ZIP setup, eight pinned packages, launchers, shortcut, and LTspice smoke check on the developer machine. The pinned x64 Python installer also passed on a fresh Windows GitHub Actions runner. |
+| Windows 11 ARM64 | Targeted | The pinned ARM64 Python installer passed on a fresh GitHub Actions runner; full source ZIP setup was not tested there. |
+
+Windows 10 x64/ARM64 are setup targets but were not tested in this change. See [`docs/STATUS.md`](docs/STATUS.md) for exact results and limits.
+
+## Make and revisit a model
+
+`Start.cmd` opens a menu to build a model, open or re-test a saved model, change settings, or check setup. A datasheet can be dragged into the prompt; quoted paths are accepted. You can also use the flag interface:
+
+```text
+Boardmodeler.cmd doctor --json
+Boardmodeler.cmd setup --json
+Boardmodeler.cmd model build --part TPS54332DDA --datasheet C:\path\to\sheet.pdf --out models\TPS54332DDA
+Boardmodeler.cmd model open --out models\TPS54332DDA --json
+Boardmodeler.cmd model test --out models\TPS54332DDA --json
+```
+
+Full electrical verification is the default. `model build --engine legacy_ai --sanity` requests a quick structural draft (the code-built engines need full verification); its electrical accuracy remains unverified. A missing LTspice path, Bob Shell, Bob key, or network permission blocks a build with its reason. No provider is substituted silently. Setup never searches this PC for LTspice; you provide its path.
+
+Bob Shell receives its prompt through stdin with tool groups disabled. The application writes Bob's candidate and runs LTspice itself; Bob's reply cannot mark a model verified. With Internet access off, the app refuses Bob runs and key checks before launching Bob Shell. It has no telemetry. LTspice receives an allowlisted child environment without the Bob API key. The app writes its own files inside the extracted folder, never into the LTspice installation or library.
+
+For the exact storage paths and key tradeoff, see [`docs/PORTABLE_STORAGE.md`](docs/PORTABLE_STORAGE.md). For model coverage and limits, see [`docs/FAST_ACCURATE_MODELS.md`](docs/FAST_ACCURATE_MODELS.md).
 
 ## Current source engine
 
-New builds in the window, CLI and API default to **Code-built behavioral** with full LTspice
+New builds in the text menu, CLI and API default to **Code-built behavioral** with full LTspice
 verification. AI extraction is the only default AI stage and can be skipped for matching cached,
 supplied or exact reviewed evidence. Local code binds independent tests, builds a typed design from
 cited inputs and renders SPICE. It does not invoke an AI author, planner or repair loop by default.
@@ -46,150 +86,20 @@ unverified in the new run and cannot supply a qualified test reference.
 
 **Safety update:** SETUP requires you to choose an LTspice executable with **BROWSE** and save it. The app does not search installed programs or adopt an inherited `LTSPICE_EXE`. Bob Shell receives the complete prompt through stdin with its read, edit, execute, MCP, skill, todo, subagent and mode tools disabled. The application writes Bob's model text and runs LTspice itself; a Bob reply cannot mark a model verified.
 
-The root `AGENTS.md` and `.bob/rules/` files guide work when this repository is opened as an IBM Bob project. Embedded model authoring uses a generated scratch workspace with the same tool restrictions; it does not load repository rules or hooks. The application supplies the model requirements and safety limits in the prompt.
+## Setup options
 
-**IBM Bob is the only AI in this edition, in both the UI and the application source.** Bob is a CLI provider, so it declares no HTTP endpoint: an HTTP destination is refused for it rather than guessed. Bob extracts datasheet records when local evidence is unavailable. Model authoring,
-AI test planning and repair require the explicit legacy route or a planning opt-in. A model card records measured behavior and every uncovered requirement.
-
-**Full electrical verification is the default.** Its checkbox is beside **GO** in
-the build window. It can be unchecked only on **AI authored (legacy)** for a quick structural
-draft whose electrical accuracy remains unverified. SETUP has one **INTERNET ACCESS** checkbox for Bob
-and the part vendor's supporting-material site. With it off, the app refuses
-Bob runs and key checks before launching Bob Shell. [Modes and limitations](docs/QUICK_MODE.md).
-
-**Installer 1.6.0 history: template-first buck models.** For a supported buck-converter pinout,
-the app fills a known-convergent template from cited datasheet rows, labels any
-template defaults and judges the candidate with LTspice. Bob receives measured
-failures for bounded repair. If repair cannot improve the model, the simulator-
-measured template may still be delivered with its FAIL and UNKNOWN rows visible.
-Other device classes continue through Bob authoring. Template parameters are
-provenance, not verification; PASS still requires an observed simulator artifact.
-
-**This build is portable.** Extract the GitHub **Code > Download ZIP** archive and run
-**Install.exe** inside it. The animated installer puts the app in `app/` in that same
-folder. Open `Start.cmd` next time. First launch asks you to choose LTspice and a model
-folder inside this extracted folder, and enter your key. It never restores settings
-or keys from an older installation. [Storage and fresh-start instructions](docs/PORTABLE_STORAGE.md).
-
-
-**SAVE & CHECK KEY** now verifies a newly saved key in the background, with a 15-second wait and clear verified/rejected/unverified results. [Credential safety and check details](docs/API_KEY_CHECK.md).
-
-Datasheet extraction and model verification now recover smaller requests, preserve failed-run feedback, and report untested numeric requirements honestly. See [coverage and reliability](docs/DATASHEET_ROBUSTNESS.md).
-
-IC symbols now use a consistent local layout with verified model pin order. See
-[standard symbols](docs/STANDARD_SYMBOLS.md).
-
-LM358 now has reviewed datasheet extraction and real dual-amplifier checks. See
-[measured coverage and limitations](docs/LM358_VALIDATION.md).
-
-GO now shows a continuously updating **ELAPSED HH:MM:SS** clock, preserving the
-final duration. See [what the agents and simulator do](docs/AGENT_WORKFLOW.md).
-
-## Install on Windows
-
-On the **main** branch, choose **Code → Download ZIP**, extract the archive and run
-**Install.exe** beside this README. The checked-in 1.6.0 installer retains the animated
-pepper setup. INSTALL.txt contains instructions; SHA256SUMS.txt authenticates the installer.
-Python is bundled. LTspice and IBM Bob Shell are separate prerequisites. This build is unsigned.
-
-The installer carries CPython 3.14, hash-checked wheels and its generated
-`env/requirements.txt`. It creates this extracted folder's `.venv` from those pins
-without downloading packages during installation or using the computer's Python.
-`Boardmodeler.cmd` uses that environment for command-line work; `Start.cmd` opens
-the separately frozen GUI, because the `.venv` does not include Qt.
-
-A fresh ZIP downloaded from GitHub main was installed and checked on Windows:
-the frozen GUI opened, the installer created its local Python 3.14.2 `.venv`,
-the selected LTspice path worked, and a saved model passed 8/8 simulator retests.
-The fixture-based build still had 21 UNKNOWN requirements, so these checks do
-not establish full device accuracy. [Release evidence](docs/evidence/2026-09-25-release/REPORT.md).
-
-Open IBM Bob Shell once to review and accept IBM's license. Then open SETUP, use
-**BROWSE** to choose the LTspice executable, run its smoke test and save a Bob API key.
-Bob Shell uses an Inference-scoped key through the process environment; the key is kept in
-`data/credentials.bob.json` inside this folder — plain text, **not encrypted**, so anyone who
-can read the folder can read the key — and is never passed on the command line. See the
-[Bob Shell setup documentation](https://bob.ibm.com/docs/shell/getting-started/install-and-setup).
-No interactive account login is required by this app.
-
-**What is and is not a sandbox.** The project `.venv` isolates Python packages only, and
-`.bobignore` only hides files from Bob's context. Neither is an OS sandbox: neither restricts
-filesystem, network or process access by this app, LTspice or the model provider. What does
-contain this app: LTspice runs only from the path you choose in SETUP (nothing searches for
-it); the simulator gets an allowlisted environment, so no API key reaches it; Bob Shell runs
-with every tool group disabled (no Bash, no file tools) and only returns model text; and only
-the application writes files (decks and the candidate model). The key file,
-`data/credentials.bob.json`, is plain text inside this folder. The optional `sim` extra (`spicelib`, not in `requirements.txt`) checks LTspice's default
-install locations when it is imported; the app imports it only after an LTspice path is set.
-
-If existing settings are incompatible, click **USE IBM BOB** and **SAVE** in SETUP.
-The app refuses incompatible settings until that explicit choice; it never silently
-substitutes an agent or displays the incompatible agent's name.
-
-## Make and test a model
-
-Enter the exact part number, select its PDF and a save folder, then press **GO**.
-The default engine builds supported behavioral implementations in code. Bob may be needed for
-extraction, while exact reviewed or cached evidence can allow a build with no Bob calls. AI model
-authoring and repair run only after selecting **AI authored (legacy)**. When an AI stage runs,
-the app sends its relevant text through Bob Shell with all tool groups disabled. SETUP holds the persistent
-model folder and the one **INTERNET ACCESS** switch; **FULL VERIFICATION** is beside
-GO for each build. CANCEL requests cancellation;
-results provide Open model folder, Run tests again and Install into LTspice actions.
-Bob controls model selection and reasoning. This application does not invent a maximum
-thinking flag that Bob Shell has not documented.
-
-For command-line reverification, `model test --out <saved model folder>` reloads
-the saved model and reruns its checks. Version 1.6.0 has no `model open` CLI
-command; the result window has **Open model folder** and **Run tests again**.
-
-The extraction prompt includes the exact requested part. The same family PDF's cached
-rows cannot be silently reused for a different part suffix. A repeated PDF can grant or
-revoke remote permission without changing its content identity. Invalid extraction JSON
-gets bounded repair; failures identify the parse location with secrets redacted before
-any diagnostic excerpt is shortened.
-
-The frozen specification owns limits, citations and conditions. On the default route, local code
-writes the candidate. On the explicit legacy route, Bob proposes model text; only the application
-writes it. Legacy repairs receive the current model and observed results, retain the best candidate
-and stop at the iteration/stall limit. Revalidation checks the current bytes against simulator evidence.
-
-## What is actually validated
-
-There are 11 regulator/supply probes and 9 electrical I/O probes. Each PASS needs an
-observed LTspice artifact and the cited operating conditions. Different supply, load,
-temperature or timing conditions remain separate. Missing signals, unverified citations,
-unsupported behavior and incomplete runs cannot become PASS.
-
-The TPS54320 fixture has 38 rows: 9 bind to 8 regulator probes and 29 remain explicitly
-untested. Fixture success establishes the harness, not every real device. Acceptance by
-the broad analogue classifier does not establish op-amp gain, offset, bandwidth or slew
-coverage. No complete LM358 qualification is claimed. Full temperature/statistical
-behavior needs its own modeled dependence and evidence.
-
-Vendor IBIS/AMI/Touchstone sources can be imported with provenance. These reduced probes
-do not qualify high-speed channel, eye, BER or protocol behavior; compatible external
-validation is required. See [coverage and limitations](docs/FAST_ACCURATE_MODELS.md).
+`Setup.cmd --yes` uses saved answers, and `--no-install-python` refuses a Python download. Pass `--ltspice`, `--model-dir`, `--provider bob`, `--internet on|off`, `--shortcut yes|no`, and `--shortcut-dir` for scripted setup. `--key-env NAME` names an environment variable containing the Bob API key; the key value itself never belongs on a command line. `Setup.cmd --remove` removes the shortcut made by this copy.
 
 ## Development
 
+Source development requires Python 3.14. The user setup requires only the tools that ship with Windows.
+
 ```powershell
 py -3.14 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m boardmodeler.cli doctor --json
-.\.venv\Scripts\python.exe -m boardmodeler.cli ui
+.\.venv\Scripts\python.exe -m pip install --require-hashes --only-binary=:all: -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\ruff.exe check .
 ```
 
-The `.venv` is inside this project and `requirements.txt` pins the runtime
-dependencies. This source setup requires Python 3.14 already installed; the rebuilt
-`Install.exe` bundles Python for users who do not have it. For development tests,
-install `requirements-dev.txt` into the same `.venv` and run pytest there.
-
-`--backend api` is a compatibility alias for the Bob API-key adapter in this edition.
-The fixture/scripted backends remain clearly labeled deterministic test tools. No other
-AI catalog or author transport ships in this repository.
-
-Rebuild with `installer/build.ps1 -Version 1.6.0`. The build checks the frozen GUI before
-packaging and refreshes Install.exe, INSTALL.txt and SHA256SUMS.txt at the repository
-root. These generated files must be committed for Code → Download ZIP to update.
-See [installer details](installer/README.md) and [current status](docs/STATUS.md).
+`uv.lock` is the developer lock. `requirements.txt` is its hash-bearing runtime export and has no editable project install. The launchers put `src` on `PYTHONPATH` instead. [`AGENTS.md`](AGENTS.md) contains the repository rules. `pyproject.toml` currently declares **Proprietary**; the owner has not chosen publication license terms yet.

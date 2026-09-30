@@ -1,5 +1,5 @@
 * tps54320_vendor_ltspice current limit probe
-.include C:\Users\basam\AppData\Local\Temp\scholar-packaged-tests-bcQABY\fixtures\regulator\tps54320\adapted\TPS54320_TRANS_ltspice.lib
+.include "../../../adapted/TPS54320_TRANS_ltspice.lib"
 .options method=gear
 .options trtol=10
 V1 n_vin 0 PWL(0 0 0.0002 12 0.0044 12)

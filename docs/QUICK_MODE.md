@@ -1,12 +1,12 @@
 # Full verification and optional quick structural checks
 
 New builds default to **Code-built behavioral** and full LTspice verification. The behavioral
-and pin-only engines require full verification; the window keeps **FULL VERIFICATION** selected
+and pin-only engines require full verification; the text menu and `model build` keep full verification
 for both. AI extraction may still be needed, but the default engine does not ask AI to author,
 plan tests or repair a model.
 
-For a quick structural draft, explicitly choose **AI authored (legacy)** and uncheck
-**FULL VERIFICATION** beside GO. That choice is remembered for legacy builds. Quick mode reads
+For a quick structural draft, choose the legacy engine explicitly and add `--sanity`
+(`model build --engine legacy_ai --sanity`). Quick mode reads
 the datasheet, extracts and validates its records and physical pin map, then asks the selected
 provider for a model. It skips AI test planning, supplemental web search and the full electrical
 suite. The same blocked-class and source/package safety gates still apply.
@@ -27,9 +27,7 @@ A model the simulator rejects outright is not published. An unpowered load measu
 behavior and does not establish powered convergence, accuracy, timing, stability or temperature
 performance. The example still needs appropriate supplies, inputs, loads and an analysis.
 
-**Run full verification** reuses extraction caches and starts full verification on that saved
-legacy route. AI can plan circuits and repair the candidate against frozen requirements there;
-only observed simulator measurements can earn PASS. It can take substantial time.
+Run `model test --out DIR` to re-test a saved draft with the configured LTspice executable. It reuses extraction caches, plans independent measurement circuits, runs real LTspice and may repair a model against the frozen requirements. Only observed simulator measurements can produce PASS. This workflow can take substantial time.
 
 CLI example:
 

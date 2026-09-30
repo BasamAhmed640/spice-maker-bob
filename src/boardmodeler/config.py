@@ -2,7 +2,7 @@
 
 Precedence, highest first:
 
-1. explicit constructor argument (CLI switch, GUI field)
+1. explicit constructor argument or command flag
 2. ``BOARDMODELER_CONFIG`` (path to the config file itself)
 3. the config file
 4. built-in defaults

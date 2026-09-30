@@ -7,50 +7,6 @@ interfaces or release gates. The retained code may support internal model
 test fixtures. Current model-only milestones are in
 [`SYSTEM_MODELS_PLAN.md`](SYSTEM_MODELS_PLAN.md).
 
-## Current model engine contract
-
-`pipeline/make_model.py` is the current model-generation pipeline. New `MakeModelRequest`
-instances default to `engine="behavioral"`, `verification="full"` and `plan_tests=False`.
-The text menu and the CLI use the same defaults. Code-built routes require the source PDF even when
-requirements and bindings are supplied; citations and source/package gates still apply.
-Historical saved requests with no engine field decode as `legacy_ai`.
-
-AI extraction is the only default AI stage. Supplied or matching cached/reviewed evidence can
-avoid it. Local code binds validated independent fixtures, freezes the source/spec and buck
-qualification plan, selects a supported implementation, renders SPICE and runs LTspice.
-Unsupported behavioral parts stop with BLOCKED and a support decision. They never fall back.
-
-Citation replay is fail-closed: this run's page checks replace `citation_verified` on DOCUMENT
-rows before new requirements or qualification sources are frozen. Missing source text, failed
-matches and missing verifier results clear stale true flags. Non-document origins are unchanged;
-historical input artifacts are not edited. An affected qualification check remains a gap.
-
-`legacy_ai` explicitly enables the author/planner/repair path. `--plan-tests` is a separate
-opt-in to extra AI planning on a local route. `pin_only` explicitly builds a limited interface
-with no device function; its one-supply/one-ground shell refuses a second required supply.
-Both code-built routes require full verification; `--sanity` requires `legacy_ai`.
-MCU/FPGA/CPLD/processor/SoC identity is blocked on every route regardless of family hints.
-
-The delivered library must match the ordinary harness report's model hash and frozen spec
-digest. `model-design.json` records delivered library/symbol hashes, pin order and whether the
-typed design still describes those bytes exactly. Supplemental buck qualification judges that
-same delivered file against the prior frozen plan. Its four default nominal tests leave twelve
-mandatory UNKNOWN gaps and cannot qualify the whole family. Old app-owned deliverables on a
-reused output directory are archived under `build/publication-history/` before new publication
-or refusal. `run-timing.json` records stage durations and observable provider calls.
-
-M6 remains open: package selection, generated symbol numbers and discrete pin order need a
-source-backed confirmation gate before publication. Current hashes, pin-order records and the
-TPS54331 unresolved-package refusal are narrower checks.
-Resumed buck/op-amp designs are reconstructed and rendered before retaining an exact association.
-Schema/type, design/library hashes, part, subcircuit and frozen spec must match; an edited payload
-cannot keep an exact claim merely because library bytes are unchanged. Invalid provenance supplies
-no exact design hash to qualification. Supplemental BLOCKED is publicly BLOCKED with its refusal
-reason; fixed FAIL stays FAIL, while fixed UNKNOWN downgrades an ordinary PASS.
-
-The older pipeline/controller and board contracts below are retained historical interfaces;
-they do not replace this model engine contract.
-
 ## 1. Pipeline controller (`pipeline/controller.py`)
 
 ```python
@@ -136,13 +92,30 @@ Rules the controller must enforce (each must have a test):
 * Only `reporting/export.py` computes approval/qualification receipts — the model
   generation code never writes one.
 
-## 2. Model-making path
+## 2. Worker protocol (`pipeline/worker.py`)
 
-The public text menu and flag commands both call `pipeline/make_model.py`. Its
-progress callback reports stages while the same engine writes candidates and
-LTspice judges them. Results and row counts come from that engine. The old child
-process transport is archived in
-[`docs/evidence/2026-09-28-terminal/history/INTERFACES-before-terminal.md`](evidence/2026-09-28-terminal/history/INTERFACES-before-terminal.md).
+* Invocation: `python -m boardmodeler.pipeline.worker --request <request.json>
+  --project <dir>`.
+* stdout carries **one JSON object per line**, nothing else. Diagnostics go to
+  stderr.
+* Event shapes (`event` field is mandatory):
+
+```jsonc
+{"event": "stage",    "stage": "COMPILE_SIMULATE", "status": "PASS", "detail": "...", "elapsed_s": 1.2}
+{"event": "progress", "stage": "EVALUATE", "done": 3, "total": 9, "detail": "..."}
+{"event": "findings", "findings": [ /* Finding dicts */ ]}
+{"event": "review",   "items":    [ /* ReviewItem dicts */ ]}
+{"event": "waveform", "ref": "runs/<id>/probe.raw", "signals": ["V(VOUT)"], "violations": [{"req_id": "...", "t_s": 0.0012}]}
+{"event": "result",   "status": "FAIL", "summary": {"PASS": 4, "FAIL": 1}, "results": [ /* TestResult dicts */ ]}
+{"event": "error",    "code": "project_not_found", "detail": "..."}
+```
+
+* The worker exits 0 for any completed run (statuses are data) and non-zero only
+  when the request itself could not be served.
+* Cancellation: the parent terminates the child's **process tree**; the worker
+  also honours SIGINT/SIGTERM by writing `{"event":"error","code":"cancelled"}`
+  and exiting 130.
+* The GUI never computes a verdict; it renders what the worker emits.
 
 ## 3. Schematic layer (`schematic/`)
 
@@ -270,52 +243,51 @@ def mutate_project(project_dir: Path, fault_id: str, out_dir: Path) -> Mutation
 def fault_ids() -> tuple[str, ...]
 ```
 
-## 4. Text menu and setup
+## 4. GUI (`ui/`) and the model maker
 
-`boardmodeler` with no arguments opens `terminal_menu.run_menu()`. The menu builds a
-model from a part number and PDF, opens or re-tests a saved model, runs the setup
-wizard, checks setup with doctor, or quits. A build calls `make_model(request,
-progress=...)`; the engine and its result records are shared with flag commands.
+* `ui/app.py`: `def main(argv: Sequence[str] | None = None) -> int` — QApplication
+  entry point; `--installer` opens the setup page and `--board-ui` the dormant board
+  window instead of the model maker.
+* `ui/model_maker.py`: `class ModelMakerWindow(QMainWindow)` — the build surface:
+  `part_edit`, `datasheet_edit`, `out_edit`, `go_button`, `cancel_button`, a stage
+  table and a datasheet-row table, with `SETUP` and `CHECK ENVIRONMENT` buttons. Fixed
+  900×600; all control styling comes from `ui/theme.py`'s `RETRO_STYLESHEET`.
+* `ui/setup_dialog.py`: `class SetupDialog(QDialog)` — the one page of persistent
+  settings (LTspice path + smoke test, the agent provider and its API key, the model id when
+  the provider takes one, model folder, the read-only LTspice user library, web reinforcement),
+  sized to its content. `describe_settings(config)`
+  returns those settings as data for `boardmodeler setup --json`, and `main(argv)` is
+  the `boardmodeler setup` entry point. Reached from the SETUP button, `boardmodeler
+  setup`, or `boardmodeler ui --installer`.
+* `ui/theme.py`: `CGA` palette and `RETRO_STYLESHEET` (controls only); a window adds
+  window-scoped rules and must scope its background by object name.
+* `ui/main_window.py`, `ui/worker_client.py`, `ui/waveforms.py`, `ui/results_panel.py`,
+  `ui/review_panel.py`, `ui/settings.py` belong to the dormant earlier board spec.
+* Tests run with `QT_QPA_PLATFORM=offscreen` and are marked `gui`.
 
-`Setup.cmd` discovers CPython 3.14, then starts `tools/bootstrap.py`. The bootstrap
-creates `.venv`, installs the eight hash-pinned runtime wheels, calls
-`setup_wizard.main()`, runs doctor and optionally creates a Desktop shortcut.
-`Start.cmd` and `Boardmodeler.cmd` derive the root from their own folder and set
-`SPICE_MAKER_ROOT` and `PYTHONPATH`.
+## 5. CLI surface (final)
 
-## 5. Public flag commands
-
-```text
+```
 boardmodeler version [--json]
 boardmodeler doctor [--json] [--no-smoke] [--smoke-workdir DIR]
-boardmodeler setup [--json] [--ltspice EXE] [--model-dir DIR] [--provider ID]
-    [--internet on|off] [--key-env NAME] [--yes]
-boardmodeler model build --part PN --out DIR --datasheet PDF
-    [--requirements F --bindings F] [--subckt NAME]
-    [--backend api|bob|scripted|fixture] [--provider ID] [--model ID] [--max-tokens N]
+boardmodeler setup [--json]                      # one page of persistent settings
+boardmodeler ui [--project DIR] [--installer]    # model maker (--installer: setup page)
+boardmodeler model build --part PN --out DIR [--datasheet PDF | --requirements F --bindings F]
+    [--subckt NAME] [--backend bob|scripted|fixture] [--provider ID] [--team-id ID]
     [--allow-remote] [--no-reinforce] [--iterations N]
-    [--engine behavioral|legacy_ai|pin_only] [--family ID] [--plan-tests]
-    [--sanity] [--timeout S] [--json] [--strict]
-boardmodeler model import --file F --part PN --source-url URL --license-note TEXT --out DIR [--json]
+    [--timeout S] [--json] [--strict]           # bob: the Bob CLI; scripted: the bundled template
 boardmodeler model test --out DIR [--timeout S] [--json] [--strict]
 boardmodeler model install --out DIR [--into DIR | --user-lib] [--apply] [--json]
-boardmodeler run tests --project DIR [--scope S] [--test ID] [--list-tests] [--json]
+boardmodeler run tests --project DIR [--scope S] [--test ID] [--list-tests] [--json] [--out F]
+                                     [--timeout S] [--ltspice EXE] [--ascii-raw] [--strict]
+boardmodeler demo build --out DIR [--json] [--no-probe]
+boardmodeler circuit check --project DIR [--circuit FILE] [--scope S] [--fault-matrix]
+                           [--json] [--out F] [--report F] [--strict]
+boardmodeler run mutations --project DIR --report F [--fault ID] [--json]
 boardmodeler export --project DIR --out DIR [--json] [--model ID]
 boardmodeler extract --project DIR [--doc FILE] [--provider NAME] [--allow-remote] [--json]
 boardmodeler --self-test [--json]
 ```
 
-The default engine is `behavioral`. `--backend` chooses an extraction/legacy provider; it does
-not change the engine or authorize fallback. In this edition `api` is a compatibility alias for the Bob API-key adapter; `--team-id` is also available.
-`--family` provides a classification hint, never support or permission to bypass a blocked class.
-`--plan-tests` is off by default on local routes; full legacy builds already use AI planning.
-`--sanity` requires the explicit legacy engine. All routes keep unsupported rows visible.
-
-Requirements/bindings alone remain a legacy compatibility input; code-built routes require
-`--datasheet` as well. The old board/demo/circuit commands are not public product workflows.
-
-Exit codes: `0` for success or a completed run whose results are data; `1` when the request
-could not be served or `--strict` saw a non-PASS; `2` for usage errors.
-
-The Bob edition retains its own accepted backend and provider. Use each edition's
-`--help` as the source of exact optional flags.
+Exit codes: `0` success or a completed run whose results are data; `1` when the
+request could not be served or `--strict` saw a non-PASS; `2` usage error.
