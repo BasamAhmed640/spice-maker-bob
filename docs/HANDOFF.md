@@ -10,9 +10,9 @@ Current reviewed implementations are UCC28251PW/PWR primary-side PWM, TPS54332DD
 
 Version 1.8.0 preserves the compact retro desktop and timer, per-part save folders and detailed diagnostics. Saved full retests test existing bytes off-thread, preserve UNKNOWN/scope/citation state, refresh exact provenance from canonical source values and archive older receipts. Installers validate current wheel/desktop/source identity; stale environments upgrade from checked local wheels with staging/rollback and preserve user files.
 
-The software, fault controls, actual previous-version upgrades and installed default routes pass their scoped checks. 
+The software, fault controls, actual previous-version upgrades and installed default routes pass their scoped checks.
 
-Both 1.8.0 public releases are published and fresh-download/install verified. The owner's saved PW model and unchanged-file retest both retain 15 PASS / 0 FAIL / 21 UNKNOWN / 8 N/A, zero AI calls and exact provenance. Identified old downloads are archived without deletion. The current app starts at Downloads/SpiceMaker-1.8.0/Start.cmd; final receipts are in the release report. 
+Both 1.8.0 public releases are published and fresh-download/install verified. The owner's saved PW model and unchanged-file retest both retain 15 PASS / 0 FAIL / 21 UNKNOWN / 8 N/A, zero AI calls and exact provenance. Identified old downloads are archived without deletion. The current app starts at Downloads/SpiceMaker-1.8.0/Start.cmd; final receipts are in the release report.
 
 Both repositories use main; desktop remains in place and terminal-app remains separate.
 
