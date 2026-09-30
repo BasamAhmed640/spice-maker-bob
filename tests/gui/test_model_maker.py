@@ -206,7 +206,7 @@ def test_unknown_template_fallback_finishes_author_and_judge_stages(qtbot, tmp_p
     assert stages["author"] == ("UNKNOWN", fallback)
     assert stages["judge"] == ("UNKNOWN", fallback)
     assert all(state != "running" for state, _ in stages.values())
-    assert window.status_label.text().startswith("UNKNOWN")
+    assert window.status_label.text().startswith("Model saved — UNKNOWN (limited coverage)")
 
 
 def test_a_blocked_run_still_reports_something_useful(qtbot, tmp_path, monkeypatch) -> None:

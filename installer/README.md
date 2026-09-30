@@ -1,11 +1,12 @@
-# Animated portable installer
+# Portable desktop installer
 
-Run `uv sync --frozen --all-extras`, then `installer/build.ps1 -Version 1.4.0`.
+Run `uv sync --frozen --all-extras`, then `installer/build.ps1 -Version 1.8.0`.
 The build vendors the in-folder Python environment (`vendor_env.py`, the only step that
 uses a package index), freezes the GUI, launches it to verify startup, then compiles
 `PortableInstaller.cs` using the .NET Framework compiler included with Windows.
-The executable embeds three payloads: the frozen application, the vendored environment
-and the animated pepper GIF. No updater service, AppData installation or registry
+The executable embeds the frozen application and the vendored environment.
+The compact setup window shows progress and elapsed time.
+No updater service, AppData installation or registry
 registration is created.
 
 ## What setup writes, and where
@@ -18,7 +19,7 @@ Everything is inside the folder that holds `Install.exe`:
 | `env/python/` | the vendored CPython runtime, so the target machine needs no Python |
 | `env/wheels/` | the pinned wheel set and `wheels.sha256`, verified before installation |
 | `env/requirements.txt` | the exact pins pip installs, including `boardmodeler` itself |
-| `.venv/` | this copy's own environment, created once from `env/` and then kept |
+| `.venv/` | this copy's own environment; stale packages are upgraded from checked local wheels |
 | `Start.cmd` | starts this copy's app; uses `%~dp0`, so it survives a folder move |
 | `Boardmodeler.cmd` | runs this copy's command line from `.venv` |
 | `Spice Maker.lnk` | folder-local shortcut to `Start.cmd` |
@@ -26,8 +27,10 @@ Everything is inside the folder that holds `Install.exe`:
 | `.venv-setup-error.txt` | written only if the environment could not be created |
 | `data/`, `models/`, `library/` | the app's own storage, untouched by setup |
 
-Staging and rollback folders also stay beside it. Existing `data/`, `models/` and `.venv/`
-are preserved on update. An edition marker prevents installing the other edition into the
+Staging and rollback folders also stay beside it. Existing `data/` and `models/` are preserved.
+A matching `.venv` is unchanged; a stale version or engine fingerprint upgrades its packages
+with staging, validation and rollback while retaining its interpreter and configuration.
+An edition marker prevents installing the other edition into the
 same root. `Install.exe --silent --no-launch` supports verification without opening the app.
 
 ## The environment: offline, and why it has no Qt
@@ -77,7 +80,8 @@ python installer/verify_portable.py   # install/update/two-copy/fresh-copy verif
 `verify_portable.py` installs two copies concurrently, checks each one's interpreter, base
 prefix, configuration path, launchers and shortcut, asserts the first copy is byte-identical
 after the second is installed, and asserts that no AppData, Start Menu, desktop or registry
-entry was created.
+entry was created. It compares the installed wheel and frozen executable's engine fingerprints
+with the actual source, so the same version number cannot hide an old engine.
 
 **Smart App Control:** on a machine with Smart App Control enabled, a *freshly built*
 unsigned `Install.exe` is blocked when launched (`WinError 4551`, CodeIntegrity events

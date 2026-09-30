@@ -111,7 +111,7 @@ def test_registry_has_the_required_probes() -> None:
             assert spec.renderer is None and spec.measurer is None
             continue
         assert spec.title and spec.question
-        assert spec.unit in {"V", "A", "s", "ohm", "F", "Hz", "V/V", "V/s"}
+        assert spec.unit in {"V", "A", "s", "ohm", "F", "Hz", "V/V", "V/s", "ratio"}
         assert spec.ports_needed
         assert spec.renderer is not None and spec.measurer is not None
         assert spec.judge_key

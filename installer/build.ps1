@@ -1,5 +1,5 @@
 <#
-Build the frozen app and animated portable installer. Requires uv sync --all-extras
+Build the frozen app and portable installer. Requires uv sync --all-extras
 and the .NET Framework compiler included in Windows. Installs only beside Install.exe.
 #>
 param(
@@ -31,7 +31,7 @@ function Invoke-Step([string] $what, [scriptblock] $cmd) {
 
 Push-Location $repo
 try {
-    Invoke-Step "Render splash and icon" {
+    Invoke-Step "Render application icon" {
         & $python "$PSScriptRoot\render_assets.py" --name $Name --version $Version --out $assets
     }
 
@@ -53,7 +53,7 @@ try {
             --screenshot "build\gui-startup.png"
     }
 
-    Invoke-Step "Package the folder-local animated installer" {
+    Invoke-Step "Package the folder-local installer" {
         & $python "$PSScriptRoot\package_portable.py"
     }
     Invoke-Step "Verify portable install, update and fresh-copy behavior" {
@@ -61,14 +61,15 @@ try {
     }
     New-Item -ItemType Directory -Force -Path releases | Out-Null
     Copy-Item "$repo/Install.exe" "releases/Setup.exe" -Force
-    # The download zip contains the original animated installer, unchanged.
+    # Keep the application download separate from the developer source archive.
     $bundle = Join-Path $repo "build/download-$PackId"
     New-Item -ItemType Directory -Force -Path $bundle | Out-Null
     Copy-Item "$repo/Install.exe" "$bundle/Install.exe" -Force
     @"
 $Name $Version for Windows x64
 
-Extract this zip, then double-click Install.exe. The pepper animation plays during setup.
+Extract this zip into its own folder, check SHA256SUMS.txt, then start Install.exe.
+Setup shows a simple progress bar and elapsed timer.
 Setup unpacks the application into app/ and the Python runtime it is built from into env/,
 then creates this folder's own .venv and its launchers: Start.cmd starts the app,
 Boardmodeler.cmd runs the command line, and one "Spice Maker" shortcut does the same as
@@ -79,13 +80,17 @@ Settings, key, temporary work, logs and models stay inside this extracted folder
 The shortcut is created inside this folder only: no registry installation, no Start Menu
 entry, no desktop shortcut, no AppData settings, no Credential Manager entries.
 Delete this entire extracted folder for a fresh start. Reinstalling in it preserves data/,
-models/ and .venv/. Copies in different folders never read or change each other; keep the two
+models/ and the .venv interpreter. Current packages stay unchanged; stale engine packages are
+upgraded from checked local wheels with validation and rollback. Copies in different folders
+never read or change each other; keep the two
 editions in separate folders.
 The .venv command line environment has no Qt, so commands that open a window (ui, setup) are
 served by the bundled app: use Start.cmd, or app\SpiceMaker.exe --cli <command>.
 LTspice and (for IBM Bob) Bob Shell must be installed separately.
 The API key stays inside this extracted folder; no account login is needed in this app.
-GO sends the selected datasheet and model text to the chosen provider.
+The default engine builds models in code and tests them in LTspice.
+Datasheet extraction may send PDF text to the chosen provider. Exact reviewed sources need no AI call.
+Legacy AI authoring is explicitly selected; its model text is also sent to the provider.
 This build is unsigned. Check the publisher/source and the SHA256 before running it.
 "@ | Set-Content "$bundle/Read me.txt" -Encoding utf8
     $hash = (Get-FileHash "$bundle/Install.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -99,4 +104,4 @@ This build is unsigned. Check the publisher/source and the SHA256 before running
 } finally {
     Pop-Location
 }
-Write-Host "Done. Portable Setup.exe and the download ZIP are in .\releases"
+Write-Host "Done. The current portable download ZIP is in .\releases"

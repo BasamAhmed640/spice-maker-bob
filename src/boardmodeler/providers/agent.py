@@ -17,6 +17,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from boardmodeler.authoring.backends import AuthorBackend, AuthorRequest
+from boardmodeler.build_flavor import BOB_ONLY
 from boardmodeler.domain.enums import ProviderKind
 from boardmodeler.domain.records import ProviderIdentity
 from boardmodeler.providers.base import (
@@ -32,6 +33,40 @@ from boardmodeler.providers.base import (
 from boardmodeler.providers.http_inference import extract_json_object
 
 PROGRESS_INTERVAL_S = 5.0
+EXTRACTION_TIMEOUT_S = 300.0
+EXTRACTION_CALL_TIMEOUT_S = 150.0
+EXTRACTION_MAX_CALLS = 12
+
+
+class _ExtractionBudget:
+    """One wall-clock and AI-turn budget shared by batches and all their repairs.
+
+    A backend may retry its transport inside a turn; every transport retry receives
+    the remaining turn time. The observer counts actual HTTP calls separately.
+    """
+
+    def __init__(self, timeout_s, max_calls, call_timeout_s):
+        self.deadline = time.monotonic() + timeout_s
+        self.timeout_s = timeout_s
+        self.max_calls = max_calls
+        self.call_timeout_s = call_timeout_s
+        self.calls = 0
+        self.lock = threading.Lock()
+
+    def claim(self, cancel):
+        with self.lock:
+            if cancel is not None and cancel.is_set():
+                raise ProviderError("cancelled", "datasheet extraction was cancelled")
+            remaining = self.deadline - time.monotonic()
+            if remaining <= 0 or self.calls >= self.max_calls:
+                raise ProviderError(
+                    "extraction_budget_exhausted",
+                    f"datasheet extraction reached its {self.timeout_s:g} s / "
+                    f"{self.max_calls} AI-turn limit ({self.calls} turns started); "
+                    "validated batch results remain cached for a retry",
+                )
+            self.calls += 1
+            return min(self.call_timeout_s, remaining)
 
 
 def _run_batches(jobs, run, progress, cancel):
@@ -42,6 +77,8 @@ def _run_batches(jobs, run, progress, cancel):
     results = [None] * len(jobs)
 
     def execute(index, job):
+        if cancel is not None and cancel.is_set():
+            raise ProviderError("cancelled", "datasheet extraction was cancelled before this batch")
         pages = len({(s.doc_id, s.pdf_page) for r in job for s in r.snippets})
 
         def report(detail):
@@ -87,6 +124,12 @@ def _run_batches(jobs, run, progress, cancel):
         pending = {pool.submit(execute, index, job): index for index, job in enumerate(jobs)}
         publish()
         while pending:
+            if cancel is not None and cancel.is_set():
+                failure = failure or ProviderError(
+                    "cancelled", "datasheet extraction was cancelled"
+                )
+                for queued in pending:
+                    queued.cancel()
             done, _ = wait(pending, timeout=PROGRESS_INTERVAL_S, return_when=FIRST_COMPLETED)
             for future in done:
                 index = pending.pop(future)
@@ -101,6 +144,18 @@ def _run_batches(jobs, run, progress, cancel):
             publish()
     if failure is not None:
         raise failure
+    # The annotation promises one response per job. Two states could otherwise return a
+    # ``None`` to a caller that immediately reads a field from it: a slot whose future was
+    # cancelled (only reachable on the failure path above, which raised) and a ``run`` that
+    # itself returned ``None``. The latter is silent today and would surface as an
+    # AttributeError in the caller, so name it here instead of letting it travel.
+    missing = [index for index, result in enumerate(results) if result is None]
+    if missing:
+        raise ProviderError(
+            "response_missing",
+            f"batch(es) {', '.join(str(index + 1) for index in missing)} returned no "
+            f"extraction response for {len(jobs)} submitted job(s)",
+        )
     return results
 
 
@@ -171,18 +226,29 @@ class AgentExtractionProvider:
         part: str | None = None,
         diagnostics_dir: Path | None = None,
         progress=None,
+        timeout_s: float = EXTRACTION_TIMEOUT_S,
+        max_calls: int = EXTRACTION_MAX_CALLS,
+        call_timeout_s: float = EXTRACTION_CALL_TIMEOUT_S,
     ) -> None:
         self.backend = backend
         self.part = part.strip() if part else None
         self.diagnostics_dir = diagnostics_dir
         self.progress = progress
+        if timeout_s <= 0 or call_timeout_s <= 0 or max_calls < 1:
+            raise ValueError("extraction budgets must be positive")
+        self.timeout_s = float(timeout_s)
+        self.max_calls = int(max_calls)
+        self.call_timeout_s = float(call_timeout_s)
         self.cache_context = f"{type(self).cache_context}:part={self.part or ''}"
 
     def identity(self) -> ProviderIdentity:
         entry = getattr(self.backend, "provider", None)
+        # Only the Bob edition can wrap a backend that has no HTTP provider entry;
+        # this edition's authoring wires are all HTTPS, so the label stays HTTP there.
+        cli_backend = entry is None and BOB_ONLY
         return ProviderIdentity(
             provider=self.backend.name,
-            kind=ProviderKind.BOB_SHELL if entry is None else ProviderKind.HTTP_INFERENCE,
+            kind=ProviderKind.BOB_SHELL if cli_backend else ProviderKind.HTTP_INFERENCE,
             model=(getattr(self.backend, "model", None) or getattr(entry, "model", None)),
             endpoint=getattr(entry, "endpoint", None),
             usage_units="tokens",
@@ -202,14 +268,17 @@ class AgentExtractionProvider:
     def extract_many(
         self, requests: Sequence[ExtractionRequest], cancel: threading.Event | None = None
     ) -> dict[ExtractionTask, ExtractionResponse]:
-        """Bound response size and cache each batch so one failure never loses all work."""
+        """Bound total time, turns and response size; cache each validated batch."""
         if any(not request.allow_remote for request in requests):
             raise ProviderError("remote_not_enabled", "authorize processing this datasheet first")
+        budget = _ExtractionBudget(self.timeout_s, self.max_calls, self.call_timeout_s)
         rows = next((r for r in requests if r.task == ExtractionTask.REQUIREMENTS), None)
         if rows is None or sum(len(s.text) for s in rows.snippets) <= 24_000:
             return _run_batches(
                 [requests],
-                lambda job, report: self._extract_combined(job, cancel, progress=report),
+                lambda job, report: self._extract_combined(
+                    job, cancel, progress=report, budget=budget
+                ),
                 self.progress,
                 cancel,
             )[0]
@@ -326,7 +395,7 @@ class AgentExtractionProvider:
             response = split() if previous_failure else None
             if response is None:
                 try:
-                    response = self._extract_combined(job, cancel, progress=progress)
+                    response = self._extract_combined(job, cancel, progress=progress, budget=budget)
                 except ProviderError as exc:
                     if exc.code not in {"agent_extraction_failed", "extraction_payload_invalid"}:
                         raise
@@ -352,9 +421,12 @@ class AgentExtractionProvider:
         cancel: threading.Event | None = None,
         *,
         progress=None,
+        budget=None,
     ) -> dict[ExtractionTask, ExtractionResponse]:
         if not requests:
             return {}
+        if budget is None:
+            budget = _ExtractionBudget(self.timeout_s, self.max_calls, self.call_timeout_s)
         if any(not request.allow_remote for request in requests):
             raise ProviderError("remote_not_enabled", "authorize processing this datasheet first")
         ok, detail = self.backend.availability()
@@ -454,7 +526,7 @@ class AgentExtractionProvider:
                     reasoning_effort="low",
                 )
                 started = time.monotonic()
-                result = self.backend.author(request, cancel)
+                result = self.backend.author(request, cancel, timeout_s=budget.claim(cancel))
                 if progress:
                     progress("response received, validating extracted records")
                 if self.diagnostics_dir is not None:

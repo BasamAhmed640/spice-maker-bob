@@ -1,4 +1,4 @@
-"""Compile the animated, folder-local installer using Windows .NET Framework.
+"""Compile the folder-local installer using Windows .NET Framework.
 
 Two payloads are embedded, because the installer keeps them in two folders:
 
@@ -91,7 +91,6 @@ def package(repo: Path, edition: str) -> Path:
             "/resource:" + str(environment) + ",env.zip",
             "/resource:" + str(build / "edition.txt") + ",edition.txt",
             "/resource:" + str(build / "version.txt") + ",version.txt",
-            "/resource:" + str(repo / "installer/assets/pepper-splash.gif") + ",splash.gif",
             str(assembly),
             str(repo / "installer/PortableInstaller.cs"),
         ],

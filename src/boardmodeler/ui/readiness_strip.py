@@ -22,15 +22,15 @@ from boardmodeler.security.readiness import (
     overall,
     verify_all,
 )
-from boardmodeler.ui.theme import CGA
+from boardmodeler.ui.theme import DESKTOP
 
 __all__ = ["STATE_COLOURS", "ReadinessStrip"]
 
 STATE_COLOURS: dict[str, str] = {
-    "ok": CGA["bright_green"],
-    "warn": CGA["yellow"],
-    "fail": CGA["bright_red"],
-    "unchecked": CGA["grey"],
+    "ok": DESKTOP["pass"],
+    "warn": DESKTOP["unknown"],
+    "fail": DESKTOP["fail"],
+    "unchecked": DESKTOP["muted"],
 }
 _STATE_WORDS = {"ok": "ready", "warn": "limited", "fail": "problem", "unchecked": "not tested"}
 
@@ -96,9 +96,9 @@ class ReadinessStrip(QWidget):
             light = self.lights.get(check.key)
             if light is None:
                 continue
-            colour = STATE_COLOURS.get(check.state, CGA["grey"])
+            colour = STATE_COLOURS.get(check.state, DESKTOP["muted"])
             light.setText(_light_text(check.label))
-            light.setStyleSheet(f"color: {colour}; font-family: Consolas; font-size: 9pt;")
+            light.setStyleSheet(f"color: {colour}; font-family: 'Segoe UI'; font-size: 9pt;")
             light.setToolTip(
                 f"{check.label}: {_STATE_WORDS.get(check.state, check.state)} — {check.detail}"
             )

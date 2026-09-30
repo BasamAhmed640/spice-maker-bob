@@ -226,6 +226,8 @@ def _probe_units(probe_id: str) -> str:
     probe = PROBES.get(probe_id)
     if probe is None:
         return ""
+    if probe.judge_key == "pwm_value":
+        return probe.unit
     return _JUDGE_UNITS.get(probe.judge_key, "")
 
 
@@ -1632,6 +1634,49 @@ class _Run:
             )
         return doc_id, ""
 
+    def preflight(self) -> None:
+        """Refuse impossible new builds before extraction or AI test planning."""
+        if (
+            self.request.requirements_json is not None
+            or self.request.backend_name in ("fixture", "scripted")
+            or self.record is None
+        ):
+            return
+        from boardmodeler.authoring import tps54331_reference
+        from boardmodeler.models.pinout import PinoutError, resolve_reviewed_profile
+        from boardmodeler.models.support import decide_support
+
+        decision = decide_support(
+            self.request.part,
+            title=self.record.title,
+            head=self.head_text,
+            declared_family=self.request.family,
+        )
+        if decision.state == "blocked_class":
+            self.support = decision
+            raise _Stop("gate", Status.BLOCKED.value, decision.refusal(self.request.engine))
+        if self.request.part.strip().upper() == "UCC28251":
+            raise _Stop(
+                "pinout",
+                Status.BLOCKED.value,
+                "package_required: UCC28251 has different PW (TSSOP) and RGP (QFN) pin maps; "
+                "choose the package before building (UCC28251PW or UCC28251RGP)",
+            )
+        # This exact reviewed reader produces a cheap, useful diagnostic of the
+        # remaining evidence/package gaps, without calling a provider.
+        if tps54331_reference.matches(self.request.part, self.record.file_hash):
+            return
+        try:
+            resolve_reviewed_profile(self.request.part, self.record.file_hash)
+        except PinoutError as exc:
+            raise _Stop(
+                "pinout",
+                Status.BLOCKED.value,
+                "unsupported_part: source-backed package pinout is not reviewed for this part "
+                "and datasheet revision; extraction was not sent to AI because the current "
+                f"engine could not publish its result ({exc})",
+            ) from exc
+
     def extract(self, cancel: threading.Event | None) -> None:
         if self.request.requirements_json is not None:
             self.requirements = self.supplied
@@ -1658,6 +1703,46 @@ class _Run:
             return
 
         if self.record is not None and self.request.backend_name not in ("fixture", "scripted"):
+            from boardmodeler.authoring import ucc28251_reference
+
+            if ucc28251_reference.matches(self.request.part, self.record.file_hash):
+                self.citation_lookup = _page_lookup(self.record, self.store)
+                pages = {
+                    page: self.citation_lookup(self.record.doc_id, page) or ""
+                    for page in ucc28251_reference.PAGES
+                }
+                try:
+                    (
+                        self.requirements,
+                        self.reference_bindings,
+                        self.pin_map,
+                        self.reviewed_extraction,
+                    ) = ucc28251_reference.records(self.record, pages, part=self.request.part)
+                except ValueError as exc:
+                    raise _Stop("extract", Status.BLOCKED.value, str(exc)) from exc
+                validation = validate_requirements(self.requirements, documents=self._documents())
+                if validation.errors:
+                    raise _Stop(
+                        "extract",
+                        Status.BLOCKED.value,
+                        "reviewed_extraction_invalid: "
+                        + "; ".join(issue.message for issue in validation.errors[:3]),
+                    )
+                self._verify_citations()
+                if self.unverified:
+                    raise _Stop(
+                        "extract", Status.BLOCKED.value, "reviewed extraction citations failed"
+                    )
+                self._write_json(
+                    self.out_dir / "reviewed-extraction.json", self.reviewed_extraction
+                )
+                self.log.emit(
+                    "extract",
+                    "ok",
+                    "partial reviewed UCC28251 Rev. E rows and selected package matched the exact TI datasheet; zero extraction API calls",
+                    self._row_counts(),
+                )
+                return
             from boardmodeler.authoring import tps54331_reference
 
             if tps54331_reference.matches(self.request.part, self.record.file_hash):
@@ -3066,6 +3151,20 @@ class _Run:
             (path for path in written if path.name == "MODEL_CARD.md"),
             self.out_dir / "MODEL_CARD.md",
         )
+        if (
+            self.reviewed_extraction is not None
+            and self.reviewed_extraction.get("complete_datasheet_extraction") is False
+        ):
+            self._write_text(
+                self.card_path,
+                self.card_path.read_text(encoding="utf-8")
+                + "\n## Reviewed evidence scope\n\n"
+                + "This build uses a partial reviewed extraction, not every datasheet statement. "
+                + str(self.reviewed_extraction.get("scope", ""))
+                + "\nUnreviewed scope: "
+                + str(self.reviewed_extraction.get("unreviewed_scope", "not qualified"))
+                + "\nDetails and source identity are in `reviewed-extraction.json`.\n",
+            )
         if self.template_seed is not None and self.template_seed_bytes is not None:
             same_as_seed = delivered == self.template_seed_bytes
             metadata = {
@@ -3103,6 +3202,19 @@ class _Run:
                 provenance.append(
                     "Bob changed the seed during repair. Parameter origins in the JSON "
                     "describe the starting seed; review the delivered library for final values.\n"
+                )
+            if metadata.get("limitations"):
+                provenance.append("\n## Modeled scope and limitations\n\n")
+                provenance.extend(f"- {item}\n" for item in metadata["limitations"])
+            if metadata.get("numerical_assumptions"):
+                provenance.append(
+                    "\n## Numerical assumptions\n\n"
+                    "These values regularize the first-order implementation. They are not "
+                    "measured device characteristics or qualified datasheet values.\n\n"
+                )
+                provenance.extend(
+                    f"- `{item['name']}` = {item['value']:g} {item['unit']}: {item['reason']}\n"
+                    for item in metadata["numerical_assumptions"]
                 )
             self._write_text(
                 self.card_path,
@@ -3273,43 +3385,11 @@ class _Run:
             self._write_json(parameters_path, parameters)
 
     def _saved_design_is_exact(self, record: Any, delivered: bytes) -> bool:
-        """Reconstruct and render saved provenance before trusting an exact association."""
-        from boardmodeler.models.buck_switching import BuckDesign
-        from boardmodeler.models.op_amp import OpAmpDesign
+        """Validate saved values against the fixed source spec, then exact rendered bytes."""
+        from boardmodeler.authoring.retest import saved_design_is_exact
 
-        if not isinstance(record, dict) or record.get("association") != "exact":
-            return False
-        payload = record.get("design")
-        if not isinstance(payload, dict) or self.spec is None:
-            return False
-        if not isinstance(payload.get("record_kind"), str):
-            return False
-        design_type = {
-            "buck_design": BuckDesign,
-            "op_amp_design": OpAmpDesign,
-        }.get(payload.get("record_kind"))
-        if design_type is None:
-            return False
-        try:
-            design = design_type.from_payload(payload)
-            refreshed = design.record(delivered)
-        except AttributeError, KeyError, OSError, OverflowError, TypeError, ValueError:
-            return False
-        return (
-            design.spec_digest == self.spec.digest()
-            and design.part == self.spec.part
-            and design.subckt == self.spec.subckt
-            and refreshed["association"] == "exact"
-            and all(
-                record.get(key) == refreshed[key]
-                for key in (
-                    "schema_version",
-                    "record_kind",
-                    "design_sha256",
-                    "rendered_library_sha256",
-                    "delivered_library_sha256",
-                )
-            )
+        return self.spec is not None and saved_design_is_exact(
+            record, delivered, self.spec, unverified=self.unverified
         )
 
     def _publish_symbol(
@@ -3569,6 +3649,8 @@ def make_model(
             )
         with ledger.stage("read"):
             run.read()
+        with ledger.stage("preflight"):
+            run.preflight()
         with ledger.stage("extract"):
             run.extract(cancel)
         with ledger.stage("bind"):

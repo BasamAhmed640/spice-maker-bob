@@ -1,3 +1,12 @@
+## 2026-09-30 — current 1.8.0 PWM and verified desktop delivery (D-064/D-065)
+
+The supplied UCC28251PW/PWR Rev. E source now builds through actual upgraded 1.8.0 installed wheel and desktop: 15 PASS/0 FAIL/21 UNKNOWN/8 N/A, zero provider calls, exact identical library/symbol/spec/design/pinout across editions. General pipeline totals 50.698 / 50.888 s. Actual generated amplifier-feedback examples run in LTspice. RGP remains blocked; omitted prebias/sync/hiccup/thermal behavior remains UNKNOWN.
+
+- General: 2371 passed, 24 skipped, 191 deselected in 157.70s (0:02:37); installation instructions: 9 passed.
+- Bob: 2124 passed, 31 skipped, 188 deselected, 4 warnings in 138.99s (0:02:18); installation instructions: 9 passed.
+
+Ruff/format/diff checks pass; 71 shared files are identical. Actual old 1.7 General / 1.6 Bob→1.8 upgrades preserve interpreter/configuration/model bytes; current source, wheel and frozen fingerprints agree. Fresh installs/updates/isolation/actual GUI checks pass. The original engine page is immutable and retained for RAG. Retests preserve current bytes, fixed tests, honest coverage and current provenance; 43 final independent controls pass in each edition. See [current release evidence](evidence/2026-09-30-pwm-release/REPORT.md) and [source/control evidence](evidence/2026-09-30-ucc28251/REPORT.md). Entries below are historical observations.
+
 ## 2026-09-30 — resumed M6 delivery boundary (D-063)
 
 Recovered the saved engine guide and preserved local changes, then fast-forwarded to the current

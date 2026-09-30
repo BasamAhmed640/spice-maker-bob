@@ -52,7 +52,7 @@ def test_an_enabled_button_is_not_black_on_black(window) -> None:
         f"GO renders black ({background}); button text is black, so it would be invisible"
     )
     # the palette the theme declares for an enabled button
-    assert background in {(170, 170, 170), (255, 255, 255)}, background
+    assert background in {(212, 208, 200), (230, 227, 220)}, background
 
 
 def test_a_disabled_button_is_still_distinguishable(window) -> None:
@@ -131,4 +131,4 @@ def test_the_setup_browse_button_renders_legibly(setup_page) -> None:
         for dx in (3, button.width() - 3):
             background, _ = _sample(setup_page, button, dx=dx)
             assert background != (0, 0, 0), f"{button.text()} renders black ({background})"
-            assert background in {(170, 170, 170), (255, 255, 255)}, background
+            assert background in {(212, 208, 200), (230, 227, 220)}, background

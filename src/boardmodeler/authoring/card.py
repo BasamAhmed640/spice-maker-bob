@@ -448,6 +448,17 @@ def write_deliverables(
 
         text = PROBES["opamp_slew_rise"].render(model_lib=library, subckt=subckt, params={})
         text = text.replace(library.resolve().as_posix(), model_file)
+    elif library.is_file() and any((row.probe or "").startswith("pwm_") for row in spec.covered()):
+        from boardmodeler.authoring.probes import PROBES
+
+        text = PROBES["pwm_frequency"].render(model_lib=library, subckt=subckt, params={})
+        text = text.replace(library.resolve().as_posix(), model_file)
+        text = (
+            "* First-order primary-side PWM example; VSENSE is tied externally to VREF.\n"
+            "* COMP is tied to FB/EA-; the external command drives REF/EA+ (datasheet Figure 33).\n"
+            "* This illustrates controller pulses, not a complete converter or prebias servo.\n"
+            + text
+        )
     else:
         ports: tuple[str, ...] = ()
         if library.is_file():

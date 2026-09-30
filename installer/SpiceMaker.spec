@@ -14,6 +14,8 @@ The frozen executable is ``SpiceMaker.exe``; ``console=False`` (windowed) becaus
 product is a GUI. ``installer/entry.py`` gives that windowed binary a CLI path as well.
 """
 import os
+import json
+import runpy
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules
@@ -22,6 +24,15 @@ REPO = Path(SPECPATH).parent  # noqa: F821 - SPECPATH is injected by PyInstaller
 INSTALLER = Path(SPECPATH)  # noqa: F821
 NAME = "SpiceMaker"
 ICON = INSTALLER / "assets" / "pepper.ico"
+
+# Bind the frozen application to the actual sources also placed in the wheel.
+identity_api = runpy.run_path(str(REPO / "src" / "boardmodeler" / "engine_identity.py"))
+identity_file = REPO / "build" / "engine-identity.json"
+identity_file.parent.mkdir(parents=True, exist_ok=True)
+identity_file.write_text(
+    json.dumps(identity_api["source_contract"](REPO / "src" / "boardmodeler"), sort_keys=True),
+    encoding="utf-8",
+)
 
 # providers/registry.py imports the provider modules by name at run time, which static
 # analysis cannot see. Without this a frozen build answers the configured provider with
@@ -100,6 +111,7 @@ a = Analysis(
     # The window looks for its icon next to the executable and inside the bundle;
     # "installer/assets/pepper.ico" is the mark the splash and the .ico are drawn from.
     datas=[
+        (os.fspath(identity_file), "boardmodeler"),
         (os.fspath(ICON), "."),
         (
             os.fspath(REPO / "src" / "boardmodeler" / "models" / "peak_current_buck.json"),

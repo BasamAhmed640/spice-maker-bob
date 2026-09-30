@@ -73,13 +73,18 @@ def symbol(ports=("IN", "OUT")):
 
 
 def test_reviewed_profiles_have_two_distinct_documents_and_explicit_package_scope():
-    buck, amplifier = reviewed_profiles()
+    buck, amplifier, pwm = reviewed_profiles()
     assert buck.selected_package == "DDA" and len(buck.pins) == 9
     assert buck.required_external_connections == (("9", "7"),)
     assert amplifier.selected_package is None
     assert amplifier.package_resolution == "pinout_equivalent_group"
     assert amplifier.packages == ("D", "DGK", "P", "PS", "PW")
-    for profile in (buck, amplifier):
+    assert pwm.parts == ("UCC28251PW", "UCC28251PWR")
+    assert pwm.selected_package == "PW" and pwm.packages == ("PW",)
+    assert pwm.required_external_connections == (("1", "7"),)
+    assert "SLUA673A" in pwm.confirmation_reference
+    assert "substitution" in pwm.confirmation_reference
+    for profile in (buck, amplifier, pwm):
         assert len({source.document_sha256 for source in profile.sources}) == 2
         assert all(source.url.startswith("https://www.ti.com/") for source in profile.sources)
         assert all(pin.spice_order == int(pin.number) for pin in profile.pins)

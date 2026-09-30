@@ -28,7 +28,7 @@ from boardmodeler.authoring.circuit_probe import CircuitRecipe
 from boardmodeler.authoring.part_class import classify
 from boardmodeler.authoring.pin_roles import physical_terminals
 from boardmodeler.authoring.spec import Characteristic, SpecSet
-from boardmodeler.models import op_amp
+from boardmodeler.models import op_amp, pwm_controller
 from boardmodeler.models.buck_switching import (
     BuckDesign,
     TemplateSeedError,
@@ -623,7 +623,35 @@ def _op_amp_untested(spec: SpecSet) -> tuple[str, ...]:
 
 
 # The behavioural implementations registered so far, one per family that has independent tests.
+def _match_pwm(spec: SpecSet, unverified: Collection[str]) -> object | None:
+    try:
+        return pwm_controller.design_from_spec(spec, unverified=unverified)
+    except pwm_controller.PwmControllerDesignError:
+        return None
+
+
+def _pwm_uncited(design: object) -> tuple[str, ...]:
+    assert isinstance(design, pwm_controller.PwmControllerDesign)
+    origins = {item.name: item.origin for item in design.parameters}
+    return tuple(
+        name
+        for name in pwm_controller.ESSENTIAL_INPUTS
+        if origins.get(name) not in ("cited_row", "derived_from_bounds")
+    )
+
+
 IMPLEMENTATIONS: tuple[Implementation, ...] = (
+    Implementation(
+        name="alternating_pwm_controller",
+        family="switching_regulator",
+        label="UCC28251 first-order alternating PWM controller",
+        matches=_match_pwm,
+        uncited=_pwm_uncited,
+        untested=pwm_controller.untested,
+        seed=lambda spec, unverified: pwm_controller.seed_from_spec(spec, unverified=unverified),
+        template="pwm_controller_template",
+        heading="First-order PWM controller",
+    ),
     Implementation(
         name="peak_current_buck",
         family="switching_regulator",

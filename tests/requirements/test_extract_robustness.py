@@ -359,7 +359,7 @@ def test_truncated_agent_output_is_not_parsed_into_rows(tmp_path: Path) -> None:
         def availability(self):
             return True, "test double"
 
-        def author(self, request, cancel):
+        def author(self, request, cancel, *, timeout_s=None):
             self.calls += 1
             return AuthorResult(
                 ok=True,

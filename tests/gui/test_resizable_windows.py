@@ -51,22 +51,18 @@ def _assert_room_to_move(widget) -> None:
 
 
 def test_the_model_window_can_be_resized(qtbot, window) -> None:
-    """It used to be locked at 900x600; now that size is where it opens, not where it stays."""
+    """The compact page starts at its content size and remains freely resizable."""
     _assert_room_to_move(window)
     starts_at = window.size()
-    # The documented working size, or a little wider when the controls need it (the
-    # readiness row with BOB SHELL is): the floor is the content's own minimum, so a wider
-    # control raises the opening width rather than being clipped — as in the general edition.
-    assert starts_at.width() >= 900, "the working size the owner knows"
-    assert starts_at.height() == 600, "the working height the owner knows"
+    assert starts_at.height() < 600, "collapsed diagnostics should leave a compact page"
     assert window.minimumSize().width() <= starts_at.width()
-    assert window.minimumSize().height() < starts_at.height()
+    assert window.minimumSize().height() <= starts_at.height()
 
     window.resize(1180, 780)
     assert window.size() == QSize(1180, 780), "enlarging must take effect"
 
     window.resize(600, 300)  # smaller than the content floor
-    assert window.size().height() < starts_at.height(), "shrinking must take effect too"
+    assert window.size().height() < 780, "shrinking an enlarged window must take effect"
     floor = window.minimumSize()
     assert window.width() >= floor.width() and window.height() >= floor.height(), (
         "Qt clamps to the content floor, never past it"
@@ -90,6 +86,10 @@ def test_the_model_window_keeps_every_control_when_shrunk_to_its_minimum(qtbot, 
         assert widget.width() > 0 and widget.height() > 0, f"{name} must have real room"
     assert window.elapsed_label.isVisible()
     assert window.hourglass.isVisible()
+    assert not window.details_panel.isVisible(), "diagnostics start collapsed"
+    window.details_button.click()
+    window.resize(window.minimumSize())
+    assert window.stages.isVisible() and window.rows.isVisible()
     assert window.stages.height() > 0 and window.rows.height() > 0
 
 
@@ -199,4 +199,4 @@ def test_the_scroll_area_rule_does_not_repaint_the_settings_buttons(
     )
     sampled = (background.red(), background.green(), background.blue())
     assert sampled != (0, 0, 0), f"SAVE renders black ({sampled}); it would be invisible"
-    assert sampled in {(170, 170, 170), (255, 255, 255)}, sampled
+    assert sampled in {(212, 208, 200), (230, 227, 220)}, sampled

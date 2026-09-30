@@ -1116,6 +1116,15 @@ def _register_opamp_probes() -> None:
 
 _register_opamp_probes()
 
+
+def _register_pwm_probes() -> None:
+    from boardmodeler.authoring.pwm_probes import register
+
+    register(PROBES)
+
+
+_register_pwm_probes()
+
 # The per-characteristic frozen recipe supplies this probe's implementation.
 # A missing recipe has no renderer and is UNKNOWN, never a synthetic result.
 _register(

@@ -1,6 +1,7 @@
-﻿Spice Maker Bob 1.6.0 for Windows x64
+Spice Maker Bob 1.8.0 for Windows x64
 
-Extract this zip, then double-click Install.exe. The pepper animation plays during setup.
+Extract this zip into its own folder, check SHA256SUMS.txt, then start Install.exe.
+Setup shows a simple progress bar and elapsed timer.
 Setup unpacks the application into app/ and the Python runtime it is built from into env/,
 then creates this folder's own .venv and its launchers: Start.cmd starts the app,
 Boardmodeler.cmd runs the command line, and one "Spice Maker" shortcut does the same as
@@ -11,11 +12,15 @@ Settings, key, temporary work, logs and models stay inside this extracted folder
 The shortcut is created inside this folder only: no registry installation, no Start Menu
 entry, no desktop shortcut, no AppData settings, no Credential Manager entries.
 Delete this entire extracted folder for a fresh start. Reinstalling in it preserves data/,
-models/ and .venv/. Copies in different folders never read or change each other; keep the two
+models/ and the .venv interpreter. Current packages stay unchanged; stale engine packages are
+upgraded from checked local wheels with validation and rollback. Copies in different folders
+never read or change each other; keep the two
 editions in separate folders.
 The .venv command line environment has no Qt, so commands that open a window (ui, setup) are
 served by the bundled app: use Start.cmd, or app\SpiceMaker.exe --cli <command>.
 LTspice and (for IBM Bob) Bob Shell must be installed separately.
 The API key stays inside this extracted folder; no account login is needed in this app.
-GO sends the selected datasheet and model text to the chosen provider.
+The default engine builds models in code and tests them in LTspice.
+Datasheet extraction may send PDF text to the chosen provider. Exact reviewed sources need no AI call.
+Legacy AI authoring is explicitly selected; its model text is also sent to the provider.
 This build is unsigned. Check the publisher/source and the SHA256 before running it.

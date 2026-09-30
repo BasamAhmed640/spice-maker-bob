@@ -31,7 +31,8 @@ class RecordingAgent:
     def availability(self):
         return True, "test double"
 
-    def author(self, request, cancel):
+    def author(self, request, cancel, *, timeout_s=None):
+        assert timeout_s is not None and 0 < timeout_s <= 150
         self.calls.append(request)
         data = payloads(requirement_payload("TEST", EXCERPT))
         return AuthorResult(
@@ -119,8 +120,8 @@ def test_invalid_classification_gets_one_repair_and_only_valid_result_is_cached(
     )
 
     class RepairingAgent(RecordingAgent):
-        def author(self, request, cancel):
-            result = super().author(request, cancel)
+        def author(self, request, cancel, *, timeout_s=None):
+            result = super().author(request, cancel, timeout_s=timeout_s)
             if len(self.calls) == 1:
                 data = json.loads(result.stdout_tail)
                 data["REQUIREMENTS"]["requirements"][0]["limits"] = None
@@ -150,8 +151,8 @@ def test_datasheet_compound_units_do_not_trigger_a_paid_correction(tmp_path):
     )
 
     class CompoundAgent(RecordingAgent):
-        def author(self, request, cancel):
-            result = super().author(request, cancel)
+        def author(self, request, cancel, *, timeout_s=None):
+            result = super().author(request, cancel, timeout_s=timeout_s)
             data = json.loads(result.stdout_tail)
             rows = []
             for req_id, unit, value, statement in (
@@ -175,3 +176,82 @@ def test_datasheet_compound_units_do_not_trigger_a_paid_correction(tmp_path):
     assert all(row["probe"] is None and row["not_testable_reason"] for row in bindings)
     assert extract_requirements(project, provider=provider, allow_remote=True).cache_hits == 4
     assert len(backend.calls) == 1
+
+
+def test_validation_repairs_share_one_call_limit_and_never_cache_bad_rows(tmp_path):
+    from dataclasses import replace
+
+    project = make_project(tmp_path)
+    store_plain_document(
+        project,
+        CONTRACT_TEXT,
+        doc_id="DOC_1",
+        classification="public",
+        remote_inference_allowed=True,
+    )
+
+    class InvalidAgent(RecordingAgent):
+        def author(self, request, cancel, *, timeout_s=None):
+            result = super().author(request, cancel, timeout_s=timeout_s)
+            return replace(result, stdout_tail="{cut off")
+
+    backend = InvalidAgent()
+    provider = AgentExtractionProvider(backend, max_calls=1)
+    with pytest.raises(ProviderError, match="extraction_budget_exhausted"):
+        extract_requirements(project, provider=provider, allow_remote=True)
+    assert len(backend.calls) == 1
+    assert not list(project.path("evidence/cache").glob("*.json"))
+
+
+def test_elapsed_extraction_budget_prevents_a_new_validation_repair(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from boardmodeler.providers import agent
+
+    clock = [100.0]
+    monkeypatch.setattr(agent.time, "monotonic", lambda: clock[0])
+    project = make_project(tmp_path)
+    store_plain_document(
+        project,
+        CONTRACT_TEXT,
+        doc_id="DOC_1",
+        classification="public",
+        remote_inference_allowed=True,
+    )
+
+    class SlowInvalidAgent(RecordingAgent):
+        def author(self, request, cancel, *, timeout_s=None):
+            assert timeout_s == 7.0
+            result = super().author(request, cancel, timeout_s=timeout_s)
+            clock[0] += 8.0
+            return replace(result, stdout_tail="{cut off")
+
+    backend = SlowInvalidAgent()
+    provider = AgentExtractionProvider(backend, timeout_s=7)
+    with pytest.raises(ProviderError, match="extraction_budget_exhausted"):
+        extract_requirements(project, provider=provider, allow_remote=True)
+    assert len(backend.calls) == 1
+
+
+def test_parallel_batches_and_split_retries_cannot_multiply_the_request_limit(tmp_path):
+    from dataclasses import replace
+
+    project = make_project(tmp_path)
+    store_plain_document(
+        project,
+        CONTRACT_TEXT * 300,
+        doc_id="DOC_1",
+        classification="public",
+        remote_inference_allowed=True,
+    )
+
+    class InvalidAgent(RecordingAgent):
+        def author(self, request, cancel, *, timeout_s=None):
+            result = super().author(request, cancel, timeout_s=timeout_s)
+            return replace(result, stdout_tail="{cut off")
+
+    backend = InvalidAgent()
+    provider = AgentExtractionProvider(backend, max_calls=2)
+    with pytest.raises(ProviderError, match="extraction_budget_exhausted"):
+        extract_requirements(project, provider=provider, allow_remote=True)
+    assert len(backend.calls) == 2

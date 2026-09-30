@@ -50,12 +50,12 @@ from boardmodeler.config import AppConfig, config_path, load_config, save_config
 from boardmodeler.security.key_verification import CHECK_TIMEOUT_S, KeyVerification, verify_key
 from boardmodeler.storage import app_root, library_dir, local_path, model_dir, portable
 from boardmodeler.ui.file_dialogs import starting_directory
-from boardmodeler.ui.theme import CGA, RETRO_STYLESHEET
+from boardmodeler.ui.theme import DESKTOP, RETRO_STYLESHEET
 
 __all__ = ["SetupDialog", "configured_provider", "describe_settings", "ltspice_user_lib", "main"]
 
-_HINT = f"color: {CGA['bright_cyan']}; font-family: Consolas; font-size: 9pt;"
-_STATUS = f"color: {CGA['grey']}; font-family: Consolas; font-size: 9pt;"
+_HINT = f"color: {DESKTOP['blue']}; font-family: 'Segoe UI'; font-size: 9pt;"
+_STATUS = f"color: {DESKTOP['muted']}; font-family: 'Segoe UI'; font-size: 9pt;"
 
 #: How small the page may be dragged. The settings grid is wider than this at its own
 #: minimum, so the scroll area below keeps every row reachable at this size instead of
@@ -141,6 +141,7 @@ class SetupDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._key_check = None
+        self._opening_fit_scheduled = False
         self._key_timer = QTimer(self)
         self._key_timer.setInterval(100)
         self._key_timer.timeout.connect(self._poll_key_check)
@@ -149,7 +150,7 @@ class SetupDialog(QDialog):
         self.setStyleSheet(
             RETRO_STYLESHEET
             + f"""
-QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; border: 0; }}
+QScrollArea, #setupPage {{ background: {DESKTOP["face"]}; border: 0; }}
 """
         )
         self._config = load_config()
@@ -177,8 +178,11 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
         self.page.setObjectName("setupPage")
         self.scroll_area.setWidget(self.page)
         layout = QVBoxLayout(self.page)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(7)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(10)
+        banner = QLabel("Spice Maker · Setup")
+        banner.setObjectName("windowBanner")
+        layout.addWidget(banner)
         grid = QGridLayout()
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(7)
@@ -302,9 +306,7 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
             "library/ inside this extracted folder" if portable() else str(ltspice_user_lib())
         )
         library.setToolTip(str(ltspice_user_lib()))
-        library.setStyleSheet(
-            f"color: {CGA['bright_green']}; font-family: Consolas; font-size: 9pt;"
-        )
+        library.setStyleSheet(f"color: {DESKTOP['pass']}; font-family: 'Segoe UI'; font-size: 9pt;")
         grid.addWidget(QLabel("LTSPICE LIBRARY"), row, 0)
         grid.addWidget(library, row, 1, 1, 3)
         row += 1
@@ -367,8 +369,24 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
         how much room its contents need, which is exactly what the content-sized rule is
         about. The frame overhead between dialog and viewport is measured, not assumed.
         """
-        overhead = self.size() - self.scroll_area.viewport().size()
+        # Scrollbars are temporary consequences of a small viewport, not frame space.
+        # Counting them as overhead can permanently over-grow the opening page.
+        if self.layout() is not None:
+            self.layout().activate()
+        overhead = self.size() - self.scroll_area.size()
+        frame = 2 * self.scroll_area.frameWidth()
+        overhead += QSize(frame, frame)
         return self.page.sizeHint() + QSize(max(0, overhead.width()), max(0, overhead.height()))
+
+    def showEvent(self, event: object) -> None:  # Qt signature
+        super().showEvent(event)  # type: ignore[arg-type]
+        # Word wrapping settles after the first actual viewport is laid out.
+        if not self._opening_fit_scheduled:
+            self._opening_fit_scheduled = True
+            opening_size = QSize(self.size())
+            QTimer.singleShot(
+                0, self, lambda: self._fit_to_content() if self.size() == opening_size else None
+            )
 
     def _fit_to_content(self) -> None:
         """Grow the page when its content needs the room; never shrink the user's window."""
@@ -406,13 +424,13 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
         self.key_label.setText(provider.key_label)
         self.key_edit.setPlaceholderText(f"paste your {provider.label} API key")
         self.key_hint.setText(
-            f"{provider.key_hint}\n{provider.docs}\n"
-            "GO sends your chosen datasheet and model text to this provider.\n"
-            f"The key is saved in {credential_file_label()} in this folder as plain "
-            "text, not encrypted, so anyone who can read this folder can read it; "
-            "a new provider replaces it.\n"
-            "Saving a key runs a small connection check (may use a little API credit)."
+            "Datasheet extraction may send PDF text to this provider. "
+            "Legacy authoring also sends model text.\n"
+            f"Key saved in {credential_file_label()} here as plain text, not encrypted. "
+            "Anyone who can read this folder can read it.\n"
+            "Save & Check makes a small API request (may use credit)."
         )
+        self.key_hint.setToolTip(f"{provider.key_hint}\n{provider.docs}")
         self.model_edit.setText(self._model_for(provider))
         self.model_label.setVisible(provider.model_editable)
         self.model_edit.setVisible(provider.model_editable)
@@ -569,11 +587,11 @@ QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CGA["black"]}; bord
     def _colour_key_status(self, status: str) -> None:
         """The same cue as the build window's API KEY light: green, amber or red."""
         colour = {
-            "verified": CGA["bright_green"],
-            "rejected": CGA["bright_red"],
-        }.get(status, CGA["yellow"])
+            "verified": DESKTOP["pass"],
+            "rejected": DESKTOP["fail"],
+        }.get(status, DESKTOP["unknown"])
         self.key_status.setStyleSheet(
-            f"color: {colour}; font-family: Consolas; font-size: 9pt; font-weight: bold;"
+            f"color: {colour}; font-family: 'Segoe UI'; font-size: 9pt; font-weight: 600;"
         )
 
     def _cancel_key_check(self, *_args) -> None:

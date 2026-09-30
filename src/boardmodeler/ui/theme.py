@@ -1,4 +1,4 @@
-"""The shared retro look: the CGA palette and the control stylesheet.
+"""Classic desktop controls with readable type and restrained modern spacing.
 
 Kept separate from any one window so the model maker and the setup page style themselves
 from the same source, and so the stylesheet cannot be accidentally shadowed by a window
@@ -7,7 +7,7 @@ that appends its own rules.
 
 from __future__ import annotations
 
-__all__ = ["CGA", "RETRO_STYLESHEET"]
+__all__ = ["CGA", "DESKTOP", "RETRO_STYLESHEET"]
 
 CGA: dict[str, str] = {
     "black": "#000000",
@@ -28,30 +28,53 @@ CGA: dict[str, str] = {
     "white": "#ffffff",
 }
 
-#: Controls and dialogs only. A window adding its own rules must scope its background by
-#: object name (a bare ``QWidget`` rule ties with ``QPushButton`` on specificity and, being
-#: later, repaints every button).
+DESKTOP: dict[str, str] = {
+    "face": "#d4d0c8",
+    "text": "#202020",
+    "navy": "#000080",
+    "blue": "#164e9a",
+    "white": "#ffffff",
+    "shadow": "#808080",
+    "dark_shadow": "#404040",
+    "muted": "#555555",
+    "pass": "#146c38",
+    "fail": "#a32121",
+    "unknown": "#805b00",
+}
+
+#: Scope window backgrounds by object name, so they can never repaint a button.
 RETRO_STYLESHEET = f"""
 QPushButton {{
-    background: {CGA["grey"]}; color: {CGA["black"]}; border: 2px solid {CGA["white"]};
-    padding: 5px 10px; font-family: Consolas; font-weight: bold;
+    background: {DESKTOP["face"]}; color: {DESKTOP["text"]};
+    border-top: 2px solid white; border-left: 2px solid white;
+    border-bottom: 2px solid {DESKTOP["dark_shadow"]};
+    border-right: 2px solid {DESKTOP["dark_shadow"]};
+    padding: 6px 12px; font-family: "Segoe UI"; font-size: 10pt;
 }}
-QPushButton:hover, QPushButton:default {{ background: {CGA["white"]}; color: {CGA["black"]}; }}
-QPushButton:pressed {{ background: {CGA["dark_grey"]}; color: {CGA["white"]}; }}
-QPushButton:disabled {{ background: {CGA["dark_grey"]}; color: {CGA["grey"]};
-                        border-color: {CGA["dark_grey"]}; }}
+QPushButton:hover {{ background: #e6e3dc; }}
+QPushButton:default {{ font-weight: 600; }}
+QPushButton:pressed {{ border-top-color: {DESKTOP["dark_shadow"]};
+    border-left-color: {DESKTOP["dark_shadow"]}; border-bottom-color: white;
+    border-right-color: white; padding-top: 7px; padding-bottom: 5px; }}
+QPushButton:disabled {{ color: {DESKTOP["shadow"]}; }}
 QLineEdit, QComboBox, QPlainTextEdit {{
-    background: {CGA["black"]}; color: {CGA["bright_green"]};
-    border: 2px solid {CGA["bright_blue"]}; padding: 3px;
-    font-family: Consolas; font-size: 10pt;
+    background: white; color: {DESKTOP["text"]};
+    border-top: 2px solid {DESKTOP["shadow"]};
+    border-left: 2px solid {DESKTOP["shadow"]};
+    border-bottom: 2px solid white; border-right: 2px solid white;
+    padding: 5px; font-family: "Segoe UI"; font-size: 10pt;
 }}
-QCheckBox {{ color: {CGA["grey"]}; font-family: Consolas; font-size: 10pt; spacing: 6px; }}
-QCheckBox::indicator {{ width: 12px; height: 12px; border: 2px solid {CGA["bright_green"]};
-                        background: {CGA["black"]}; }}
-QCheckBox::indicator:checked {{ background: {CGA["bright_green"]}; }}
-QProgressBar {{ background: {CGA["black"]}; color: {CGA["bright_green"]};
-                border: 2px solid {CGA["bright_blue"]}; text-align: center; }}
-QProgressBar::chunk {{ background: {CGA["blue"]}; }}
-QLabel {{ color: {CGA["grey"]}; font-family: Consolas; font-size: 10pt; }}
-QDialog {{ background: {CGA["black"]}; }}
+QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus {{ border-color: {DESKTOP["blue"]}; }}
+QCheckBox {{ color: {DESKTOP["text"]}; font-family: "Segoe UI"; font-size: 10pt; spacing: 7px; }}
+QCheckBox:disabled {{ color: {DESKTOP["muted"]}; }}
+QProgressBar {{ background: white; color: {DESKTOP["text"]};
+    border-top: 2px solid {DESKTOP["shadow"]}; border-left: 2px solid {DESKTOP["shadow"]};
+    border-bottom: 2px solid white; border-right: 2px solid white;
+    min-height: 22px; text-align: center; font-family: "Segoe UI"; }}
+QProgressBar::chunk {{ background: {DESKTOP["navy"]}; width: 12px; margin: 1px; }}
+QLabel {{ color: {DESKTOP["text"]}; font-family: "Segoe UI"; font-size: 10pt; }}
+QLabel#windowBanner {{ background: {DESKTOP["navy"]}; color: white;
+    padding: 8px 10px; font-weight: 600; font-size: 12pt; }}
+QDialog {{ background: {DESKTOP["face"]}; }}
+QToolTip {{ background: #ffffe1; color: {DESKTOP["text"]}; border: 1px solid black; }}
 """

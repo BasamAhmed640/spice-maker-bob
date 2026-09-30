@@ -35,6 +35,7 @@ internal static class PortableInstaller {
     private static string EnvironmentWarning;
     private static int Result;
     private static bool Silent;
+    private static volatile string SetupStage = "Preparing the application";
 
     [STAThread]
     private static int Main(string[] args) {
@@ -50,15 +51,7 @@ internal static class PortableInstaller {
         if (Silent) {
             try { Install(); } catch (Exception ex) { Fail(ex); }
         } else {
-            using (var form = new Form())
-            using (var gif = Assembly.GetExecutingAssembly().GetManifestResourceStream("splash.gif")) {
-                form.Text = Edition + " " + Version + " setup";
-                form.FormBorderStyle = FormBorderStyle.FixedDialog;
-                form.MaximizeBox = false; form.MinimizeBox = false;
-                form.StartPosition = FormStartPosition.CenterScreen;
-                var picture = new PictureBox { Image = Image.FromStream(gif), SizeMode = PictureBoxSizeMode.AutoSize };
-                form.ClientSize = picture.Image.Size;
-                form.Controls.Add(picture);
+            using (var form = CreateSetupForm()) {
                 bool done = false;
                 form.FormClosing += (s,e) => { if (!done) e.Cancel = true; };
                 form.Shown += async (s,e) => {
@@ -78,6 +71,83 @@ internal static class PortableInstaller {
             } catch (Exception ex) { Fail(ex); }
         }
         return Result;
+    }
+
+    /// <summary>A compact classic setup screen; no estimated percentage is invented.</summary>
+    private static Form CreateSetupForm() {
+        var form = new Form {
+            Text = Edition + " " + Version + " setup",
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false, MinimizeBox = false,
+            StartPosition = FormStartPosition.CenterScreen,
+            BackColor = Color.FromArgb(212, 208, 200),
+            Font = new Font("Segoe UI", 9f),
+            AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(14)
+        };
+        var layout = new TableLayoutPanel {
+            AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 1,
+            Margin = Padding.Empty, Padding = Padding.Empty
+        };
+        layout.Controls.Add(new Label {
+            Text = "Spice Maker · Setup", AutoSize = false,
+            Width = 440, Height = 36, Dock = DockStyle.Fill,
+            BackColor = Color.Navy, ForeColor = Color.White,
+            Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(9, 0, 0, 0),
+            Margin = new Padding(0, 0, 0, 12)
+        });
+        var stage = new Label {
+            Text = SetupStage, AutoSize = true, MaximumSize = new Size(440, 0),
+            Margin = new Padding(0, 0, 0, 9)
+        };
+        layout.Controls.Add(stage);
+        var progress = new SetupActivityBar {
+            Width = 440, Height = 26, Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 0, 9)
+        };
+        layout.Controls.Add(progress);
+        var elapsed = new Label {
+            Text = "ELAPSED 00:00:00", AutoSize = true, ForeColor = Color.Navy,
+            Font = new Font("Consolas", 9f), Margin = new Padding(0, 0, 0, 10)
+        };
+        layout.Controls.Add(elapsed);
+        layout.Controls.Add(new Label {
+            Text = "Installing into this folder. Your saved models and settings stay here.",
+            AutoSize = true, MaximumSize = new Size(440, 0), Margin = Padding.Empty
+        });
+        form.Controls.Add(layout);
+        var clock = Stopwatch.StartNew();
+        var timer = new System.Windows.Forms.Timer { Interval = 120 };
+        timer.Tick += (s,e) => {
+            stage.Text = SetupStage;
+            elapsed.Text = "ELAPSED " + clock.Elapsed.ToString(@"hh\:mm\:ss");
+            progress.Advance();
+        };
+        form.Shown += (s,e) => timer.Start();
+        form.Disposed += (s,e) => timer.Dispose();
+        return form;
+    }
+
+    /// <summary>Navy moving blocks show activity, without claiming percent complete.</summary>
+    private sealed class SetupActivityBar : Control {
+        private int step;
+        public SetupActivityBar() {
+            DoubleBuffered = true;
+            AccessibleName = "Setup is working; progress is not a percentage";
+        }
+        public void Advance() { step = (step + 1) % 24; Invalidate(); }
+        protected override void OnPaint(PaintEventArgs e) {
+            e.Graphics.Clear(Color.White);
+            ControlPaint.DrawBorder3D(e.Graphics, ClientRectangle, Border3DStyle.Sunken);
+            int block = 14, count = Math.Max(1, (Width - 4) / block);
+            using (var brush = new SolidBrush(Color.Navy)) {
+                for (int index = 0; index < count; index++) {
+                    if ((index - step + 48) % 24 < 8)
+                        e.Graphics.FillRectangle(brush, 3 + index * block, 3, block - 2, Height - 6);
+                }
+            }
+        }
     }
 
     private static string Resource(string name) {
@@ -146,6 +216,7 @@ internal static class PortableInstaller {
 
     /// <summary>Unpack both payloads beside the installer before anything is replaced.</summary>
     private static void Stage(string staging) {
+        SetupStage = "Unpacking the application and local tools";
         Directory.CreateDirectory(staging);
         Extract("payload.zip", Path.Combine(staging, AppFolder));
         Extract("env.zip", Path.Combine(staging, EnvFolder));
@@ -158,6 +229,7 @@ internal static class PortableInstaller {
 
     /// <summary>Move both staged folders into place, keeping a copy of what they replace.</summary>
     private static void Replace(string staging) {
+        SetupStage = "Updating this copy of Spice Maker";
         var undo = new List<Action>();
         string backup = Safe(".previous-" + Guid.NewGuid().ToString("N"));
         try {
@@ -253,19 +325,26 @@ internal static class PortableInstaller {
     }
 
     /// <summary>
-    /// Create this copy's own interpreter environment once, from the vendored runtime and
-    /// wheel set, with no package index involved. Nothing outside this folder is read or
-    /// written, and an existing environment is kept as it is.
+    /// Keep a matching environment unchanged; replace stale packages from verified local
+    /// wheels. The interpreter and user data stay in place, with package rollback on failure.
     /// </summary>
     private static void ProvisionEnvironment() {
+        SetupStage = "Preparing the local command-line tools";
         string venv = Safe(VenvFolder);
         string python = Safe(VenvFolder + "/Scripts/python.exe");
         bool created = false;
         try {
+            RefuseLinkedAncestors(venv);
+            ExpectedEngineSnapshot();
             if (File.Exists(python)) {
-                Log("environment: keeping the existing " + VenvFolder);
-                if (Check(python) == 0) { ClearWarning(); return; }
-                throw new IOException("The existing " + VenvFolder + " cannot import the application.");
+                if (Check(python) == 0) {
+                    Log("environment: existing " + VenvFolder + " matches the packaged engine");
+                    ClearWarning(); return;
+                }
+                Log("environment: upgrading stale packages in the existing " + VenvFolder);
+                UpgradePackages(python);
+                ClearWarning();
+                return;
             }
             if (Directory.Exists(venv))
                 throw new IOException("The " + VenvFolder + " folder exists but has no interpreter. Delete that folder and run setup again to rebuild this copy's environment.");
@@ -279,7 +358,7 @@ internal static class PortableInstaller {
                 + " --find-links " + Quote(Safe(EnvFolder + "/wheels"))
                 + " --requirement " + Quote(Safe(EnvFolder + "/requirements.txt")), 1800);
             if (code != 0) throw new IOException("Installing the vendored wheels failed (exit " + code + ").");
-            if (Check(python) != 0) throw new IOException("The new " + VenvFolder + " cannot import the application.");
+            if (Check(python) != 0) throw new IOException("The new " + VenvFolder + " does not match the packaged engine.");
             ClearWarning();
             Log("environment ready: " + venv);
         } catch (Exception ex) {
@@ -291,11 +370,92 @@ internal static class PortableInstaller {
         }
     }
 
+    private static string ExpectedEngineSnapshot() {
+        string snapshot = Safe(AppFolder + "/_internal/boardmodeler/engine-identity.json");
+        if (!File.Exists(snapshot))
+            throw new IOException("The packaged engine identity is missing; this installer cannot verify its command-line environment.");
+        return snapshot;
+    }
+
+    /// <summary>Stage only local wheel packages, then activate them with a rollback copy.</summary>
+    private static void UpgradePackages(string python) {
+        VerifyWheels();
+        string packages = Safe(VenvFolder + "/Lib/site-packages");
+        RefuseLinkedAncestors(packages);
+        if (!Directory.Exists(packages))
+            throw new IOException("The existing environment has no site-packages directory.");
+        string staging = Safe(".venv-upgrade-" + Guid.NewGuid().ToString("N"));
+        string candidate = Path.Combine(staging, "site-packages");
+        string backup = Safe(".venv-packages-previous-" + Guid.NewGuid().ToString("N"));
+        try {
+            CopyTree(packages, candidate);
+            RemoveReplacedMetadata(candidate);
+            int code = Run(python, "-m pip install --disable-pip-version-check --no-index --no-deps"
+                + " --upgrade --force-reinstall --target " + Quote(candidate)
+                + " --find-links " + Quote(Safe(EnvFolder + "/wheels"))
+                + " --requirement " + Quote(Safe(EnvFolder + "/requirements.txt")), 1800);
+            if (code != 0) throw new IOException("Upgrading the vendored packages failed (exit " + code + "). The original environment was kept.");
+            if (Check(python, candidate) != 0)
+                throw new IOException("The staged packages do not match the packaged engine. The original environment was kept.");
+            Directory.Move(packages, backup);
+            try {
+                Directory.Move(candidate, packages);
+                if (Check(python) != 0)
+                    throw new IOException("The upgraded environment did not match the packaged engine.");
+            } catch {
+                if (Directory.Exists(packages)) DeleteTree(packages);
+                Directory.Move(backup, packages);
+                Log("environment: restored the previous packages after a failed upgrade");
+                throw;
+            }
+            DeleteTree(backup);
+            Log("environment: upgraded local packages to " + Version + " with the packaged engine identity");
+        } finally {
+            if (Directory.Exists(staging)) DeleteTree(staging);
+        }
+    }
+
+    private static void CopyTree(string source, string destination) {
+        source = Safe(source);
+        destination = Safe(destination);
+        if ((File.GetAttributes(source) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("Refusing to upgrade a linked package directory.");
+        Directory.CreateDirectory(destination);
+        foreach (string file in Directory.GetFiles(source)) {
+            if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0)
+                throw new IOException("Refusing to copy a linked package file.");
+            File.Copy(Safe(file), Safe(Path.Combine(destination, Path.GetFileName(file))));
+        }
+        foreach (string child in Directory.GetDirectories(source))
+            CopyTree(child, Path.Combine(destination, Path.GetFileName(child)));
+    }
+
+    private static void RefuseLinkedAncestors(string path) {
+        string current = Safe(path);
+        while (!String.Equals(current.TrimEnd(Path.DirectorySeparatorChar), Root.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)) {
+            if ((Directory.Exists(current) || File.Exists(current))
+                && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                throw new IOException("Refusing to upgrade an environment through a linked path: " + current);
+            current = Path.GetDirectoryName(current);
+        }
+    }
+
+    private static void RemoveReplacedMetadata(string packages) {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string wheel in Directory.GetFiles(Safe(EnvFolder + "/wheels"), "*.whl"))
+            names.Add(Path.GetFileName(wheel).Split('-')[0].Replace('_', '-'));
+        foreach (string metadata in Directory.GetDirectories(Safe(packages), "*.dist-info")) {
+            string name = Path.GetFileName(metadata).Split('-')[0].Replace('_', '-');
+            if (names.Contains(name)) DeleteTree(metadata);
+        }
+    }
+
     /// <summary>The wheel set is verified before it is installed, never after.</summary>
     private static void VerifyWheels() {
         string list = Safe(EnvFolder + "/wheels.sha256");
         if (!File.Exists(list)) throw new IOException("The wheel checksum list " + EnvFolder + "/wheels.sha256 is missing.");
         int checkedFiles = 0;
+        var verified = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var raw in File.ReadAllLines(list)) {
             var line = raw.Trim();
             if (line.Length == 0) continue;
@@ -310,15 +470,30 @@ internal static class PortableInstaller {
             using (var stream = File.OpenRead(wheel))
                 actual = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
             if (actual != expected) throw new IOException("A vendored wheel does not match its checksum: " + name);
+            verified.Add(wheel);
             checkedFiles++;
         }
         if (checkedFiles == 0) throw new IOException("The wheel checksum list is empty.");
+        foreach (string wheel in Directory.GetFiles(Safe(EnvFolder + "/wheels"), "*.whl"))
+            if (!verified.Contains(Safe(wheel)))
+                throw new IOException("An unverified wheel is present: " + Path.GetFileName(wheel));
         Log("environment: verified " + checkedFiles + " wheels");
     }
 
     private static int Check(string python) {
-        return Run(python, "-c \"import boardmodeler, numpy, pydantic, pypdf, pypdfium2;"
-            + " print('boardmodeler', boardmodeler.__version__)\"", 300);
+        return Check(python, "");
+    }
+
+    private static int Check(string python, string packageRoot) {
+        return Run(python, "-c \"import sys,json;"
+            + " sys.path.insert(0,sys.argv[3]) if sys.argv[3] else None;"
+            + " import boardmodeler,numpy,pydantic,pypdf,pypdfium2;"
+            + " from boardmodeler.engine_identity import engine_contract;"
+            + " expected=json.load(open(sys.argv[1],encoding='utf-8'));"
+            + " assert boardmodeler.__version__==sys.argv[2], 'packaged_version_mismatch';"
+            + " assert engine_contract()==expected, 'packaged_engine_mismatch';"
+            + " print('boardmodeler',boardmodeler.__version__,expected['source_sha256'])\" "
+            + Quote(ExpectedEngineSnapshot()) + " " + Quote(Version) + " " + Quote(packageRoot), 300);
     }
 
     private static string Quote(string value) {
@@ -374,10 +549,10 @@ internal static class PortableInstaller {
 
     private static void Report(Exception ex) {
         string message = "This copy runs, but its own Python environment in " + VenvFolder
-            + " could not be created, so Boardmodeler.cmd needs it rebuilt.\r\n"
+            + " could not be prepared or upgraded, so Boardmodeler.cmd may still use an older engine.\r\n"
             + "The frozen app in " + AppFolder + " is unaffected.\r\n\r\n"
             + "Reason: " + ex.Message + "\r\n\r\nDetails: " + SetupLog + " and " + SetupError + " in "
-            + Root + ". Delete " + VenvFolder + " and run Install.exe again to retry.";
+            + Root + ". Run Install.exe again to retry; the previous environment is retained when an upgrade fails.";
         try { File.WriteAllText(Safe(SetupError), message); } catch (Exception) { }
         EnvironmentWarning = message;
     }

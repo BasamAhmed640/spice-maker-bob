@@ -34,7 +34,6 @@ jobs:
             Install.exe
             INSTALL.txt
             SHA256SUMS.txt
-            installer/assets/pepper-splash.gif
             build/build-verification.json
             build/gui-startup.png
             build/portable-verification.json

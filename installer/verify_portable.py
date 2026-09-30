@@ -172,6 +172,57 @@ def _launchers(root: Path) -> dict[str, object]:
     return {"target": target, "working_directory": working}
 
 
+def _validate_engine_identity(payload: dict, expected: dict, surface: str) -> dict:
+    actual = payload.get("engine_contract")
+    if actual != expected:
+        raise RuntimeError(
+            f"{surface} engine differs from the release source; "
+            "the packaged wheel or desktop executable is stale"
+        )
+    return actual
+
+
+def _engine_report(repo: Path, root: Path) -> dict[str, object]:
+    """A matching version cannot excuse an old wheel or frozen model route."""
+    from boardmodeler.engine_identity import source_contract
+
+    expected = source_contract(repo / "src/boardmodeler")
+    version = _declared_version(repo)
+    surfaces = {
+        "installed_wheel": [str(_venv_python(root)), "-m", "boardmodeler.cli"],
+        "desktop_executable": [str(root / "app/SpiceMaker.exe"), "--cli"],
+    }
+    report = {"source": expected}
+    env = _clean_environment()
+    env["SPICE_MAKER_ROOT"] = str(root) + os.sep
+    for surface, prefix in surfaces.items():
+        observed = subprocess.run(
+            [*prefix, "version", "--json"],
+            capture_output=True,
+            text=True,
+            cwd=root,
+            env=env,
+            timeout=120,
+        )
+        assert observed.returncode == 0, observed.stderr
+        payload = _json(observed.stdout, surface)
+        assert payload.get("version") == version, payload
+        report[surface] = _validate_engine_identity(payload, expected, surface)
+        choices = subprocess.run(
+            [*prefix, "model", "build", "--help"],
+            capture_output=True,
+            text=True,
+            cwd=root,
+            env=env,
+            timeout=120,
+        )
+        assert choices.returncode == 0, choices.stderr
+        assert "--engine" in choices.stdout and all(
+            engine in choices.stdout for engine in ("behavioral", "pin_only", "legacy_ai")
+        ), f"{surface} cannot select the deterministic engine"
+    return report
+
+
 _SHORTCUT_PLACES = (
     Path(os.environ["APPDATA"]) / "Microsoft/Windows/Start Menu",
     Path(os.environ["USERPROFILE"]) / "Desktop",
@@ -242,6 +293,8 @@ def run(repo: Path) -> dict:
     assert not (second / ".venv-setup-error.txt").exists()
     environment = _environment_report(first)
     environment_two = _environment_report(second)
+    engine_identity = _engine_report(repo, first)
+    engine_identity_two = _engine_report(repo, second)
     assert environment["home"] != environment_two["home"]
     launchers = _launchers(first)
     outside = _outside_entries(first, outside_before)
@@ -301,6 +354,8 @@ def run(repo: Path) -> dict:
         "ignores_external_config": True,
         "environment": environment,
         "second_environment": environment_two,
+        "engine_identity": engine_identity,
+        "second_engine_identity": engine_identity_two,
         "launchers": launchers,
         "two_copies_installed_concurrently": True,
         "second_copy_left_the_first_unchanged": True,

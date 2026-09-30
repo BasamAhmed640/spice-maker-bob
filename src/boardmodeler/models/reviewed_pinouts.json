@@ -378,6 +378,338 @@
       "scope": "TI base LM358 eight-pin electrical pinout shared by D/DGK/P/PS/PW. No package suffix, physical footprint, or package geometry is selected. Does not cover LM358B/BA, LM158, JG/FK/DDF or other manufacturers.",
       "device_kind": "integrated_circuit",
       "required_external_connections": []
+    },
+    {
+      "profile_id": "ti-ucc28251-pw-pinout-v1",
+      "parts": [
+        "UCC28251PW",
+        "UCC28251PWR"
+      ],
+      "primary_document_sha256": "81a4414e6f2d7de81398bba5f7ceffb2f4f117dbc005a8c9e157b372646dc602",
+      "packages": [
+        "PW"
+      ],
+      "package_resolution": "exact_package",
+      "selected_package": "PW",
+      "pins": [
+        {
+          "number": "1",
+          "name": "VSENSE",
+          "aliases": [
+            "VSNS"
+          ],
+          "spice_order": 1
+        },
+        {
+          "number": "2",
+          "name": "RT",
+          "aliases": [],
+          "spice_order": 2
+        },
+        {
+          "number": "3",
+          "name": "RAMP/CS",
+          "aliases": [
+            "CS"
+          ],
+          "spice_order": 3
+        },
+        {
+          "number": "4",
+          "name": "ILIM",
+          "aliases": [],
+          "spice_order": 4
+        },
+        {
+          "number": "5",
+          "name": "EN",
+          "aliases": [],
+          "spice_order": 5
+        },
+        {
+          "number": "6",
+          "name": "OVP/OTP",
+          "aliases": [],
+          "spice_order": 6
+        },
+        {
+          "number": "7",
+          "name": "VREF",
+          "aliases": [],
+          "spice_order": 7
+        },
+        {
+          "number": "8",
+          "name": "REF/EA+",
+          "aliases": [],
+          "spice_order": 8
+        },
+        {
+          "number": "9",
+          "name": "FB/EA-",
+          "aliases": [
+            "REF/EA-"
+          ],
+          "spice_order": 9
+        },
+        {
+          "number": "10",
+          "name": "COMP",
+          "aliases": [],
+          "spice_order": 10
+        },
+        {
+          "number": "11",
+          "name": "GND",
+          "aliases": [],
+          "spice_order": 11
+        },
+        {
+          "number": "12",
+          "name": "VDD",
+          "aliases": [],
+          "spice_order": 12
+        },
+        {
+          "number": "13",
+          "name": "SRB",
+          "aliases": [],
+          "spice_order": 13
+        },
+        {
+          "number": "14",
+          "name": "SRA",
+          "aliases": [],
+          "spice_order": 14
+        },
+        {
+          "number": "15",
+          "name": "OUTB",
+          "aliases": [],
+          "spice_order": 15
+        },
+        {
+          "number": "16",
+          "name": "OUTA",
+          "aliases": [],
+          "spice_order": 16
+        },
+        {
+          "number": "17",
+          "name": "HICC",
+          "aliases": [],
+          "spice_order": 17
+        },
+        {
+          "number": "18",
+          "name": "PS",
+          "aliases": [],
+          "spice_order": 18
+        },
+        {
+          "number": "19",
+          "name": "SP",
+          "aliases": [],
+          "spice_order": 19
+        },
+        {
+          "number": "20",
+          "name": "SS",
+          "aliases": [],
+          "spice_order": 20
+        }
+      ],
+      "sources": [
+        {
+          "source_id": "ucc28251_datasheet",
+          "url": "https://www.ti.com/lit/ds/symlink/ucc28251.pdf",
+          "document_sha256": "81a4414e6f2d7de81398bba5f7ceffb2f4f117dbc005a8c9e157b372646dc602",
+          "revision": "SLUSBD8E; revised December 2014",
+          "pdf_page": 3,
+          "location": "Printed page 4: PW-20 pin figure and Pin Functions table; outputs/ground continued on printed page 5.",
+          "page_image_sha256": "8fcde672bb3f4769e4bb046261d1da569eb44e55a7a040b7bd2d3aa421e254d3",
+          "pins": [
+            [
+              "1",
+              "VSENSE"
+            ],
+            [
+              "2",
+              "RT"
+            ],
+            [
+              "3",
+              "RAMP/CS"
+            ],
+            [
+              "4",
+              "ILIM"
+            ],
+            [
+              "5",
+              "EN"
+            ],
+            [
+              "6",
+              "OVP/OTP"
+            ],
+            [
+              "7",
+              "VREF"
+            ],
+            [
+              "8",
+              "REF/EA+"
+            ],
+            [
+              "9",
+              "FB/EA-"
+            ],
+            [
+              "10",
+              "COMP"
+            ],
+            [
+              "11",
+              "GND"
+            ],
+            [
+              "12",
+              "VDD"
+            ],
+            [
+              "13",
+              "SRB"
+            ],
+            [
+              "14",
+              "SRA"
+            ],
+            [
+              "15",
+              "OUTB"
+            ],
+            [
+              "16",
+              "OUTA"
+            ],
+            [
+              "17",
+              "HICC"
+            ],
+            [
+              "18",
+              "PS"
+            ],
+            [
+              "19",
+              "SP"
+            ],
+            [
+              "20",
+              "SS"
+            ]
+          ],
+          "method": "reviewed_table_and_figure"
+        },
+        {
+          "source_id": "ucc28250evm564_schematic",
+          "url": "https://www.ti.com/lit/pdf/SLUU441",
+          "document_sha256": "83cff7c1b5821641a4f7d92165b7f6df6c624ffccd7af48edb766516b50b436f",
+          "revision": "SLUU441A; revised October 2011",
+          "pdf_page": 3,
+          "location": "Printed page 4: Figure 1, U3 UCC28250PW complete 20-pin map. SLUA673A printed page 1 explicitly authorizes replacing this UCC28250PW with UCC28251PW, with RT resistor change.",
+          "page_image_sha256": "672655f6c5e96baba386dd72590d799ba8156486d514a30eec99cb0b05b3a782",
+          "pins": [
+            [
+              "1",
+              "VSNS"
+            ],
+            [
+              "2",
+              "RT"
+            ],
+            [
+              "3",
+              "CS"
+            ],
+            [
+              "4",
+              "ILIM"
+            ],
+            [
+              "5",
+              "EN"
+            ],
+            [
+              "6",
+              "OVP/OTP"
+            ],
+            [
+              "7",
+              "VREF"
+            ],
+            [
+              "8",
+              "REF/EA+"
+            ],
+            [
+              "9",
+              "REF/EA-"
+            ],
+            [
+              "10",
+              "COMP"
+            ],
+            [
+              "11",
+              "GND"
+            ],
+            [
+              "12",
+              "VDD"
+            ],
+            [
+              "13",
+              "SRB"
+            ],
+            [
+              "14",
+              "SRA"
+            ],
+            [
+              "15",
+              "OUTB"
+            ],
+            [
+              "16",
+              "OUTA"
+            ],
+            [
+              "17",
+              "HICC"
+            ],
+            [
+              "18",
+              "PS"
+            ],
+            [
+              "19",
+              "SP"
+            ],
+            [
+              "20",
+              "SS"
+            ]
+          ],
+          "method": "reviewed_schematic_with_manufacturer_substitution"
+        }
+      ],
+      "confirmation_method": "two_independent_sources",
+      "confirmation_reference": "Independently reviewed TI UCC28251 datasheet PW pin figure/table and separately authored SLUU441A U3 UCC28250PW schematic. TI SLUA673A page 1 explicitly says replace the UCC28250PW with a UCC28251PW and change the timing resistor on pin 2; document SHA256 da93b82a9551d84481943d9ae188dc1089cf2ee01666831b148c3658c5331f7e, https://www.ti.com/lit/pdf/SLUA673. This manufacturer-backed substitution supports only PW, not RGP. Distinct documents, not independent manufacturers.",
+      "scope": "Explicit UCC28251PW/PWR TSSOP-20 electrical pinout, primary-side first-order controller. No physical footprint or package geometry claim. Bare UCC28251 and RGP variants are not admitted by this profile.",
+      "device_kind": "integrated_circuit",
+      "required_external_connections": [["1", "7"]]
     }
   ]
 }

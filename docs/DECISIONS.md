@@ -174,7 +174,7 @@ receipt version changes so candidates from the earlier repair logic are not reus
 The TPS54332DDA build of 2026-09-24 spent two author turns (868 s, 182k tokens) on
 models LTspice could not use: turn 1 read the internal node `en_ok` as a bare name
 (LTspice: "No such parameter defined"), turn 2 held its PWM latch on a node whose only
-path to ground was 1 TΩ and whose driving source read its own output ("trouble with
+path to ground was 1 TÎ© and whose driving source read its own output ("trouble with
 node en" after every operating-point method failed). The feedback the author received
 named the failing probes, never the lines that caused them.
 
@@ -319,7 +319,7 @@ Proof: `docs/evidence/2026-09-25-buck-slice/ground-proof/`.
 ## D-046 — Buck rules see through sense elements and pin aliases (2026-09-25)
 
 The pre-freeze buck rules found the power stage only through an inductor on a pin literally
-named PH. A 0.02 Ω PH-to-inductor sense resistor, or pins named SW/FB/AGND, made every rule
+named PH. A 0.02 Î© PH-to-inductor sense resistor, or pins named SW/FB/AGND, made every rule
 — soft-start timing, COMP shunt, catch diode — silently not apply. PH is now traced through
 current-sense elements (≤ 1 Ω, 0 V sources) and terminal names are mapped through the
 template's aliases first. Limits are unchanged; the saved 0.5 ms current-limit window is
@@ -417,7 +417,7 @@ in the general edition.
 
 A template may expose an additional ground or pad terminal, but it may not
 silently satisfy that terminal's board connection with an internal low-ohm
-element. The TPS54332 PowerPAD remains distinct from GND; its 1 GΩ internal
+element. The TPS54332 PowerPAD remains distinct from GND; its 1 GÎ© internal
 resistor exists only for numerical convergence. A card-level static check uses
 the verified raw `B001_PIN_POWERPAD` citation, physical pins 9 and 7, and the
 declared/built netlist to require the actual PCB tie. The generic buck contract
@@ -867,4 +867,50 @@ program marked as downloaded from the internet; the application does not produce
 Evidence: [M6 report](evidence/2026-09-29-m6-pinout/REPORT.md) records the exact primary documents,
 image hashes, implementation boundary and observed acceptance. Both editions' new LM358 runs
 retain 32 PASS / 10 N/A with confirmed exact artifacts; TPS54331 remains BLOCKED before source
-confirmation and delivers no model. Final buck replay and full-suite evidence are pending.
+confirmation and delivers no model. Final buck replay and full-suite completion receipts are retained in the M6 report.
+
+## D-064 — Source-led, scoped UCC28251 PWM and early refusal (2026-09-30)
+
+1. Add a typed, deterministic UCC28251 primary-side controller builder for the exact reviewed
+   SLUSBD8E PDF. The selected PW/PWR TSSOP package uses physical pins 1–20. Bare UCC28251 must
+   select a package; RGP/QFN remains blocked until separately confirmed pinout evidence exists.
+2. The second PW pin map comes from SLUU441A's UCC28250PW schematic, supported by SLUA673A's
+   explicit manufacturer substitution to UCC28251PW. Record all three document identities and
+   the narrow substitution claim. Distinct documents from TI are not independent manufacturers.
+   Primary-side VSENSE1 to VREF7 stays external; the example uses Figure 33's COMP/FB connection.
+3. This is a partial reviewed extraction and a limited 25-C, primary-side, resistor-timed,
+   level-enabled controller. Preserve UNKNOWN for omitted secondary prebias control, HICC recovery,
+   external synchronization, pulse enable, primary SR startup ramp, minimum pulse width, thermal
+   and other unmeasured behavior. Numerical pin biases and amplifier poles are explicit assumptions.
+   A subset of passing rows cannot qualify the full controller or a complete power converter.
+4. Freeze independent stimuli, source bounds and conditions. Threshold tests must account for
+   startup, clock latency and measurement uncertainty; an interval crossing a source endpoint is
+   UNKNOWN. Actual wrong-value and wrong-state controls must fail the same unchanged tests.
+5. Refuse an unsupported part/revision or ambiguous package before paid extraction when existing
+   publication policy already prevents delivery. MCU/FPGA/CPLD/processor/SoC gates apply first to
+   every route. Keep the exact TPS54331 reviewed diagnostic path inexpensive and explicit.
+6. General-purpose AI extraction has one shared 300-s stage budget, 150-s turns and at most 12
+   backend turns across parallel batches and repair attempts. Backend turns are not HTTP attempts;
+   retain the existing observable transport-call counter. Exact reviewed evidence needs no AI.
+
+The original guide is preserved byte-for-byte in `docs/engine-refactor.html`; its SHA-256 is
+`9637137e2f3533210975d7e49c3a20def816c468ed60491c86fba38bfbce38e8`.
+The readable contract is [ENGINE_GUIDE.md](ENGINE_GUIDE.md). Actual source and delivery receipts
+are linked from [the PWM release report](evidence/2026-09-30-pwm-release/REPORT.md).
+
+## D-065 — Compact desktop and matching installed engine (2026-09-30)
+
+Keep the two-window desktop and `Install.exe` (D-062). Use the owner's gray, beveled, navy/blue
+reference style, a segmented activity bar and elapsed timer. Detailed diagnostics are collapsible;
+default outputs use one directory per part, while an explicitly chosen custom directory remains exact.
+
+Version 1.8.0 must ship the current wheel and frozen desktop together. Both expose a source-policy
+fingerprint in `version --json`; release checks compare each with the release sources. A version
+number alone cannot distinguish an old engine. An existing environment with a stale version or
+fingerprint upgrades only its packages from hash-checked vendored wheels, using staging, validation
+and rollback; preserve its interpreter, configuration, keys and model files. A matching environment
+stays unchanged. Keep all installation state folder-local and reject linked upgrade paths.
+
+Offer the small curated application ZIP as the normal download. Keep development history and the
+original engine guide available for RAG. Archive only identified old application downloads, preserve
+their saved outputs, and do not modify unrelated files in Downloads or Windows protection settings.
