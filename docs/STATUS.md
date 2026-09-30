@@ -290,7 +290,7 @@ Not done, stated plainly.
   report is not saved on a block, so the exact cause is not inspectable yet.
 - The op-amp probes fix the eight-pin dual pinout. The window exposes neither `--engine` nor
   `--family`. Provider calls are not counted in the timing record.
-- The terminal setup is pushed on the `terminal-app` branch and is not merged into `main`.
+- The terminal setup landed on `main` on 2026-09-30 (entry at the top of this file).
 
 ## 2026-09-28 — engine step 3: a second family built by code, the pin shell merged, family read by points (D-056)
 
