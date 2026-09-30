@@ -1,3 +1,7 @@
+## 2026-09-30 — public 1.8.0 and owner model delivered
+
+Both main engine milestones and GitHub Windows CI pass; both versioned public releases are published. Actual public ZIP/installer bytes match checked builds and fresh installations open responsive desktop windows. The owner's public frozen default model took 50.655 s, with 15 PASS / 0 FAIL / 21 UNKNOWN / 8 N/A, zero AI calls and exact design/pinout provenance. The actual 45.445-s saved-file retest preserves those files, scope and counts. The generated amplifier-feedback example runs in LTspice. Current app: Downloads/SpiceMaker-1.8.0/Start.cmd; model:models/UCC28251PW. Identified old app downloads/settings/models/logs are archived without deletion. Private config/key bytes were not published. See [final public delivery evidence](evidence/2026-09-30-pwm-release/REPORT.md#public-release-and-owner-folder-completion).
+
 ## 2026-09-30 — current 1.8.0 PWM and verified desktop delivery (D-064/D-065)
 
 The supplied UCC28251PW/PWR Rev. E source now builds through actual upgraded 1.8.0 installed wheel and desktop: 15 PASS/0 FAIL/21 UNKNOWN/8 N/A, zero provider calls, exact identical library/symbol/spec/design/pinout across editions. General pipeline totals 50.698 / 50.888 s. Actual generated amplifier-feedback examples run in LTspice. RGP remains blocked; omitted prebias/sync/hiccup/thermal behavior remains UNKNOWN.

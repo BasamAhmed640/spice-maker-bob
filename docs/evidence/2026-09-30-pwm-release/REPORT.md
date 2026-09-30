@@ -58,4 +58,23 @@ The gray beveled desktop follows the owner's GUI reference with navy headings, a
 
 Normal downloads are the curated versioned application ZIP with just Install.exe, Read me.txt and SHA256SUMS.txt. README installation uses HTTPS and a failing checksum guard before setup. It makes no unsigned-publisher or Windows-protection bypass claim. Source history and prior README/HANDOFF records remain under docs/archive for RAG. Vendor PDF/model binaries, private configurations and waveform files are not published.
 
-After the main milestone and CI complete, public-release download/install and the owner's final saved-model retest receipts are appended below. Those final observations must match this exact checked engine identity.
+## Public release and owner-folder completion
+
+Both engine milestones were pushed to main: General `b33d632`, Bob `84716a4`. GitHub Windows CI passed: [General 36697948093](https://github.com/BasamAhmed640/spice-maker/actions/runs/36697948093), [Bob 36697972483](https://github.com/BasamAhmed640/spice-maker-bob/actions/runs/36697972483). The versioned [General 1.8.0](https://github.com/BasamAhmed640/spice-maker/releases/tag/v1.8.0) and [Bob 1.8.0](https://github.com/BasamAhmed640/spice-maker-bob/releases/tag/v1.8.0) application downloads are published.
+
+Fresh downloads from those public GitHub asset URLs matched the exact checked local ZIP and installer hashes. Fresh silent installs completed in 21.052 s General and 22.892 s Bob. Both actual public desktop windows opened, responded and closed successfully. Bob's public wheel/frozen fingerprints match the previously measured Bob release sources; the General public install ran the actual final model journey and unchanged saved-file retest.
+
+| Public ZIP | SHA256 |
+| --- | --- |
+| SpiceMaker-1.8.0-Windows-x64.zip | `e54e1bb9348735d7e86e7094d3048176c4830a2743ceebeb4d036780f62bf78e` |
+| SpiceMakerBob-1.8.0-Windows-x64.zip | `ba371e80d4b6d8d3053dce2f0f0dd7765fd4a3e40bb97b09790a9600c7b1a3d8` |
+
+The owner's final model is in `Downloads/SpiceMaker-1.8.0/models/UCC28251PW`. The fresh public frozen engine completed the default build in 50.655 s, with 15 PASS / 0 FAIL / 21 UNKNOWN / 8 N/A, complete zero-AI accounting and the same exact model/design/spec/pinout identities listed above. Its generated feedback/ramp example passed real LTspice. An actual saved-file retest took 45.445 s, preserved library/symbol/spec/design identity, retained all counts/scope and kept exact canonical design association. The model card still explicitly carries the partial-evidence scope and numerical assumptions.
+
+Private existing settings were carried into the new local data folder without logging or publication. The selected simulator was retained and default saves were moved inside the current app's models folder. The specifically identified old app folder and old/source ZIP were moved under `Previous downloads`, alongside the current release ZIP. Their original configuration, models and failure logs remain intact; the historical result-file hash was checked before/after the move. Zero files were deleted. The original datasheet and unrelated Downloads items were left in place. Historical receipts retain their original path names.
+
+[public-delivery-receipts.json](public-delivery-receipts.json) contains the non-secret download, source-identity, actual model/retest, GUI and preservation observations. Private config/key bytes are excluded. Model waveform files remain local. `Start.cmd` starts the current app.
+
+![Actual verified General 1.8.0 desktop from the public download](desktop.png)
+
+This completes the scoped PWM failure, desktop/download refresh and identified Downloads cleanup. It does not establish universal functional support, full UCC prebias/hiccup behavior or unreviewed RGP mapping. Future device families still need their own reviewed evidence, implementation and independent measurements.
