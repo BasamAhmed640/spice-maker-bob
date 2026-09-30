@@ -214,7 +214,7 @@ class PipelineRequest:
 
 @dataclass
 class StageProgress:
-    """One stage's outcome for internal pipeline callers."""
+    """One stage's outcome, as the worker protocol and the GUI consume it."""
 
     stage: Stage
     status: Status

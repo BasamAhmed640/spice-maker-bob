@@ -1,0 +1,33 @@
+name: Windows download
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Installer version (x.y.z)
+        required: false
+        default: ''
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --frozen --all-extras
+      - name: Build animated installer and download zip
+        env:
+          INSTALLER_VERSION: ${{ inputs.version }}
+        shell: pwsh
+        run: |
+          $version = $env:INSTALLER_VERSION
+          if (-not $version) {
+            $version = & ./.venv/Scripts/python.exe -c "from boardmodeler import __version__; print(__version__)"
+          }
+          & ./installer/build.ps1 -Version $version
+          if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-download
+          path: releases/*-Windows-x64.zip
+          if-no-files-found: error

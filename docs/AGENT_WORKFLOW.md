@@ -1,20 +1,10 @@
-# Model generation and verification
+# What happens after GO
 
-New builds default to **Code-built behavioral** with full verification in the text menu,
-the `model build` command and the `MakeModelRequest` API. Code selects a supported
-implementation, builds a typed design from cited inputs, renders SPICE and judges it in
-LTspice. AI extraction is the only default AI stage; matching cached records, supplied
-evidence or an exact reviewed PDF profile can avoid it. No default AI author, test planner,
-reinforcement search or repair loop runs.
-
-`model build --engine legacy_ai --sanity` requests a quick structural draft: it reads the
-datasheet, writes a model, runs local structural checks and a bounded unpowered LTspice load
-when configured, and labels electrical behavior unverified. See [quick mode](QUICK_MODE.md)
-for its exact limits.
-
-The menu prints stages and elapsed time from the build progress callback. It does
-not predict completion or expose Bob's private reasoning. The full
-workflow below runs when full verification is selected.
+New builds default to **Code-built behavioral** with **FULL VERIFICATION** in the window,
+CLI and `MakeModelRequest` API. Code selects a supported implementation, builds a typed design
+from cited inputs, renders SPICE and judges it in LTspice. AI extraction is the only default AI
+stage; matching cached records, supplied evidence or an exact reviewed PDF profile can avoid it.
+No default AI author, test planner, reinforcement search or repair loop runs.
 
 Replayed DOCUMENT rows are checked against the currently available cited text. The result replaces
 their saved citation flags before the new source/spec and qualification plan freeze. Missing text,
@@ -55,7 +45,7 @@ required supply is refused. Its real LTspice viability checks do not turn it int
 model. Both code-built routes require full verification.
 
 Only the legacy engine offers the optional [quick structural draft](QUICK_MODE.md), by
-running `model build --engine legacy_ai --sanity`. Quick checks remain electrically unverified.
+unchecking **FULL VERIFICATION** beside GO. Quick checks remain electrically unverified.
 
 PASS covers only measured characteristics at their recorded conditions. The exact reviewed
 LM358 PDF has checks on both channels, but common-mode range, temperature corners and other gaps

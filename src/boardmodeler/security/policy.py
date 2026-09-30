@@ -2,7 +2,7 @@
 
 Defaults are the conservative ones: nothing leaves the machine unless the
 document is public *and* the document record allows remote inference *and* the
-user explicitly passed ``--allow-remote`` for the selected document.
+user passed ``--allow-remote`` (CLI) or confirmed the dialog (GUI).
 
 There is no telemetry, and there is no path that reaches the network without
 producing a :class:`boardmodeler.domain.records.DataDisclosure` first.
@@ -34,7 +34,7 @@ class DataPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     allow_remote: bool = False
-    """Set only by explicit remote inference authorization."""
+    """Set only by ``--allow-remote`` / the GUI confirmation dialog."""
 
     permitted_classifications: list[str] = Field(
         default_factory=lambda: list(EGRESS_PERMITTED_CLASSIFICATIONS)

@@ -422,7 +422,7 @@ def test_the_scripted_backend_authors_the_bundled_template_without_injection(
 ) -> None:
     """``backend_name="scripted"`` is the offline author: bundled template, no key.
 
-    Nothing is injected here: this is the path the menu's integration run and any
+    Nothing is injected here: this is the path the GUI's integration run and any
     user without an agent key take, judged by the same real LTspice harness.
     """
     result, events, _wall = run(tmp_path, backend_name="scripted")

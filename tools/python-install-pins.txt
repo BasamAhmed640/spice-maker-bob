@@ -1,5 +1,0 @@
-# Python 3.14 traditional full installers for Windows. Fields: architecture|URL|SHA-256|bytes|MB shown to user.
-# To bump: check the new python.org release page and winget show Python.Python.3.14 for each
-# architecture, download BOTH installers, verify each SHA-256 locally, then update all fields.
-amd64|https://www.python.org/ftp/python/3.14.7/python-3.14.7-amd64.exe|9d9eb2709ef81bf5cd30db3c2096bdbc4ea10087c22e62f27d356b36f6ae9649|33258168|31.7
-arm64|https://www.python.org/ftp/python/3.14.7/python-3.14.7-arm64.exe|9a3fe120cc81bc2cb099550f794d8356811f96a86c7f438519243c3485db928d|32570072|31.1

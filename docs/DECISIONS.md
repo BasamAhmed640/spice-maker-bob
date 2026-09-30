@@ -820,10 +820,15 @@ of STATUS passed 284 tests in General and 283 in Bob, with one skip and two dese
 Saved TPS54332/LM358 support decisions remain accepted; unrelated-probe variants are refused.
 These checks add no simulator measurements or new electrical-accuracy claims.
 
-## D-061 — Terminal front end and optional shortcut replace the window and the installer (decided 2026-09-28, merged into main 2026-09-30)
+## D-062 — The window stays; the terminal-only front end is withdrawn (2026-09-30)
 
-The terminal menu supersedes the Qt window, and `Setup.cmd` plus `tools/bootstrap.py` supersede the compiled installer. One local `.venv` runs both the menu and flag commands. `Setup.cmd` explains its actions, discovers a supported CPython 3.14 or asks before a hash-checked per-user Python installation, and uses a hash-bearing wheel requirements export. The setup wizard reproduces the persistent choices previously saved by setup, including the explicit LTspice path and smoke test, model folder, Bob key, Internet switch, and `setup_complete`.
+The owner asked to go back after the terminal setup and text menu, merged into `main` at dad0d54,
+replaced the desktop window: the owner wants the window. `main` again holds exactly the files it had
+before that merge, so the window and `Install.exe` are the front end. The terminal work stays on the
+`terminal-app` branch and is not merged again without the owner's explicit OK. Because `main`
+reverted a merge, git treats those commits as already merged; merging them later needs this revert
+reverted first.
 
-The prior no-shortcut decision is reversed only for an opt-in Desktop shortcut. Bootstrap creates or refreshes it after asking; `Setup.cmd --remove` deletes it. A shortcut failure is nonfatal. The application write guard continues to confine application-owned writes to the extracted folder; bootstrap owns the optional Desktop write. The model engine, Bob's tool-free boundary, and measured-verdict rules remain unchanged.
-
-Consequences of landing it on main: the window and its tests are gone, including the engine and family controls the window had gained. The menu builds with the default engine (`behavioral`); choose another with `Boardmodeler.cmd model build --engine legacy_ai|pin_only` (and `--family`). A menu prompt for the engine is not built yet. This decision was numbered D-053 on the terminal branch, which collided with the pin-model decision of the same number on main, so it is D-061 here.
+The owner's installation goal: the application self-contained in its folder, with the window, and no
+Windows warning when the download is first run. That warning comes from Windows for any unsigned
+program marked as downloaded from the internet; the application does not produce it.

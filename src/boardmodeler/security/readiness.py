@@ -62,8 +62,10 @@ def overall(checks: list[Check]) -> str:
 
 
 def _configured_provider(config):
-    from boardmodeler.settings_summary import configured_provider
-
+    try:
+        from boardmodeler.settings_summary import configured_provider
+    except ImportError:  # the Bob edition keeps this helper on its setup page
+        from boardmodeler.ui.setup_dialog import configured_provider
     return configured_provider(config)
 
 

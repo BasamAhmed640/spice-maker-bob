@@ -7,7 +7,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -39,7 +38,7 @@ def test_profile_and_config_override_never_restore_old_settings(
     assert config_path() == portable_root / "data/config.json"
     assert load_config().default_model_dir is None
     assert not load_config().setup_complete
-    assert credentials.credential_path() == portable_root / "data/credentials.bob.json"
+    assert credentials.credential_path() == portable_root / "data/credentials.json"
 
 
 def test_fresh_copy_and_relative_paths_do_not_share_state(portable_root, tmp_path, monkeypatch):
@@ -98,15 +97,15 @@ def test_saved_key_stays_in_this_copy_and_does_not_cross_copies(
     secret = "test-only-portable-secret"
     credentials.set_credential("fixture", secret)
     path = credentials.credential_path()
-    assert path == portable_root / "data/credentials.bob.json"
+    assert path == portable_root / "data/credentials.json"
     assert credentials.get_credential("fixture").value == secret
     monkeypatch.setenv("SPICE_MAKER_ROOT", str(tmp_path / "fresh-copy"))
     assert credentials.credential_path() != path
     assert credentials.get_credential("fixture").value is None
 
 
-def test_launcher_root_keeps_state_inside_the_extracted_folder(portable_root, tmp_path):
-    """The launcher root keeps config and credentials inside its own folder."""
+def test_frozen_state_paths_stay_inside_the_extracted_folder(portable_root, tmp_path):
+    """A frozen copy keeps config and credentials under its own folder, override or not."""
     outside = tmp_path / "outside-config.json"
     code = """
 import sys
@@ -114,6 +113,8 @@ from pathlib import Path
 from boardmodeler.config import config_path
 from boardmodeler.security.credentials import credential_path
 from boardmodeler.storage import app_root, data_dir
+sys.frozen = True
+sys.executable = str(Path(sys.argv[1]) / 'app' / 'SpiceMaker.exe')
 root = app_root()
 assert root == Path(sys.argv[1]), root
 for path in (data_dir(), config_path(), credential_path()):
@@ -121,7 +122,6 @@ for path in (data_dir(), config_path(), credential_path()):
 print('contained')
 """
     environment = {k: v for k, v in os.environ.items() if k != "SPICE_MAKER_ROOT"}
-    environment["SPICE_MAKER_ROOT"] = str(portable_root)
     environment["BOARDMODELER_CONFIG"] = str(outside)
     result = subprocess.run(
         [sys.executable, "-c", code, str(portable_root)],
@@ -134,12 +134,40 @@ print('contained')
     assert not outside.exists()
 
 
+def test_frozen_write_guard_in_subprocess(portable_root, tmp_path):
+    # A separate process avoids installing a permanent audit hook in the test runner.
+    code = """
+import sys
+from pathlib import Path
+from boardmodeler.storage import initialize, install_write_guard
+sys.frozen = True
+sys.executable = str(Path(sys.argv[1]) / 'app' / 'SpiceMaker.exe')
+initialize()
+install_write_guard()
+(Path(sys.argv[1]) / 'data' / 'ok.txt').write_text('local')
+try:
+    Path(sys.argv[2]).write_text('must fail')
+except PermissionError:
+    print('blocked')
+else:
+    raise AssertionError('outside write succeeded')
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(portable_root), str(tmp_path / "outside.txt")],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "blocked" in result.stdout
+    assert not (tmp_path / "outside.txt").exists()
+
+
 def test_unfrozen_write_guard_in_subprocess(portable_root, tmp_path):
     """Containment follows the process, not the build: ``SPICE_MAKER_ROOT`` suffices.
 
     The folder-local ``.venv`` runs the command line with ``SPICE_MAKER_ROOT`` set and
-    ``sys.frozen`` is absent, and the write guard still installs. A separate process
-    avoids installing a permanent audit hook in the
+    ``sys.frozen`` false, so the write guard must be installed for a contained venv
+    runtime too. A separate process avoids installing a permanent audit hook in the
     test runner.
     """
     code = """
@@ -206,12 +234,12 @@ else:
 
 
 def test_write_guard_installs_nothing_in_a_repo_dev_run(tmp_path):
-    """Without ``SPICE_MAKER_ROOT``, an ordinary developer run stays unguarded."""
+    """No frozen exe and no ``SPICE_MAKER_ROOT``: an ordinary developer run stays unguarded."""
     code = """
 import sys
 from pathlib import Path
 from boardmodeler.storage import install_write_guard, portable
-assert not portable(), 'this case is a repo dev run'
+assert not getattr(sys, 'frozen', False) and not portable(), 'this case is a repo dev run'
 install_write_guard()
 Path(sys.argv[1]).write_text('dev run')
 print('installed nothing')
@@ -230,36 +258,26 @@ print('installed nothing')
 
 
 def test_setup_requires_explicit_ltspice_and_local_model_folder(
-    portable_root, tmp_path, monkeypatch
+    portable_root, tmp_path, monkeypatch, qtbot
 ):
-    from boardmodeler import agent_providers, setup_wizard
+    from PySide6.QtWidgets import QMessageBox
 
-    with pytest.raises(setup_wizard.SetupError, match="has not been selected"):
-        setup_wizard._check_ltspice(None)
-    assert not config_path().exists()
+    from boardmodeler.ui.setup_dialog import SetupDialog
+
+    warnings = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: warnings.append(args[-1]))
+    page = SetupDialog()
+    qtbot.addWidget(page)
+    assert page.ltspice_edit.text() == ""
+    page._save()
+    assert warnings and not config_path().exists()
     fake_exe = tmp_path / "LTspice.exe"
     fake_exe.write_bytes(b"test fixture")
-    monkeypatch.setattr(setup_wizard, "locate", lambda path: SimpleNamespace(path=path))
-    monkeypatch.setattr(
-        setup_wizard,
-        "smoke_test",
-        lambda *args: SimpleNamespace(status="pass", detail=""),
-    )
-    assert setup_wizard._check_ltspice(str(fake_exe)) == str(fake_exe)
-    with pytest.raises(ValueError, match="inside"):
-        setup_wizard._model_folder(str(tmp_path / "outside"))
+    page.ltspice_edit.setText(str(fake_exe))
+    page.model_dir_edit.setText(str(tmp_path / "outside"))
+    page._save()
     assert not config_path().exists()
-    monkeypatch.setenv("SPICE_TEST_KEY", "test-only-key")
-    monkeypatch.setattr("boardmodeler.cli.doctor_payload", lambda: {"ok": True})
-    monkeypatch.setattr("boardmodeler.cli._render_doctor_human", lambda report: "Doctor OK")
-    args = SimpleNamespace(
-        ltspice=str(fake_exe),
-        model_dir=str(portable_root / "models"),
-        provider=agent_providers.default_provider().id,
-        internet="off",
-        key_env="SPICE_TEST_KEY",
-        yes=True,
-    )
-    assert setup_wizard._save(args) == 0
+    page.model_dir_edit.setText(str(portable_root / "models"))
+    page._save()
     assert load_config().setup_complete
     assert load_config().default_model_dir == "models"

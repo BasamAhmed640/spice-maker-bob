@@ -1,4 +1,4 @@
-"""All application-owned state belongs inside this extracted copy."""
+"""All application-owned state belongs beside this copy of the installer."""
 
 from __future__ import annotations
 
@@ -9,10 +9,13 @@ from pathlib import Path
 
 
 def portable() -> bool:
-    return bool(os.environ.get("SPICE_MAKER_ROOT"))
+    return bool(getattr(sys, "frozen", False) or os.environ.get("SPICE_MAKER_ROOT"))
 
 
 def app_root() -> Path:
+    if getattr(sys, "frozen", False):
+        folder = Path(sys.executable).resolve().parent
+        return folder.parent if folder.name == "app" else folder
     override = os.environ.get("SPICE_MAKER_ROOT")
     return Path(override).resolve() if override else Path(__file__).resolve().parents[2]
 
@@ -58,6 +61,8 @@ def initialize() -> None:
     for key in ("TEMP", "TMP", "TMPDIR"):
         os.environ[key] = str(scratch)
     os.environ["MPLCONFIGDIR"] = str(data_dir() / "plot-cache")
+    if getattr(sys, "frozen", False):
+        os.chdir(app_root())
 
 
 def bob_environment(env: dict[str, str]) -> dict[str, str]:
@@ -128,12 +133,16 @@ _write_guard_installed = False
 def install_write_guard() -> None:
     """Refuse Python file mutations outside the portable root, including CLI exports.
 
-    ``Boardmodeler.cmd`` sets ``SPICE_MAKER_ROOT`` for the folder-local venv, so
-    that process is guarded. A developer run without that variable installs nothing.
+    Containment follows the process, not the build. The folder-local ``env/python``
+    runtime (``python.exe -m boardmodeler.cli`` from ``Boardmodeler.cmd``) sets
+    ``SPICE_MAKER_ROOT`` and leaves ``sys.frozen`` false; that process is contained too,
+    so it is guarded as well. A developer run from a checkout is neither frozen nor
+    rooted, installs nothing, and keeps every dev workflow unconfined.
 
     The audit hook is process-wide and cannot be removed once installed, so this is
-    called from ``boardmodeler.cli.main``, never as an import side effect and never
-    from a test that shares the runner process.
+    called from an entry point (``boardmodeler.cli.main``, the frozen
+    ``installer/entry.py``), never as an import side effect and never from a test that
+    shares the runner process.
     """
     global _write_guard_installed
     if _write_guard_installed or not portable():

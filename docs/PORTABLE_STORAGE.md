@@ -1,23 +1,43 @@
-# Portable storage
+# Portable storage in 1.4.0
 
-Each extracted Spice Maker Bob folder is one independent copy. `Setup.cmd`, `Start.cmd`, and `Boardmodeler.cmd` resolve their own folder and set `SPICE_MAKER_ROOT`. The Python application writes its own files only inside that root:
+The folder extracted from GitHub is the storage boundary for this copy:
 
-| Path | Contents |
-| --- | --- |
-| `.venv/` | Python environment built from `requirements.txt` |
-| `data/config.json` | LTspice path, relative model folder, Bob provider and Internet choice |
-| `data/credentials.bob.json` | The Bob API key as plain local JSON |
-| `data/temp/`, `data/logs/`, `data/plot-cache/` | Local scratch and diagnostics |
-| `data/bob-profile/` | Isolated profile for Bob Shell |
-| `models/` | Default models, evidence, caches, and simulator runs |
-| `library/` | Local model and symbol exports |
+- `Install.exe`: animated installer, included in Code > Download ZIP on main.
+- `Start.cmd` and `app/`: launch command and bundled application/Python.
+- `data/config.json`: first-launch settings, selected executable path and relative model folder.
+- `data/credentials.bob.json`: one API key as an ordinary local JSON file, **not encrypted**.
+- `data/temp/`, `data/logs/`, `data/plot-cache/`: scratch work and diagnostics.
+- `data/bob-profile/`: isolated profile for IBM Bob Shell when used by this copy.
+- `models/`: default model output, including datasheet copies, evidence, caches and simulator runs.
+- `library/`: model/symbol export inside this folder; add `library/sym` and `library/sub` to LTspice search paths manually if needed.
 
-The key is **not encrypted**. Anyone who can read this folder can read it. Keep the copy private and never share `data/`. No credential is placed in Windows Credential Manager, DPAPI, the registry, or an application profile. Several extracted copies do not share settings or keys.
+SETUP is required on first launch. Choose the existing LTspice executable and a model
+folder under this extracted folder. The executable is read from its existing location;
+the app does not relocate or install LTspice. Changing working directory cannot change
+where this copy stores data. Model paths are saved relative to the portable root, so
+moving the entire folder on the same Windows account preserves that preference.
 
-Setup requires you to paste an existing LTspice executable path; it never searches for LTspice or adopts `LTSPICE_EXE`. It runs a smoke test and stores the path in `data/config.json`. The model folder must be inside this copy. Relative model paths continue to work after moving the folder; an LTspice path points to the existing installation and may need updating on another computer.
+No AppData settings or credential files are read or written. No Credential Manager
+entries, installer registration, desktop/Start Menu shortcuts, global updater, or
+telemetry are created. There is no automatic import of an older installation's key.
+Delete the entire extracted folder for a fresh start. Replacing only Install.exe or
+running it again inside an existing folder updates app/ and preserves data/ and models/.
+Keep the editions in separate folders; the installer rejects mixing them in one folder.
 
-Setup downloads hash-checked wheels into `data/temp/` and installs exactly the pinned runtime packages into `.venv/`. When Python 3.14 is absent, it first asks whether to install a hash-checked python.org installer for the current Windows user. That Python installation is a system dependency outside this folder; it is not application state. LTspice, Bob Shell and datasheets are never downloaded by Setup.
+The key remains sensitive. The file is not encrypted and is not tied to a Windows account:
+anyone who can read this folder can read the key, so keep the copy private. Generated data
+and keys
+are excluded from Git and from packaging. Sharing the entire folder manually would
+still share its private model data and its key file; share a clean GitHub download.
 
-The optional Desktop shortcut contains an absolute target to `Start.cmd`, so run Setup again after moving the extracted folder to refresh it. `Setup.cmd --remove` removes this copy's shortcut. A Desktop that cannot be written does not prevent setup. Delete the extracted folder to remove this app and its models. Remove Python separately in Windows Settings if Setup installed it and you no longer need it.
+Spice Maker restricts its Python file writes to this folder and gives child temporary
+work and the Bob profile local paths. This is application storage containment, not an
+OS sandbox: Windows, antivirus and external tools such as LTspice may maintain their
+own system records. API use sends selected content to the configured service.
 
-The Python write guard contains application-owned writes to this folder. It is not an operating-system sandbox: Bob Shell, LTspice, Python and Windows can maintain their own files, and Bob receives selected content when Internet access is enabled. Bob Shell runs with its tool groups disabled and returns model text; the application writes the candidate and judges it with LTspice.
+The UCC28251 replay in this change returned usable responses after 95.0 and 132.4
+seconds. The latter used flat evidence.pdf_page instead of evidence.page.pdf_page.
+That exact unambiguous shape is now normalized locally; conflicts, invalid values,
+unknown units, numerical limits and provenance checks remain unchanged. This avoids
+an unnecessary repair call for that recorded response. It does not prove that every
+UCC28251 behavior has been modeled or that the full run has completed.

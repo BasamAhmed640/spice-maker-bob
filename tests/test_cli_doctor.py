@@ -1,6 +1,6 @@
 """CLI tests (Phase 0 step 11).
 
-`doctor --json` is the environment contract used by setup and CI, so its
+`doctor --json` is the environment contract used by the GUI and by CI, so its
 keys are asserted; an unconfigured machine must say SETUP is required rather than
 find an installation by itself, and a configured missing path must produce
 ``smoke_test == "fail"`` with a non-empty detail rather than a crash or a false

@@ -145,9 +145,9 @@ separately from ordinary author/harness work. Refusal is not mislabeled as agent
    pin-order hashes and the TPS54331 ambiguity guard are necessary narrower checks.
 5. Add further families/pinouts only with implementations, cited inputs and qualified independent
    tests. Multi-rail pin-shell behavior remains separate scope. The terminal setup (`Setup.cmd`,
-   `Start.cmd`, `Boardmodeler.cmd`, no `Install.exe`) was merged into `main` on 2026-09-30 (D-061,
-   see STATUS); the window is gone, so the engine picker it had is not in the text menu yet
-   (use `model build --engine ...`). Adding an engine prompt to the menu is a small open item.
+   `Start.cmd`, `Boardmodeler.cmd`, a text menu instead of the window) was merged into `main` on
+   2026-09-30 and reverted the same day at the owner's request (D-062): the owner wants the window.
+   It stays on the `terminal-app` branch; do not merge it again without the owner's OK.
 
 No PASS without real simulator evidence; never relax a limit or silently switch routes. Keep vendor
 PDFs and models local, never write to the LTspice installation/library, and never print credentials.
