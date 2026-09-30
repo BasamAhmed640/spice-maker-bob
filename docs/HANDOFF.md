@@ -144,7 +144,10 @@ separately from ordinary author/harness work. Refusal is not mislabeled as agent
    against cited evidence and the owner or an independent source before publication. Existing
    pin-order hashes and the TPS54331 ambiguity guard are necessary narrower checks.
 5. Add further families/pinouts only with implementations, cited inputs and qualified independent
-   tests. Multi-rail pin-shell behavior and the terminal-app refactor remain separate scope.
+   tests. Multi-rail pin-shell behavior remains separate scope. The terminal setup (`Setup.cmd`,
+   `Start.cmd`, `Boardmodeler.cmd`, no `Install.exe`) is already pushed on the `terminal-app`
+   branch of each repo (09-28) and is not merged into `main`, which still ships `Install.exe`;
+   merging it rewrites README, STATUS and DECISIONS, so expect conflicts in the docs.
 
 No PASS without real simulator evidence; never relax a limit or silently switch routes. Keep vendor
 PDFs and models local, never write to the LTspice installation/library, and never print credentials.
