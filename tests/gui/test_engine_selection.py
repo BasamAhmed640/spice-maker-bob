@@ -112,6 +112,7 @@ def test_build_choices_are_locked_until_the_run_finishes(window, engine):
 def test_route_explanations_remain_readable_at_the_minimum_window_size(window, qtbot):
     window.show()
     qtbot.waitExposed(window)
+    window.advanced_button.click()
     for engine in ("legacy_ai", "behavioral", "pin_only"):
         _select(window, engine)
         window.resize(window.minimumSize())
@@ -119,6 +120,6 @@ def test_route_explanations_remain_readable_at_the_minimum_window_size(window, q
         hint = window.engine_hint
         assert hint.height() >= hint.heightForWidth(hint.width())
         assert (
-            hint.mapTo(window, hint.rect().bottomLeft()).y()
-            < window.go_button.mapTo(window, window.go_button.rect().topLeft()).y()
+            hint.mapTo(window.advanced_panel, hint.rect().bottomLeft()).y()
+            < window.advanced_panel.height()
         )

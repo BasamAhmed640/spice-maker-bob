@@ -55,11 +55,12 @@ is no build deadline. ``max_iterations`` is ``None`` by default — no cap — a
 loop stops on satisfaction, on ``max_iterations`` when a caller sets one, or after
 ``stall_patience`` consecutive turns that change nothing the harness can see; a
 capped or stalled run still reports every row the harness measured. The product
-``api`` path (including a Bob API key) applies a finite default of
+``api`` path applies a finite default of
 :data:`~boardmodeler.authoring.api_backend.DEFAULT_TIMEOUT_S` (600 s) to each
 turn when the caller leaves ``turn_timeout_s`` unset; an explicit value overrides
-it, and the loop API and direct Bob CLI path stay unbounded when called with
-``None``. ``timeout_s`` bounds a single simulation run, not the build.
+it, and the loop API and the Bob-only edition's direct CLI path stay unbounded
+when called with ``None``. ``timeout_s`` bounds a single simulation run, not the
+build.
 
 Nothing raises for an expected failure — a missing datasheet, a document the
 provider refuses, a missing key, absent LTspice, a tampered spec or a
@@ -80,6 +81,7 @@ import time
 import uuid
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -106,6 +108,7 @@ from boardmodeler.authoring.part_class import classify
 from boardmodeler.authoring.probes import PROBES
 from boardmodeler.authoring.reinforce import ReinforcementReport, reinforce
 from boardmodeler.authoring.spec import SpecSet, load_tps54320_spec, normalize_unit
+from boardmodeler.build_flavor import BOB_ONLY
 from boardmodeler.config import load_config
 from boardmodeler.documents.pdf import page_text, read_pdf, read_pdf_pdfium
 from boardmodeler.documents.store import DocumentStore, DocumentStoreError
@@ -126,13 +129,22 @@ from boardmodeler.security.network import (
 )
 from boardmodeler.simulation.ltspice import locate
 
+if BOB_ONLY:
+    _API_BACKEND_TYPES = ()
+else:
+    from boardmodeler.authoring.api_backend import ApiKeyBackend
+
+    _API_BACKEND_TYPES = (ApiKeyBackend,)
+
 __all__ = [
     "MakeModelRequest",
     "MakeModelResult",
+    "ModelSummary",
     "RowOutcome",
     "StageEvent",
     "bind_requirements",
     "build_backend",
+    "load_model_summary",
     "make_model",
 ]
 
@@ -161,8 +173,8 @@ DESIGN_RECORD_NAME = "model-design.json"
 EXAMPLE_NAME = "EXAMPLE.cir"
 
 LTSPICE_MISSING = (
-    "ltspice_not_configured: open SETUP, choose LTspice.exe, save, then re-run "
-    "'boardmodeler doctor' to confirm it"
+    "ltspice_not_found: LTspice is not configured; open SETUP and choose "
+    "LTspice.exe, then re-run 'boardmodeler doctor' to confirm it"
 )
 
 _TEXT_SUFFIXES = frozenset({".txt", ".text", ".md"})
@@ -242,17 +254,17 @@ class MakeModelRequest:
     ``max_iterations=None`` (the default) has no cap: the author loop runs until
     the harness is satisfied or the agent stops making progress, which is what
     ``stall_patience`` counts. ``turn_timeout_s`` bounds one agent invocation; when
-    it is ``None`` the product ``api`` path (including a Bob API key) applies its own
-    finite 600 s default, and an explicit value overrides that. ``timeout_s`` bounds
-    a single simulation run. There is no build deadline.
+    it is ``None`` the product ``api`` path applies its own finite 600 s default, and
+    an explicit value overrides that. ``timeout_s`` bounds a single simulation run.
+    There is no build deadline.
 
     ``backend_name`` names the author: ``"api"`` (the default) uses an API-key
     provider — ``provider`` is a provider id from
     :mod:`boardmodeler.agent_providers`, ``agent_model`` overrides its
     documented model and ``agent_max_tokens`` its output budget, all falling back
-    to the persisted settings and then to the catalog's own defaults — ``"bob"``
-    runs the Bob CLI, and ``"scripted"``/``"fixture"`` write the bundled offline
-    template.
+    to the persisted settings and then to the catalog's own defaults — and
+    ``"scripted"``/``"fixture"`` write the bundled offline template. ``"bob"`` names
+    the Bob-only edition's CLI, which a general build refuses with a reason.
     """
 
     part: str
@@ -1133,8 +1145,10 @@ def build_backend(request: MakeModelRequest) -> AuthorBackend:
     ``api`` (the default) speaks the configured provider's documented HTTP shape
     with an API key — ``request.provider`` picks the provider id and
     ``request.agent_model`` its model, both falling back to the persisted
-    settings. ``bob`` is the Bob CLI. ``scripted``/``fixture`` name the offline
-    author: it writes the bundled behavioural regulator template (and a symbol for
+    settings. ``bob`` is the Bob-only edition's CLI; a general build refuses that
+    name with a reason instead of constructing anything. ``scripted``/``fixture``
+    name the offline author: it writes the bundled behavioural regulator template
+    (and a symbol for
     it) when ``request.subckt`` names one, and writes nothing otherwise — the
     harness then reports the missing model with its own reason. It is what the
     GUI's integration runs and anyone without an agent key use; it never pretends
@@ -1144,6 +1158,11 @@ def build_backend(request: MakeModelRequest) -> AuthorBackend:
     """
     name = str(request.backend_name or "").strip().lower()
     if name in ("", "api"):
+        if not internet_allowed():
+            # The API author is the backend that reaches the provider's API, so the
+            # product's single switch is checked before anything is constructed: no
+            # request is built, and the reason reaches the caller as BLOCKED.
+            return UnavailableBackend("api", refusal_detail("authoring a model over the API"))
         # ``turn_timeout_s`` bounds one agent invocation; when the caller leaves it
         # unset the API-key path applies its own finite 600 s budget, retries included.
         limit = float(request.turn_timeout_s) if request.turn_timeout_s else DEFAULT_API_TIMEOUT_S
@@ -1155,13 +1174,24 @@ def build_backend(request: MakeModelRequest) -> AuthorBackend:
             timeout_s=limit,
         )
     if name == "bob":
+        if not BOB_ONLY:
+            return UnavailableBackend(
+                "bob",
+                "bob_backend_unavailable: the general edition does not include Bob Shell; "
+                "use the 'api' backend with a vendor API key",
+            )
+        if not internet_allowed():
+            # The Bob CLI also answers over the network, so the same switch governs it.
+            return UnavailableBackend("bob", refusal_detail("authoring a model with Bob"))
         return BobShellBackend(team_id=request.team_id, timeout_s=request.turn_timeout_s)
     if name in ("scripted", "fixture"):
         return _bundled_author(request)
+    known = (
+        "'api', 'bob', 'scripted' or 'fixture'" if BOB_ONLY else "'api', 'scripted' or 'fixture'"
+    )
     return UnavailableBackend(
         name or "unknown",
-        f"{name or 'unknown'}_backend_unavailable: unknown backend name; use 'api', 'bob', "
-        "'scripted' or 'fixture'",
+        f"{name or 'unknown'}_backend_unavailable: unknown backend name; use {known}",
     )
 
 
@@ -1226,8 +1256,7 @@ class _Ledger:
 
     The record answers "where did the time go" for one build. ``author`` includes the
     model-writing agent turns and every LTspice check made inside them. The run adds
-    the backend's observed invocation attempts before saving, without guessing the
-    provider requests hidden inside Bob Shell.
+    the backend's observed inference attempts to this record before saving it.
     """
 
     def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
@@ -1349,43 +1378,64 @@ def _page_lookup(record: DocumentRecord, store: DocumentStore):
     """
     document = None
     second: list[Any] = []  # the pdfium reading, read once and only when the file is a PDF
+    state: dict[str, str] = {}
 
     def lookup(doc_id: str, pdf_page: int) -> str | None:
         nonlocal document
         if doc_id != record.doc_id:
+            state["reason"] = f"unknown document {doc_id!r}"
             return None
         try:
             path = store.original_path(doc_id)
-        except KeyError, DocumentStoreError, OSError, ValueError:
+        except (KeyError, DocumentStoreError, OSError, ValueError) as exc:
+            state["reason"] = f"the stored original could not be opened ({type(exc).__name__})"
             return None
         if path.suffix.lower() in _TEXT_SUFFIXES:
             if pdf_page != 0:
+                state["reason"] = "a text document has only page 0"
                 return None
             try:
                 return path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
+            except OSError as exc:
+                state["reason"] = f"the stored text could not be read ({type(exc).__name__})"
                 return None
         if document is None:
             try:
                 document = read_pdf(path)
-            except Exception:
+            except Exception as exc:
+                # Keep the cause: this used to return a bare ``None``, so a failure to
+                # read the datasheet surfaced later as an AttributeError inside the
+                # reviewed-row extractor instead of as the read failure it is.
+                state["reason"] = f"the PDF could not be read ({type(exc).__name__}: {exc})"
                 return None
         if pdf_page >= len(document.pages):
+            state["reason"] = (
+                f"page {pdf_page + 1} is beyond this document's {len(document.pages)} pages"
+            )
             return None
         text = page_text(document, pdf_page)
         if not text.strip():
+            state["reason"] = (
+                f"page {pdf_page + 1} has no extractable text (an image-only page needs OCR)"
+            )
             return text
         if not second:
             try:
                 second.append(read_pdf_pdfium(path))
-            except Exception:  # one reading is still a reading; the second is a tolerance
+            except Exception:  # one reading is still a reading; the second is only a tolerance
                 second.append(None)
         other = second[0]
         if other is not None and pdf_page < len(other.pages):
             return text + READING_BREAK + other.pages[pdf_page].text
         return text
 
+    #: Why the last lookup returned nothing usable: cited-page refusals must name it.
+    lookup.last_reason = lambda: state.get("reason", "")  # type: ignore[attr-defined]
     return lookup
+
+
+#: The reviewed LM358 rows are cited from one page of the TI datasheet (table 5.7).
+_LM358_REFERENCE_PAGE = 9
 
 
 def _required_text(characteristic: object) -> str:
@@ -1497,12 +1547,14 @@ class _Run:
         """Keep one backend so extraction, planning and authoring share one meter."""
         if self.backend is None:
             self.backend = build_backend(self.request)
-            if isinstance(self.backend, BobShellBackend):
+            if isinstance(self.backend, _API_BACKEND_TYPES):
+                self._backend_counter_start = self.backend.provider_calls
+            elif isinstance(self.backend, BobShellBackend):
                 self._backend_counter_start = self.backend.shell_invocations
         return self.backend
 
     def _provider_call_fields(self) -> dict[str, Any]:
-        """Record shell starts without guessing requests hidden inside the CLI."""
+        """Count HTTP attempts exactly; never guess requests hidden inside a CLI."""
         backend = self.backend
         fields: dict[str, Any] = {
             "provider_calls_definition": "inference HTTP attempts handed to transport",
@@ -1510,7 +1562,11 @@ class _Run:
             "provider_calls_complete": True,
             "provider_calls": 0,
         }
-        if isinstance(backend, BobShellBackend):
+        if isinstance(backend, _API_BACKEND_TYPES):
+            calls = backend.provider_calls - self._backend_counter_start
+            fields["provider_calls_observed"] = calls
+            fields["provider_calls"] = calls
+        elif isinstance(backend, BobShellBackend):
             invocations = backend.shell_invocations - self._backend_counter_start
             fields["backend_invocations"] = invocations
             if invocations:
@@ -1601,6 +1657,11 @@ class _Run:
         refusal = classify(request.part, text=self.record.title)
         if not refusal.supported:
             raise _Stop("read", Status.BLOCKED.value, refusal.detail)
+        from boardmodeler.models.support import decide_support
+
+        identity = decide_support(request.part, title=self.record.title, head=self.head_text)
+        if identity.state == "blocked_class":
+            raise _Stop("read", Status.BLOCKED.value, identity.refusal(request.engine))
         self.store = store
         self.supplied = supplied
         self.declared = declared
@@ -1785,7 +1846,20 @@ class _Run:
 
             if matches(self.request.part, self.record.file_hash):
                 self.citation_lookup = _page_lookup(self.record, self.store)
-                page = self.citation_lookup(self.record.doc_id, 9)
+                page = self.citation_lookup(self.record.doc_id, _LM358_REFERENCE_PAGE)
+                if not page or not page.strip():
+                    # The reviewed rows are cited on one page. If that page cannot be
+                    # read, the honest outcome is a named refusal: the extractor used
+                    # to be handed ``None`` and died with an AttributeError, which read
+                    # like a crash instead of "this datasheet's page is unreadable".
+                    raise _Stop(
+                        "extract",
+                        Status.BLOCKED.value,
+                        "datasheet_page_unreadable: the reviewed rows for this part are cited "
+                        f"at page {_LM358_REFERENCE_PAGE} of this datasheet and that page "
+                        f"yielded no usable text ({self.citation_lookup.last_reason()}); "
+                        "install OCR or supply --requirements with the reviewed rows instead",
+                    )
                 self.requirements, self.reference_bindings, self.pin_map = records(
                     self.record, page
                 )
@@ -1815,10 +1889,6 @@ class _Run:
                     fixture_dir=self.cache_dir,
                 ).provider
             else:
-                try:
-                    require_network("extracting datasheet rows through Bob")
-                except NetworkRefused as exc:
-                    raise _Stop("extract", Status.BLOCKED.value, exc.detail) from exc
                 self._get_backend()
                 extraction_provider = AgentExtractionProvider(
                     self.backend,
@@ -2129,10 +2199,13 @@ class _Run:
         cancel: threading.Event | None,
         impl: Any = None,
     ) -> HarnessReport | None:
-        """Judge a deterministic buck seed before spending a Bob author turn.
+        """Judge a deterministic first candidate before spending an author turn.
 
-        ``impl`` is the registered implementation to seed from; None means the buck
-        template, which is what the agent route has always tried first.
+        A seed is only a starting model. Its values are traced to cited rows or
+        named defaults, while only the simulator may award measured PASS rows.
+        Existing models are left for the ordinary revalidation path. ``impl`` is the
+        registered implementation to seed from; None means the buck template, which is
+        what the agent route has always tried first.
         """
         if path.is_file() or self.spec is None:
             return None
@@ -2157,7 +2230,7 @@ class _Run:
         self.template_seed = seed.payload()
         self.template_seed_bytes = path.read_bytes()
         self.template_design = seed.design
-        self.log.emit("author", "running", f"judging a cited {label} before Bob repair")
+        self.log.emit("author", "running", f"judging a cited {label} before agent repair")
         cache_root = self.workdir / "validation-cache"
         key = validation_key(path, self.spec, request.ltspice, request.timeout_s)
         run_dir = (
@@ -2615,11 +2688,11 @@ class _Run:
                 status=Status.PASS.value,
                 iterations=0,
                 report=seed_report,
-                history=("cited buck template passed the LTspice harness; zero Bob turns",),
-                detail="template passed every bound simulator row; zero Bob turns",
+                history=("cited buck template passed the LTspice harness; zero agent turns",),
+                detail="template passed every bound simulator row; zero agent turns",
             )
             self.report = seed_report
-            self.log.emit("author", "ok", "template passed; zero Bob turns", {"turns": 0})
+            self.log.emit("author", "ok", "template passed; zero agent turns", {"turns": 0})
             return
         key = validation_key(path, self.spec, install.path, self.request.timeout_s)
         cached = read_report(self.workdir / "validation-cache", key, self.spec, path)
@@ -2643,7 +2716,7 @@ class _Run:
                 return
         if cached is None or not cached.passed():
             if _author_needs_network(self.request) and not internet_allowed():
-                usable, reason = False, refusal_detail("authoring a model through Bob")
+                usable, reason = False, refusal_detail("authoring a model through the provider")
             else:
                 usable, reason = backend.availability()
             if not usable:
@@ -2655,8 +2728,8 @@ class _Run:
                         status=Status.UNKNOWN.value,
                         iterations=0,
                         report=seed_report,
-                        history=("template simulated; Bob repair unavailable",),
-                        detail=f"template model measured with unresolved rows; Bob repair: {reason}",
+                        history=("template simulated; agent repair unavailable",),
+                        detail=f"template model measured with unresolved rows; agent repair: {reason}",
                     )
                     self.report = seed_report
                     self.log.emit(
@@ -2742,8 +2815,11 @@ class _Run:
         reported as such, and the run continues. ``cancel`` is the build's event; it and
         ``reinforce_timeout_s`` bound only this search, never the author loop.
         """
-        if not internet_allowed():
-            self.log.emit("reinforce", "skipped", refusal_detail("the supporting-material search"))
+        # Explicit --reinforce never overrides the one SETUP Internet switch.
+        try:
+            require_network("the supporting-material search")
+        except NetworkRefused as refused:
+            self.log.emit("reinforce", "skipped", refused.detail[:160])
             return
         enabled = self.request.reinforce is not False
         digest = self.spec.digest() if self.spec is not None else ""
@@ -2812,7 +2888,14 @@ class _Run:
             TIMING_NAME,
         }
         if include_diagnostics:
-            names.update((SUPPORT_RECORD_NAME, "reviewed-extraction.json", PINOUT_REPORT_NAME))
+            names.update(
+                (
+                    SUPPORT_RECORD_NAME,
+                    "reviewed-extraction.json",
+                    PINOUT_REPORT_NAME,
+                    "official-model.json",
+                )
+            )
         # A reused output directory can switch subcircuit names. Only recorded
         # direct-child libraries/symbols count; a results file cannot name outsiders.
         try:
@@ -3200,7 +3283,7 @@ class _Run:
                     )
             else:
                 provenance.append(
-                    "Bob changed the seed during repair. Parameter origins in the JSON "
+                    "The agent changed the seed during repair. Parameter origins in the JSON "
                     "describe the starting seed; review the delivered library for final values.\n"
                 )
             if metadata.get("limitations"):
@@ -3599,10 +3682,17 @@ def _apply_qualification_status(
 # entry point
 
 
+#: Backend names whose author answers over the network; the offline authors are
+#: ``scripted``/``fixture``, which never do. An empty name means the default, ``api``.
 _NETWORK_BACKENDS = frozenset({"", "api", "bob"})
 
 
 def _author_needs_network(request: MakeModelRequest) -> bool:
+    """True when this request's author would send something to a provider.
+
+    Read before the stages run so a switched-off network is reported immediately, and
+    kept in one place so :func:`build_backend` and the pre-flight check cannot disagree.
+    """
     if request.engine in ("behavioral", "pin_only"):
         # no agent author runs on these routes; extraction, when the rows are not supplied,
         # refuses on its own with the reason if it needs the network and the switch is off
@@ -3645,10 +3735,32 @@ def make_model(
             raise _Stop(
                 "author",
                 Status.BLOCKED.value,
-                refusal_detail("authoring a model through Bob"),
+                refusal_detail("authoring a model over the agent API"),
             )
         with ledger.stage("read"):
             run.read()
+        from boardmodeler.pipeline.official_delivery import try_official_delivery
+
+        with ledger.stage("official"):
+            try:
+                official = try_official_delivery(
+                    request, run.record, run.head_text, run.out_dir, log, cancel
+                )
+            except (OSError, ValueError) as exc:
+                raise _Stop(
+                    "official", Status.BLOCKED.value, f"official_delivery_failed: {exc}"
+                ) from exc
+        if official is not None:
+            timing = ledger.payload(
+                part=request.part,
+                status=official.status,
+                route="official_manufacturer_original",
+                **run._provider_call_fields(),
+            )
+            run._write_text(
+                run.out_dir / TIMING_NAME, json.dumps(timing, indent=2, sort_keys=True) + "\n"
+            )
+            return official
         with ledger.stage("preflight"):
             run.preflight()
         with ledger.stage("extract"):
@@ -3760,4 +3872,362 @@ def _empty_result(request: MakeModelRequest, log: _StageLog, detail: str) -> Mak
         rows=(),
         counts={status.value: 0 for status in Status},
         stages=tuple(log.events),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# reopening a model that is already on disk
+
+
+MODEL_CARD_NAME = "MODEL_CARD.md"
+"""The card every published model directory carries (see ``authoring.card``)."""
+
+_NOT_A_MODEL = (
+    "not_a_model_directory: {directory} holds none of {results}, {card}, "
+    "spec/{characteristics} or {report}; choose the folder a build wrote"
+)
+
+
+@dataclass(frozen=True)
+class ModelSummary:
+    """What an existing model directory honestly is, read from disk and never guessed.
+
+    ``reason`` is what makes this honest: a directory that is not a model comes back with
+    ``reason="not_a_model_directory"`` and no invented part, so a caller refuses (or says
+    why) instead of showing an empty model. ``result`` is the recorded run — status, row
+    counts and every row — only when ``results.json`` parsed; ``results_problem`` says what
+    stopped it otherwise, because "I could not read the record" is a fact a user needs.
+
+    ``manifest_at`` is ``build/project.json``'s own ``created_utc`` when it carries one
+    (else that file's modification time), and ``verification_at`` is when
+    ``harness-report.json`` was last written: the verification evidence's timestamp, not
+    the build's. Both are ISO-8601 UTC strings, and ``None`` when the file is absent.
+    """
+
+    out_dir: Path
+    reason: str | None
+    result: MakeModelResult | None = None
+    part: str | None = None
+    subckt: str | None = None
+    datasheet: Path | None = None
+    card_path: Path | None = None
+    lib_path: Path | None = None
+    asy_path: Path | None = None
+    lib_exists: bool = False
+    asy_exists: bool = False
+    results_path: Path | None = None
+    results_problem: str | None = None
+    manifest_path: Path | None = None
+    manifest_at: str | None = None
+    verification_path: Path | None = None
+    verification_at: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        """True when the directory holds a model, so the summary may be shown."""
+        return self.reason is None
+
+    @property
+    def status(self) -> str | None:
+        """The recorded verdict, or ``None`` when ``results.json`` did not yield one."""
+        return None if self.result is None else self.result.status
+
+    @property
+    def detail(self) -> str:
+        """The recorded reason for that verdict, or the reading problem instead."""
+        if self.result is not None:
+            return self.result.detail
+        return self.results_problem or self.reason or ""
+
+    @property
+    def counts(self) -> dict[str, int]:
+        """The recorded row counts, empty when nothing was readable."""
+        return {} if self.result is None else dict(self.result.counts)
+
+    @property
+    def rows(self) -> tuple[RowOutcome, ...]:
+        """The recorded rows; empty when nothing was readable, never re-derived."""
+        return () if self.result is None else tuple(self.result.rows)
+
+
+def spec_json_in(out_dir: str | Path) -> Path | None:
+    """The frozen specification under ``out_dir``, or ``None`` when there is none."""
+    for parts in ((SPEC_DIRNAME,), (WORK_DIRNAME, SPEC_DIRNAME)):
+        candidate = Path(out_dir).joinpath(*parts, CHARACTERISTICS_NAME)
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def model_lib_in(out_dir: str | Path, subckt: str | None) -> Path | None:
+    """The model's ``<SUBCKT>.lib``, looking where a build may have published it."""
+    from boardmodeler.authoring.loop import MODEL_DIRNAME
+
+    name = str(subckt or "").strip()
+    if not name:
+        return None
+    for parts in ((), (MODEL_DIRNAME,), (WORK_DIRNAME, MODEL_DIRNAME)):
+        candidate = Path(out_dir).joinpath(*parts, f"{name}.lib")
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _modified_at(path: Path) -> str | None:
+    """``path``'s modification time as an ISO-8601 UTC string, or ``None`` if unreadable."""
+    try:
+        stamp = path.stat().st_mtime
+    except OSError:
+        return None
+    return datetime.fromtimestamp(stamp, tz=UTC).isoformat(timespec="seconds")
+
+
+def _manifest_at(path: Path) -> str | None:
+    """The manifest's own timestamp, falling back to when the file was last written."""
+    try:
+        recorded = json.loads(path.read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return _modified_at(path)
+    if isinstance(recorded, dict):
+        claimed = recorded.get("created_utc")
+        if isinstance(claimed, str) and claimed.strip():
+            return claimed.strip()
+    return _modified_at(path)
+
+
+def _spec_parts(path: Path) -> tuple[str | None, str | None, str | None]:
+    """``(part, subckt, problem)`` from a frozen specification file, never raising.
+
+    A helper rather than an inline block so the reading of a file that may be truncated or
+    hand-edited has exactly one boundary, and so the caller's own logic stays readable.
+    """
+    try:
+        spec = SpecSet.from_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return None, None, f"spec could not be read: {type(exc).__name__}: {exc}"
+    return spec.part or None, spec.subckt or None, None
+
+
+def _summary_local_path(directory: Path | None, value: str | Path) -> Path:
+    """Refuse network names and links before resolving saved artifact paths."""
+    raw = str(value)
+    if raw.replace("\\", "/").startswith("//") or "://" in raw:
+        raise ValueError("saved model path is a network/device location")
+    candidate = Path(raw)
+    if directory is not None:
+        if ".." in candidate.parts:
+            raise ValueError("saved artifact path contains parent traversal")
+        candidate = candidate if candidate.is_absolute() else directory / candidate
+        if not candidate.is_relative_to(directory):
+            raise ValueError("saved artifact path is outside the selected model folder")
+        parts = candidate.relative_to(directory).parts
+        if any(":" in part for part in parts):
+            raise ValueError("saved artifact path names an alternate stream")
+        cursor = directory
+    else:
+        candidate = candidate.absolute()
+        cursor = Path(candidate.anchor)
+        parts = candidate.parts[1:]
+    for part in parts:
+        cursor /= part
+        if cursor.is_symlink() or cursor.is_junction():
+            raise ValueError("saved model path passes through a link or junction")
+    resolved = candidate.resolve()
+    if directory is not None and not resolved.is_relative_to(directory):
+        raise ValueError("saved artifact resolves outside the selected model folder")
+    return resolved
+
+
+def _summary_official_artifacts(directory: Path) -> tuple[Path, Path]:
+    """Reopen exact imported files, including dependencies, without inventing accuracy."""
+    receipt_path = _summary_local_path(directory, "official-model.json")
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    if (
+        not isinstance(receipt, dict)
+        or receipt.get("status") != "delivered"
+        or receipt.get("adaptation_applied") is not False
+        or receipt.get("electrical_accuracy_verified") is not False
+    ):
+        raise ValueError("official saved receipt does not describe an unchanged delivered original")
+    root = _summary_local_path(directory, receipt["bundle_root"])
+    model = _summary_local_path(directory, receipt["model_path"])
+    if not model.is_relative_to(root):
+        raise ValueError("official model is outside its recorded bundle")
+    files = receipt.get("files")
+    if not isinstance(files, dict) or not 0 < len(files) <= 200:
+        raise ValueError("official dependency manifest is missing or excessive")
+    total = 0
+    for relative, expected in files.items():
+        if (
+            not isinstance(relative, str)
+            or Path(relative).is_absolute()
+            or not isinstance(expected, str)
+            or re.fullmatch(r"[0-9a-f]{64}", expected) is None
+        ):
+            raise ValueError("official dependency manifest has an invalid path or digest")
+        artifact = _summary_local_path(root, relative)
+        size = artifact.stat().st_size
+        total += size
+        if size > 8 * 1024 * 1024 or total > 32 * 1024 * 1024:
+            raise ValueError("official saved bundle exceeds acquisition limits")
+        if hashlib.sha256(artifact.read_bytes()).hexdigest() != expected:
+            raise ValueError("official original or dependency bytes changed since delivery")
+    relative_model = model.relative_to(root).as_posix()
+    if files.get(relative_model) != receipt.get("model_sha256"):
+        raise ValueError("official model identity is not bound to the dependency manifest")
+    package_path = receipt.get("source_package_path")
+    if package_path is not None:
+        package = _summary_local_path(directory, package_path)
+        if package.stat().st_size > 32 * 1024 * 1024 or (
+            hashlib.sha256(package.read_bytes()).hexdigest() != receipt.get("source_sha256")
+        ):
+            raise ValueError("official original source package bytes changed since delivery")
+    symbol = _summary_local_path(directory, receipt["symbol_path"])
+    if symbol.stat().st_size > 1024 * 1024 or (
+        hashlib.sha256(symbol.read_bytes()).hexdigest() != receipt.get("symbol_sha256")
+    ):
+        raise ValueError("official saved symbol bytes changed since delivery")
+    return model, symbol
+
+
+def load_model_summary(out_dir: str | Path) -> ModelSummary:
+    """Read an existing model directory: what it holds, and what it recorded.
+
+    Never guesses and never raises for a directory that is not a model — the caller gets
+    ``reason="not_a_model_directory"`` instead of an invented part number, and an I/O or
+    parse problem is reported in ``results_problem`` rather than hidden. A directory is
+    accepted as a model when it carries any of ``results.json``, ``MODEL_CARD.md``,
+    ``spec/characteristics.json`` or ``harness-report.json``: those are the files a build
+    writes, and requiring all of them would refuse the half-finished directory a user is
+    most likely to ask about.
+    """
+    try:
+        directory = _summary_local_path(None, out_dir)
+    except (OSError, ValueError) as exc:
+        return ModelSummary(out_dir=Path(out_dir), reason=f"model_directory_refused: {exc}")
+    if not directory.is_dir():
+        return ModelSummary(
+            out_dir=directory, reason=f"not_a_directory: {directory} does not exist"
+        )
+    try:
+        results_path = _summary_local_path(directory, RESULTS_NAME)
+        spec_path = None
+        for relative in (f"spec/{CHARACTERISTICS_NAME}", f"build/spec/{CHARACTERISTICS_NAME}"):
+            candidate = _summary_local_path(directory, relative)
+            if candidate.is_file():
+                spec_path = candidate
+                break
+        card = _summary_local_path(directory, MODEL_CARD_NAME)
+        report = _summary_local_path(directory, HARNESS_REPORT_NAME)
+    except (OSError, ValueError) as exc:
+        return ModelSummary(out_dir=directory, reason=f"model_directory_refused: {exc}")
+    markers = [path for path in (results_path, spec_path, card, report) if path is not None]
+    if not any(path.is_file() for path in markers):
+        return ModelSummary(
+            out_dir=directory,
+            reason=_NOT_A_MODEL.format(
+                directory=directory,
+                results=RESULTS_NAME,
+                card=MODEL_CARD_NAME,
+                characteristics=CHARACTERISTICS_NAME,
+                report=HARNESS_REPORT_NAME,
+            ),
+        )
+
+    result: MakeModelResult | None = None
+    problem: str | None = None
+    if results_path.is_file():
+        try:
+            result = MakeModelResult.from_json(results_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            problem = f"{RESULTS_NAME} could not be read: {type(exc).__name__}: {exc}"
+
+    part: str | None = None if result is None else (result.part or None)
+    subckt: str | None = (
+        None if result is None or result.request is None else (result.request.subckt or None)
+    )
+    datasheet: Path | None = (
+        None if result is None or result.request is None else (result.request.datasheet)
+    )
+    if subckt is None and spec_path is not None:
+        spec_part, spec_subckt, spec_problem = _spec_parts(spec_path)
+        part = part or spec_part
+        subckt = subckt or spec_subckt
+        problem = problem or spec_problem
+
+    def saved_file(value):
+        if value is None:
+            return None
+        try:
+            path = _summary_local_path(directory, value)
+            return path if path.is_file() else None
+        except OSError, ValueError:
+            return None
+
+    published_lib = None if result is None else result.lib_path
+    published_asy = None if result is None else result.asy_path
+    lib_path = saved_file(published_lib)
+    asy_path = saved_file(published_asy)
+    official = directory / "official-model.json"
+    official_problem = None
+    if official.is_symlink() or official.is_file():
+        try:
+            receipt = json.loads(
+                _summary_local_path(directory, official).read_text(encoding="utf-8")
+            )
+            if isinstance(receipt, dict) and receipt.get("status") == "delivered":
+                lib_path, asy_path = _summary_official_artifacts(directory)
+                if result is not None:
+                    result = dataclasses.replace(
+                        result,
+                        status="UNKNOWN",
+                        counts={"PASS": 0, "FAIL": 0, "UNKNOWN": 1, "NOT_APPLICABLE": 0},
+                    )
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            official_problem = f"official saved artifacts could not be verified: {exc}"
+            problem = official_problem
+            lib_path = asy_path = None
+            if result is not None:
+                result = dataclasses.replace(result, status="BLOCKED", detail=official_problem)
+    simple_subckt = bool(subckt) and not any(char in subckt for char in "/\\:")
+    lib_path = lib_path or (
+        None
+        if official_problem or not simple_subckt
+        else saved_file(model_lib_in(directory, subckt))
+    )
+    if asy_path is None and subckt:
+        candidate = directory / f"{subckt}.asy"
+        if not official_problem:
+            asy_path = saved_file(candidate)
+    card_path = None if not card.is_file() else card
+    if card_path is None and result is not None and result.card_path is not None:
+        card_path = saved_file(result.card_path)
+    if result is not None:
+        result = dataclasses.replace(
+            result,
+            out_dir=directory,
+            card_path=card_path,
+            lib_path=lib_path,
+            asy_path=asy_path,
+        )
+
+    manifest_path = directory / WORK_DIRNAME / "project.json"
+    return ModelSummary(
+        out_dir=directory,
+        reason=None,
+        result=result,
+        part=part,
+        subckt=subckt,
+        datasheet=datasheet,
+        card_path=card_path,
+        lib_path=lib_path,
+        asy_path=asy_path,
+        lib_exists=lib_path is not None,
+        asy_exists=asy_path is not None,
+        results_path=results_path if results_path.is_file() else None,
+        results_problem=problem,
+        manifest_path=manifest_path if manifest_path.is_file() else None,
+        manifest_at=_manifest_at(manifest_path) if manifest_path.is_file() else None,
+        verification_path=report if report.is_file() else None,
+        verification_at=_modified_at(report) if report.is_file() else None,
     )

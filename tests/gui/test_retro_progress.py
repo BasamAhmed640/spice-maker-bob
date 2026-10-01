@@ -45,7 +45,7 @@ def test_ambiguous_ucc_part_requires_the_user_package(qtbot, tmp_path, monkeypat
     qtbot.addWidget(window)
     window.show()
     window.part_edit.setText("UCC28251")
-    assert window.package_combo.isVisible()
+    assert not hasattr(window, "package_combo")
     pdf = tmp_path / "datasheet.pdf"
     pdf.write_bytes(b"%PDF-1.4")
     window.datasheet_edit.setText(str(pdf))
@@ -53,17 +53,18 @@ def test_ambiguous_ucc_part_requires_the_user_package(qtbot, tmp_path, monkeypat
     started, warned = [], []
     monkeypatch.setattr(window, "_start", started.append)
     monkeypatch.setattr(ui.QMessageBox, "warning", lambda *args: warned.append(args))
+    monkeypatch.setattr(ui.QInputDialog, "getText", lambda *args: ("", False))
     window.go_button.click()
-    assert not started and warned
+    assert not started
     assert not (tmp_path / "model").exists(), "no build may begin before package selection"
-    window.package_combo.setCurrentIndex(window.package_combo.findData(package))
+    monkeypatch.setattr(ui.QInputDialog, "getText", lambda *args: (package, True))
     window.go_button.click()
     assert len(started) == 1
     assert started[0].part == package
     assert started[0].engine == "behavioral"
-    assert window.part_edit.text() == "UCC28251", "the base identity remains visible"
+    assert window.part_edit.text() == package, "the resolved ordering code remains visible"
     window._set_busy(True)
-    assert not window.package_combo.isEnabled()
+    assert not window.part_edit.isEnabled()
     window._set_busy(False)
 
 
@@ -78,11 +79,11 @@ def test_default_save_folder_follows_part_and_package_but_preserves_an_exact_cho
     window.part_edit.setText("LM358")
     assert window.out_edit.text() == str(tmp_path / "models" / "LM358")
     window.part_edit.setText("UCC28251")
-    window.package_combo.setCurrentIndex(window.package_combo.findData("UCC28251PW"))
+    window.part_edit.setText("UCC28251PW")
     assert window.out_edit.text() == str(tmp_path / "models" / "UCC28251PW")
     explicit = tmp_path / "my chosen model folder"
     window.out_edit.setText(str(explicit))
-    window.package_combo.setCurrentIndex(window.package_combo.findData("UCC28251RGP"))
+    window.part_edit.setText("UCC28251RGP")
     window.part_edit.setText("LM358")
     assert window.out_edit.text() == str(explicit)
 

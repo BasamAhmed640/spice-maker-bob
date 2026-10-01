@@ -16,6 +16,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("target", type=Path)
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument(
+        "--changed-only",
+        action="store_true",
+        help="Mirror only source files changed from HEAD, preserving unrelated edition history",
+    )
     args = parser.parse_args(argv)
     source = Path(__file__).resolve().parents[1]
     target = args.target.resolve()
@@ -24,21 +29,40 @@ def main(argv=None):
     paths = subprocess.check_output(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard"], cwd=source, text=True
     ).splitlines()
+    if args.changed_only:
+        modified = set(
+            subprocess.check_output(
+                ["git", "diff", "--name-only", "HEAD"], cwd=source, text=True
+            ).splitlines()
+        )
+        modified.update(
+            subprocess.check_output(
+                ["git", "ls-files", "--others", "--exclude-standard"], cwd=source, text=True
+            ).splitlines()
+        )
+        paths = [name for name in paths if name in modified]
     changed = []
     for name in paths:
         if name in (
             "src/boardmodeler/build_flavor.py",
             "src/boardmodeler/agent_providers.py",
             "src/boardmodeler/authoring/api_backend.py",
+            "src/boardmodeler/authoring/sanity.py",
+            "src/boardmodeler/pipeline/make_model.py",
             "src/boardmodeler/providers/http_inference.py",
             "src/boardmodeler/providers/bob.py",
             "src/boardmodeler/ui/setup_dialog.py",
             "src/boardmodeler/ui/model_maker.py",
             "tests/authoring/test_api_backend.py",
             "tests/authoring/test_api_backend_paths.py",
+            "tests/authoring/test_backends.py",
             "tests/test_desktop_retry_and_go.py",
             "tests/test_desktop_retry.py",
+            "tests/providers/test_bob.py",
+            "tests/providers/test_fixture_provider.py",
             "tests/providers/test_http_inference.py",
+            "tests/security/test_key_verification.py",
+            "tests/test_edition_bob_absent.py",
             "tests/ui/test_provider_refusal.py",
             "tests/domain/test_records_roundtrip.py",
             "tests/pipeline/test_make_model.py",

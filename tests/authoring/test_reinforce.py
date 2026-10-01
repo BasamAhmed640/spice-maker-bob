@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 from urllib.request import Request
 
 import pytest
@@ -677,22 +678,22 @@ def test_default_fetcher_refuses_non_http_schemes_and_bad_timeouts() -> None:
 @pytest.mark.parametrize(
     "url",
     [
-        "http://127.0.0.1/",
-        "http://127.1.2.3/",
-        "http://[::1]/",
-        "http://10.0.0.1/",
-        "http://172.16.0.1/",
-        "http://192.168.1.1/",
-        "http://169.254.169.254/latest/meta-data/",
-        "http://[fe80::1]/",
-        "http://224.0.0.1/",
-        "http://240.0.0.1/",
-        "http://0.0.0.0/",
+        "https://127.0.0.1/",
+        "https://127.1.2.3/",
+        "https://[::1]/",
+        "https://10.0.0.1/",
+        "https://172.16.0.1/",
+        "https://192.168.1.1/",
+        "https://169.254.169.254/latest/meta-data/",
+        "https://[fe80::1]/",
+        "https://224.0.0.1/",
+        "https://240.0.0.0/",
+        "https://0.0.0.0/",
     ],
 )
 def test_default_fetcher_refuses_non_public_destinations(url: str) -> None:
     with pytest.raises(FetchRefused) as refusal:
-        default_fetcher(url)
+        default_fetcher(url, allowed_hosts=(urlsplit(url).hostname,))
     assert "host_refused" in str(refusal.value)
 
 
@@ -705,7 +706,7 @@ def test_default_fetcher_refuses_a_hostname_that_resolves_privately(
         lambda *args, **kwargs: [(2, 1, 6, "", ("10.0.0.5", 0))],
     )
     with pytest.raises(FetchRefused) as refusal:
-        default_fetcher("https://intranet.example/a")
+        default_fetcher("https://intranet.example/a", allowed_hosts=("intranet.example",))
     assert "host_refused" in str(refusal.value)
 
 
@@ -717,16 +718,16 @@ def test_default_fetcher_refuses_a_hostname_that_does_not_resolve(
 
     monkeypatch.setattr(reinforce_module.socket, "getaddrinfo", unreachable)
     with pytest.raises(FetchRefused) as refusal:
-        default_fetcher("https://nowhere.example/a")
+        default_fetcher("https://nowhere.example/a", allowed_hosts=("nowhere.example",))
     assert "host_refused" in str(refusal.value)
 
 
 def test_a_redirect_to_a_non_public_host_is_refused() -> None:
-    handler = reinforce_module._RedirectCap()
+    handler = reinforce_module._RedirectCap(("169.254.169.254",))
     request = Request("https://93.184.216.34/a")
     with pytest.raises(FetchRefused) as refusal:
         handler.redirect_request(
-            request, None, 302, "Found", email.message.Message(), "http://169.254.169.254/"
+            request, None, 302, "Found", email.message.Message(), "https://169.254.169.254/"
         )
     assert "host_refused" in str(refusal.value)
 
@@ -798,7 +799,9 @@ def test_default_fetcher_sends_a_user_agent_and_honours_the_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     opener = _install_fake_opener(monkeypatch, _FakeResponse(b"hello", "text/plain; charset=utf-8"))
-    body, content_type = default_fetcher("https://93.184.216.34/a", timeout_s=7.5)
+    body, content_type = default_fetcher(
+        "https://93.184.216.34/a", timeout_s=7.5, allowed_hosts=("93.184.216.34",)
+    )
     assert body == b"hello"
     assert content_type == "text/plain"
     assert opener.timeout == 7.5
@@ -811,7 +814,7 @@ def test_default_fetcher_refuses_a_non_text_content_type(
 ) -> None:
     _install_fake_opener(monkeypatch, _FakeResponse(b"x", "application/octet-stream"))
     with pytest.raises(FetchRefused) as refusal:
-        default_fetcher("https://93.184.216.34/a")
+        default_fetcher("https://93.184.216.34/a", allowed_hosts=("93.184.216.34",))
     assert "content_type_refused: 'application/octet-stream'" in str(refusal.value)
 
 
@@ -827,7 +830,7 @@ def test_default_fetcher_refuses_oversize_bodies(
 ) -> None:
     _install_fake_opener(monkeypatch, response)
     with pytest.raises(FetchRefused) as refusal:
-        default_fetcher("https://93.184.216.34/a")
+        default_fetcher("https://93.184.216.34/a", allowed_hosts=("93.184.216.34",))
     assert expected in str(refusal.value)
 
 
@@ -1005,14 +1008,13 @@ def test_max_sources_caps_fetches_and_keeps_candidate_order(tmp_path: Path) -> N
 # egress: the search never leaves the part vendor, and gives up when it would
 
 
-def test_vendor_hosts_derives_the_allowlist_from_provenance_and_catalog(tmp_path: Path) -> None:
+def test_vendor_hosts_derives_only_manufacturer_authority(tmp_path: Path) -> None:
     hosts = vendor_hosts(tmp_path)
 
     # The datasheet's own source_url names the vendor; the ``www.`` label is noise.
     assert "ti.com" in hosts
     assert "www.ti.com" not in hosts
-    # This build's catalog documentation hosts are always part of the allowlist.
-    assert "api-docs.deepseek.com" in hosts
+    assert "api-docs.deepseek.com" not in hosts
     assert "example.invalid" not in hosts
     assert len(hosts) == len(set(hosts)), "hosts stay deduplicated"
 
@@ -1024,7 +1026,7 @@ def test_a_caller_supplied_vendor_url_widens_the_allowlist(tmp_path: Path) -> No
     assert "analog.com" in hosts
 
 
-def test_catalog_documentation_hosts_are_always_allowed(tmp_path: Path) -> None:
+def test_provider_documentation_never_grants_component_authority(tmp_path: Path) -> None:
     plain = tmp_path / "no-provenance"
     plain.mkdir()
     calls: list[str] = []
@@ -1036,8 +1038,9 @@ def test_catalog_documentation_hosts_are_always_allowed(tmp_path: Path) -> None:
         fetcher=_fetcher(b"UVLO threshold is 4.3 V typical.", "text/plain", calls),
     )
 
-    assert report.status == "ok"
-    assert calls == ["https://api-docs.deepseek.com/notes"]
+    assert report.status == "unavailable"
+    assert report.detail.startswith("manufacturer_authority_missing:")
+    assert calls == []
 
 
 def test_a_non_vendor_public_host_is_refused_and_reported(tmp_path: Path) -> None:
@@ -1095,19 +1098,33 @@ def test_a_lookalike_vendor_host_is_refused(tmp_path: Path, url: str) -> None:
 
 
 def test_a_vendor_subdomain_is_fetched(tmp_path: Path) -> None:
-    candidate = "https://e2e.ti.com/support/tps54320"
+    candidate = "https://downloads.ti.com/support/tps54320"
     calls: list[str] = []
     report = reinforce(
         part=PART,
         spec_digest=DIGEST,
         out_dir=tmp_path,
-        candidate_provider=_provider((candidate, "vendor forum note")),
+        candidate_provider=_provider((candidate, "vendor document")),
         fetcher=_fetcher(b"UVLO threshold is 4.3 V typical.", "text/plain", calls),
     )
 
     assert report.status == "ok"
     assert calls == [candidate]
     assert report.sources[0].retrieved is True
+
+
+def test_manufacturer_hosted_forum_is_not_official_documentation(tmp_path: Path) -> None:
+    calls: list[str] = []
+    report = reinforce(
+        part=PART,
+        spec_digest=DIGEST,
+        out_dir=tmp_path,
+        candidate_provider=_provider(("https://e2e.ti.com/support/tps54320", "community answer")),
+        fetcher=_fetcher(b"UVLO threshold 4.3 V", "text/plain", calls),
+    )
+    assert report.status == "unavailable"
+    assert calls == []
+    assert "community content is not official documentation" in report.sources[0].reason
 
 
 def test_nothing_vendor_owned_gives_up_without_spending_the_budget(tmp_path: Path) -> None:
@@ -1136,11 +1153,82 @@ def test_nothing_vendor_owned_gives_up_without_spending_the_budget(tmp_path: Pat
             "vendor's sites"
         )
         assert "ti.com" in record.reason
-        assert "api-docs.deepseek.com" in record.reason
+        assert "api-docs.deepseek.com" not in record.reason
 
 
 def test_the_candidate_prompt_names_the_vendor_hosts() -> None:
-    prompt = build_candidate_prompt(PART, 4, ("ti.com", "api-docs.deepseek.com"))
+    prompt = build_candidate_prompt(PART, 4, ("ti.com",))
 
     assert "ti.com" in prompt
     assert "may not leave the vendor" in prompt
+
+
+def test_untrusted_attribution_cannot_create_manufacturer_authority(tmp_path: Path) -> None:
+    root = tmp_path / "unknown"
+    root.mkdir()
+    assert vendor_hosts(root, extra=("https://evil.test/model.lib",)) == ()
+    manifest = root / "vendor-io" / "source" / "manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"source_url": "https://evil.test/model.lib"}))
+    assert vendor_hosts(root) == ()
+
+
+@pytest.mark.parametrize(
+    "target", ["https://evil.test/note", "http://ti.com/note", "https://user:secret@ti.com/note"]
+)
+def test_manufacturer_redirect_refused_before_dns(
+    monkeypatch: pytest.MonkeyPatch, target: str
+) -> None:
+    def forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("refused redirect must not resolve or open a socket")
+
+    monkeypatch.setattr(reinforce_module.socket, "getaddrinfo", forbidden)
+    handler = reinforce_module._RedirectCap(("ti.com",))
+    with pytest.raises(FetchRefused):
+        handler.redirect_request(Request(URL), None, 302, "Found", email.message.Message(), target)
+
+
+def test_official_same_manufacturer_redirect_remains_allowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(reinforce_module, "_require_public_host", lambda url: None)
+    handler = reinforce_module._RedirectCap(("ti.com",))
+    redirected = handler.redirect_request(
+        Request(URL), None, 302, "Found", email.message.Message(), "https://downloads.ti.com/note"
+    )
+    assert redirected.full_url == "https://downloads.ti.com/note"
+
+
+def test_unknown_manufacturer_skips_candidate_agent_turn(tmp_path: Path) -> None:
+    def forbidden(part: str) -> list:
+        raise AssertionError("no authority must skip expensive candidate discovery")
+
+    report = reinforce(
+        part=PART, spec_digest=DIGEST, out_dir=tmp_path / "unknown", candidate_provider=forbidden
+    )
+    assert report.detail.startswith("manufacturer_authority_missing:")
+
+
+def test_old_provider_evidence_cache_is_not_reused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record = reinforce_module.SourceRecord(
+        url="https://api-docs.deepseek.com/notes",
+        claim="old misplaced authority",
+        retrieved=True,
+        excerpt="UVLO threshold 4.3 V",
+        sha256="0" * 64,
+        content_type="text/plain",
+        retrieved_utc=FROZEN_UTC,
+        reason=None,
+    )
+    prior = ReinforcementReport(PART, True, "ok", "cached", (record,), (), (), DIGEST)
+    report_path = tmp_path / REPORT_NAME
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(prior.to_json(), encoding="utf-8")
+    monkeypatch.setattr(
+        reinforce_module, "query_agent_backend", lambda *args, **kwargs: ('{"sources": []}', "")
+    )
+    refreshed = reinforce(part=PART, spec_digest=DIGEST, out_dir=tmp_path)
+    assert refreshed.status == "unavailable"
+    assert refreshed.sources == ()

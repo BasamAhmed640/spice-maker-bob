@@ -54,7 +54,7 @@ def build_application(argv: Sequence[str] | None = None) -> QApplication:
     app = existing if existing is not None else QApplication(list(argv) if argv is not None else [])
     from PySide6.QtCore import Qt
 
-    app.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
+    app.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, False)
     app.setApplicationName(APPLICATION_NAME)
     app.setApplicationVersion(__version__)
     app.setOrganizationName(APPLICATION_NAME)

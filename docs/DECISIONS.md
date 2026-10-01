@@ -914,3 +914,26 @@ stays unchanged. Keep all installation state folder-local and reject linked upgr
 Offer the small curated application ZIP as the normal download. Keep development history and the
 original engine guide available for RAG. Archive only identified old application downloads, preserve
 their saved outputs, and do not modify unrelated files in Downloads or Windows protection settings.
+
+## D-066 — Automatic manufacturer priority and two-input desktop (2026-09-30)
+
+The owner's later clarification supersedes the family-by-family historical review page:
+ordinary users supply a datasheet and part number, with no normal Engine, Family or Package
+selection. Keep explicit legacy authoring under Advanced. A genuinely different physical pin
+map needs a focused ordering-code clarification, rather than a guessed package. Native local
+file selection and copying a PDF drop are allowed; paths can also be pasted with surrounding
+quotes. Selecting a file never starts generation or moves the source document.
+
+Before the generated-part gate, check official manufacturer model downloads. Prefer a model
+that actually loads in LTspice, retain original bytes/dependencies/entry names/license/scope,
+and bind receipts to all delivered hashes. Do not silently apply PSpice numerical adaptation.
+Every redirect keeps HTTPS, public-host and manufacturer-authority checks. AI-provider sites,
+distributors and manufacturer community posts cannot act as component documentation.
+
+Version 1.8.1 resolves TI and Analog Devices product pages, safely inspects plaintext/ZIP
+subcircuits and common diode/BJT/MOSFET model entries, and performs a bounded unpowered load.
+This result is UNKNOWN for datasheet electrical accuracy; model-port symbols do not assert
+physical package pin numbers. Failed native candidates are withheld after other candidates
+are considered. Failed non-native candidates are explicitly recorded before code generation.
+Broad generated behavior composition and independent electrical tests for imported models
+remain unfinished. Do not call this milestone universal or publish a compatibility-only PASS.

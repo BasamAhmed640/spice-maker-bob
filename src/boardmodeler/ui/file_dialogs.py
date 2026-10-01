@@ -16,10 +16,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-__all__ = ["starting_directory"]
+__all__ = ["normalize_path_text", "starting_directory"]
 
 
-def starting_directory(value: str) -> str:
+def normalize_path_text(value: str) -> str:
+    """Remove only a matching pair of pasted shell quotes; never evaluate the text."""
+    text = value.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ('"', "'"):
+        text = text[1:-1]
+    return text
+
+
+def starting_directory(value: str, *, fallback: str | Path | None = None) -> str:
     """The folder a file dialog must open in, given what its field currently holds.
 
     Qt's third argument is the *starting directory*, never the file to select. Handing it
@@ -30,13 +38,16 @@ def starting_directory(value: str) -> str:
     itself when it is a folder, at the folder holding it when it is a file, and at home
     when there is nothing usable to open at.
     """
-    text = value.strip()  # a pasted path often carries spaces; the dialog rejects those too
+    text = normalize_path_text(value)
+    default = Path(fallback) if fallback is not None else Path.home()
+    if not default.is_dir():
+        default = Path.home()
     if not text:
-        return str(Path.home())
+        return str(default)
     candidate = Path(text)
     if candidate.is_dir():
         return str(candidate)
     parent = candidate.parent
     if parent.is_dir():  # the folder of a file, or of a path whose file has gone
         return str(parent)
-    return str(Path.home())
+    return str(default)

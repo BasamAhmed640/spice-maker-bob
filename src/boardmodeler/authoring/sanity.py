@@ -44,7 +44,9 @@ def rejection_marker(detail: str) -> str | None:
     return detail.strip()[:300]
 
 
-def load_check(path, subckt, folder, ltspice, cancel=None) -> dict:
+def load_check(
+    path, subckt, folder, ltspice, cancel=None, *, ports=None, element_prefix="X"
+) -> dict:
     """A generic unpowered operating-point load with no numerical acceptance test.
 
     This establishes only that LTspice parsed the library, solved an operating point and
@@ -71,14 +73,17 @@ def load_check(path, subckt, folder, ltspice, cancel=None) -> dict:
         }
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
-    ports = subckt_ports(path.read_text(encoding="utf-8"), subckt)
+    if ports is None:
+        ports = subckt_ports(path.read_text(encoding="utf-8"), subckt)
+    if element_prefix not in {"X", "D", "Q", "M"}:
+        raise ValueError("unsupported load-check element prefix")
     nodes = [f"p{i}" for i in range(len(ports))]
     deck = folder / "load.cir"
     deck.write_text(
         "* Generic unpowered load check; NOT an electrical accuracy test\n"
         f'.include "{path.resolve().as_posix()}"\n'
         + "\n".join(f"R{i} {node} 0 1G" for i, node in enumerate(nodes))
-        + f"\nXdut {' '.join(nodes)} {subckt}\n.op\n.end\n",
+        + f"\n{element_prefix}dut {' '.join(nodes)} {subckt}\n.op\n.end\n",
         encoding="utf-8",
     )
     try:

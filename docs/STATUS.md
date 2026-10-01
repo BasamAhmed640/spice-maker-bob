@@ -1,3 +1,28 @@
+## 2026-09-30 — automatic workflow / official-original 1.8.1 (D-066)
+
+Both current 1.8.1 installers pass actual fresh/update/two-copy isolation, frozen GUI
+responsiveness and source/wheel/desktop fingerprint checks. The normal desktop requires
+datasheet + part number, retains the retro timer, fixes menus, quoted paths, native local
+chooser and safe PDF copy drops. Official TI/ADI downloads precede generated routing;
+original bytes/dependencies are immutable and hashed. Imported electrical accuracy stays
+UNKNOWN after the bounded real LTspice load check. Generated scope is still three reviewed
+implementations; broad PCB behavior composition and imported electrical qualification
+remain unfinished. MCU/FPGA/CPLD/processor/SoC are excluded.
+
+Final full command per edition: `python -m pytest -q -m "not ltspice and not network"`.
+General: **2485 passed, 24 skipped, 193 deselected**, 235.14 s.
+Bob: **2250 passed, 30 skipped, 190 deselected, 4 warnings in 228.48s (0:03:48)**. Installation instruction controls: 9 pass each. Ruff check/format and
+diff checks pass; 72 shared files are identical. Two real LTspice original model fixture
+checks pass separately; neither grants electrical accuracy PASS.
+
+Actual installed default UCC28251PW totals: General 50.161 / 49.289 s; Bob 52.506 /
+49.873 s (wheel / frozen desktop). All four produce the identical library hash, exact
+design association, zero AI calls and 15 PASS / 0 FAIL / 21 UNKNOWN / 8 N/A. Both editions'
+generated examples run in LTspice. Live source manufacturer-first run: 62.842 s; supplier
+candidate failures/inconclusive checks remain recorded before deterministic generation.
+See [full scoped evidence and remaining work](evidence/2026-09-30-automatic-delivery/REPORT.md).
+The owner's current running installation and Downloads files were not changed this hour.
+
 ## 2026-09-30 — public 1.8.0 and owner model delivered
 
 Both main engine milestones and GitHub Windows CI pass; both versioned public releases are published. Actual public ZIP/installer bytes match checked builds and fresh installations open responsive desktop windows. The owner's public frozen default model took 50.655 s, with 15 PASS / 0 FAIL / 21 UNKNOWN / 8 N/A, zero AI calls and exact design/pinout provenance. The actual 45.445-s saved-file retest preserves those files, scope and counts. The generated amplifier-feedback example runs in LTspice. Current app: Downloads/SpiceMaker-1.8.0/Start.cmd; model:models/UCC28251PW. Identified old app downloads/settings/models/logs are archived without deletion. Private config/key bytes were not published. See [final public delivery evidence](evidence/2026-09-30-pwm-release/REPORT.md#public-release-and-owner-folder-completion).

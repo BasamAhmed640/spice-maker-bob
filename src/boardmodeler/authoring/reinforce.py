@@ -24,8 +24,8 @@ User-Agent, Python's default TLS verification, a public-host check (loopback,
 private, link-local, multicast and reserved destinations are refused, and a
 hostname that resolves to one of those or does not resolve at all is refused),
 a 1 MiB size cap, a content-type allowlist (``text/html``, ``text/plain``,
-``application/pdf``) and at most three redirects, each re-checked for a public
-host. A refusal, timeout, HTTP error or unreadable body is recorded on the
+``application/pdf``) and at most three redirects, each re-checked for HTTPS,
+manufacturer authority and a public host. A refusal, timeout, HTTP error or unreadable body is recorded on the
 source as a ``reason``; nothing raises out of :func:`reinforce`.
 
 When no ``candidate_provider`` is injected, the stage asks the build's own agent
@@ -93,7 +93,6 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pypdf import PdfReader
 
-from boardmodeler.agent_providers import CATALOG
 from boardmodeler.authoring.probes import PROBES
 from boardmodeler.domain.hashing import sha256_bytes
 from boardmodeler.domain.records import DocumentRecord
@@ -107,6 +106,8 @@ __all__ = [
     "SourceRecord",
     "build_candidate_prompt",
     "default_fetcher",
+    "manufacturer_hosts",
+    "official_hosts_for_url",
     "parse_agent_reply",
     "query_agent_backend",
     "reinforce",
@@ -149,7 +150,29 @@ _WWW_PREFIXES = ("www.", "ww1.", "www1.")
 #: How many allowed hosts a refusal reason names before it is abbreviated.
 _MAX_HOSTS_IN_REASON = 6
 
-_HTTP_URL_SCHEMES = ("http", "https")
+_HTTP_URL_SCHEMES = ("https",)
+
+# Application-owned manufacturer identity, never inferred from an arbitrary source URL.
+# A source URL can select one of these authorities; it cannot create a new authority.
+# This catalog controls documentary origins, not supported part numbers or model physics.
+_MANUFACTURERS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (("texas instruments", "ti"), ("ti.com",)),
+    (("analog devices", "adi", "linear technology", "maxim integrated"), ("analog.com",)),
+    (("infineon", "infineon technologies", "international rectifier"), ("infineon.com",)),
+    (("stmicroelectronics", "st microelectronics", "st"), ("st.com",)),
+    (("onsemi", "on semiconductor", "on semiconductor corporation"), ("onsemi.com",)),
+    (("nexperia",), ("nexperia.com",)),
+    (("nxp", "nxp semiconductors"), ("nxp.com",)),
+    (("microchip", "microchip technology"), ("microchip.com",)),
+    (("renesas", "renesas electronics"), ("renesas.com",)),
+    (("rohm", "rohm semiconductor"), ("rohm.com",)),
+    (("toshiba", "toshiba electronic devices storage"), ("toshiba.semicon-storage.com",)),
+    (("diodes", "diodes incorporated"), ("diodes.com",)),
+    (("vishay", "vishay intertechnology"), ("vishay.com",)),
+    (("monolithic power systems", "mps"), ("monolithicpower.com",)),
+    (("semtech",), ("semtech.com",)),
+    (("wolfspeed",), ("wolfspeed.com",)),
+)
 
 #: Markers that make a *retrieved* sentence worth quoting as a caveat.
 _CAVEAT_MARKERS = (
@@ -370,6 +393,30 @@ def _host_belongs_to(host: str, vendor_host: str) -> bool:
     return host == vendor_host or host.endswith(f".{vendor_host}")
 
 
+def manufacturer_hosts(manufacturer: str | None) -> tuple[str, ...]:
+    """Official origins for an application-known manufacturer; unknown names grant none."""
+    name = re.sub(r"[^a-z0-9]+", " ", (manufacturer or "").lower()).strip()
+    for names, hosts in _MANUFACTURERS:
+        if name in names:
+            return hosts
+    return ()
+
+
+def official_hosts_for_url(url: str) -> tuple[str, ...]:
+    """Select a known official authority, never trust a URL merely because it was supplied."""
+    try:
+        parts = urllib.parse.urlsplit(url)
+        host = _normalize_host(url)
+    except ValueError:
+        return ()
+    if parts.scheme != "https" or parts.username or parts.password or not host:
+        return ()
+    for _names, hosts in _MANUFACTURERS:
+        if any(_host_belongs_to(host, origin) for origin in hosts):
+            return hosts
+    return ()
+
+
 def _host_list(hosts: Sequence[str]) -> str:
     if not hosts:
         return "none"
@@ -409,35 +456,44 @@ def _vendor_io_source_urls(out_dir: Path) -> Iterator[str]:
 def vendor_hosts(out_dir: Path | str, *, extra: Sequence[str] = ()) -> tuple[str, ...]:
     """The hosts the reinforcement stage may fetch from, in stable order.
 
-    Derived from evidence the project already recorded, never guessed:
-
-    * the ``source_url`` of every document record in ``out_dir``/``docs`` (the
-      datasheet's own provenance) and of every ``vendor-io`` attribution
-      manifest, plus any ``extra`` URL a caller already knows;
-    * the documented hosts of this build's :data:`CATALOG` entries (their
-      documentation and, when present, endpoint URLs), so a vendor whose own
-      documentation is shipped with the application stays reachable.
-
-    A host matches itself and its subdomains; nothing else. The set is never
-    empty in a shipped build, because every catalog entry carries documentation.
+    Recorded manufacturer names and URLs may select an application-known official
+    authority. An arbitrary URL, vendor-IO attribution or inference-provider endpoint
+    cannot create authority. Unknown manufacturers grant no documentary network access.
     """
     hosts: list[str] = []
     root = Path(out_dir)
     urls: list[str] = [*extra, *_document_source_urls(root), *_vendor_io_source_urls(root)]
-    for entry in CATALOG:
-        urls.extend(url for url in (entry.docs, entry.endpoint) if url)
+    for path in sorted((root / "docs").glob("*.json")):
+        try:
+            record = DocumentRecord.model_validate_json(path.read_text(encoding="utf-8"))
+        except OSError, ValueError:
+            continue
+        for host in manufacturer_hosts(record.manufacturer):
+            if host not in hosts:
+                hosts.append(host)
     for url in urls:
-        host = _normalize_host(url)
-        if host is not None and host not in hosts:
-            hosts.append(host)
+        for host in official_hosts_for_url(url):
+            if host not in hosts:
+                hosts.append(host)
     return tuple(hosts)
 
 
 def _outside_vendor_reason(url: str, allowed_hosts: Sequence[str]) -> str | None:
     """``None`` when ``url`` belongs to the vendor, else the machine-readable reason."""
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme.lower() != "https":
+        return "scheme_refused: manufacturer documentation requires HTTPS"
+    if parts.username or parts.password:
+        return "credentials_in_url: refusing a URL that carries a secret"
     host = _normalize_host(url)
     if host is None:
         return f"vendor_refused: {_safe_url(url)} names no host to match against the vendor"
+    # A manufacturer-hosted user forum is not official manufacturer documentation.
+    if any(
+        label in {"e2e", "ez", "community", "communities", "forum", "forums"}
+        for label in host.split(".")[:-2]
+    ):
+        return "manufacturer_documentation_refused: community content is not official documentation"
     if any(_host_belongs_to(host, vendor_host) for vendor_host in allowed_hosts):
         return None
     return (
@@ -501,12 +557,24 @@ class _RedirectCap(HTTPRedirectHandler):
     max_repeats = _MAX_REDIRECTS
     max_redirections = _MAX_REDIRECTS
 
+    def __init__(self, allowed_hosts: Sequence[str] = ()) -> None:
+        super().__init__()
+        self.allowed_hosts = tuple(allowed_hosts)
+
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        refusal = _outside_vendor_reason(newurl, self.allowed_hosts)
+        if refusal:
+            raise FetchRefused(refusal)
         _require_public_host(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def default_fetcher(url: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S) -> tuple[bytes, str]:
+def default_fetcher(
+    url: str,
+    *,
+    timeout_s: float = _DEFAULT_TIMEOUT_S,
+    allowed_hosts: Sequence[str] | None = None,
+) -> tuple[bytes, str]:
     """Retrieve one public URL: size cap, content-type allowlist, 3 redirects.
 
     TLS verification stays at Python's default (no custom context is passed).
@@ -516,14 +584,18 @@ def default_fetcher(url: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S) -> tuple
     """
     parts = urllib.parse.urlsplit(url)
     if parts.scheme.lower() not in _HTTP_URL_SCHEMES or not parts.netloc:
-        raise FetchRefused(f"scheme_refused: {url!r} is not an http(s) URL")
+        raise FetchRefused(f"scheme_refused: {url!r} is not an HTTPS URL")
     if parts.username or parts.password:
         raise FetchRefused("credentials_in_url: refusing a URL that carries a secret")
     if timeout_s <= 0:
         raise FetchRefused(f"invalid_timeout: timeout_s must be > 0, got {timeout_s!r}")
+    hosts = tuple(allowed_hosts) if allowed_hosts is not None else official_hosts_for_url(url)
+    refusal = _outside_vendor_reason(url, hosts)
+    if refusal:
+        raise FetchRefused(refusal)
     _require_public_host(url)
     request = Request(url, headers={"User-Agent": _USER_AGENT, "Accept": _ACCEPT_HEADER})
-    opener = build_opener(_RedirectCap())
+    opener = build_opener(_RedirectCap(hosts))
     with opener.open(request, timeout=timeout_s) as response:
         content_type = response.headers.get_content_type()
         if content_type not in _ACCEPTED_CONTENT_TYPES:
@@ -1018,9 +1090,9 @@ def reinforce(
     cancellation event, passed to the candidate agent turn.
 
     The search never leaves the part vendor: a candidate URL is fetched only
-    when its host belongs to :func:`vendor_hosts` (the datasheet provenance this
-    project recorded, any ``vendor_urls`` the caller already knows, and this
-    build's catalog documentation hosts). A candidate outside that set is
+    when its host belongs to :func:`vendor_hosts` (a known manufacturer selected
+    by document identity or official URLs). Inference-provider hosts and arbitrary
+    source URLs grant no authority. A candidate outside that set is
     recorded as an ``unverified_claim`` with a ``vendor_refused:`` reason and is
     never fetched; when *no* candidate is inside the set the stage finishes
     immediately as ``no_vendor_source_found`` instead of spending its budget.
@@ -1037,6 +1109,7 @@ def reinforce(
     a filesystem error while writing the report can propagate.
     """
     out_root = Path(out_dir)
+    allowed_hosts = vendor_hosts(out_root, extra=vendor_urls)
     if (
         enabled
         and candidate_provider is None
@@ -1051,6 +1124,11 @@ def reinforce(
                 saved.part == part
                 and saved.spec_digest == spec_digest
                 and saved.enabled
+                and all(
+                    _outside_vendor_reason(source.url, allowed_hosts) is None
+                    for source in saved.sources
+                    if source.retrieved
+                )
                 and time.time() - prior.stat().st_mtime < ttl
             ):
                 return saved
@@ -1102,7 +1180,12 @@ def reinforce(
     if budget_left() == 0.0:
         return finish("unavailable", budget_reason())
 
-    allowed_hosts = vendor_hosts(out_root, extra=vendor_urls)
+    if not allowed_hosts:
+        return finish(
+            "unavailable",
+            "manufacturer_authority_missing: no known official manufacturer origin; "
+            "supporting search was not started",
+        )
 
     if candidate_provider is None:
         # Declining here rather than handing the turn a budget it cannot use is the
@@ -1171,7 +1254,7 @@ def reinforce(
             fetch: Callable[[str], tuple[bytes, str]] = fetcher
         else:
             per_fetch = fetch_budget_s if left is None else max(min(fetch_budget_s, left), 1e-6)
-            fetch = partial(default_fetcher, timeout_s=per_fetch)
+            fetch = partial(default_fetcher, timeout_s=per_fetch, allowed_hosts=allowed_hosts)
         data, media_type, failure = _fetch(url, fetch)
         if data is None:
             records.append(

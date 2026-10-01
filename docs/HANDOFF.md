@@ -1,4 +1,27 @@
-# Current hand-off — desktop/PWM 1.8.0, 2026-09-30
+# Current hand-off — automatic manufacturer priority / desktop 1.8.1, 2026-09-30
+
+The owner clarified the contract after the original engine page: datasheet + part number,
+automatic routing, manufacturer originals preferred when they actually work in LTspice,
+and component verification from official manufacturer documentation only. Read updated
+[ENGINE_GUIDE.md](ENGINE_GUIDE.md), D-066 and
+[the one-hour milestone evidence](evidence/2026-09-30-automatic-delivery/REPORT.md) first.
+The original HTML guide remains byte-identical and is historical where these rules differ.
+
+1.8.1 removes normal Engine/Family/Package controls, fixes file inputs/menus, retains the
+retro timer, and puts explicit legacy choices under Advanced. It checks TI/ADI product
+downloads before the generated whitelist, safely preserves originals/dependencies, tests
+an actual bounded LTspice load and binds the delivered hashes. Common diode/BJT/MOSFET
+primitive entries and .SUBCKT interfaces are recognized. Import accuracy remains UNKNOWN;
+symbols describe model terminals, not verified package pin numbers. Unsupported imported
+Install/Retest buttons remain disabled rather than invoking generated-spec commands.
+
+Continue with independent fixed electrical tests for official originals, broader official
+manufacturer discovery, runtime source-derived physical pin contracts and reusable behavior
+composition. The generated route still has three reviewed implementations; this release is
+not a universal generator. Preserve MCU/FPGA/CPLD/processor/SoC exclusions. Never turn a load
+success or pin-only shell into an electrical accuracy PASS. Edition-specific authoring glue
+must be mirrored deliberately; use changed-only syncing to avoid replacing unrelated flavor
+history. The notes below describe the verified earlier 1.8.0 baseline.
 
 Read [ENGINE_GUIDE.md](ENGINE_GUIDE.md), [current release evidence](evidence/2026-09-30-pwm-release/REPORT.md) and D-064/D-065 first. The original engine page is preserved byte-for-byte. [Prior hand-off](archive/HANDOFF-before-1.8.0.md) is historical, including older pending work and timings.
 

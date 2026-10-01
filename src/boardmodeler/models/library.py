@@ -14,7 +14,6 @@ Rules this module enforces:
 from __future__ import annotations
 
 import re
-import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -149,9 +148,21 @@ class ModelStore:
         source_path = Path(source)
         data = source_path.read_bytes()
         digest = sha256_bytes(data)
+        existing = self._existing_immutable(model_id, "vendor_original", data)
+        if existing is not None:
+            return existing
         target_rel = self._relative("vendor_original", model_id, source_path.suffix or ".lib")
         target = resolve_within(self.root, target_rel)
-        target.write_bytes(data)
+        # Exclusive creation also protects an unrecorded original from accidental
+        # replacement. An identical existing file may acquire its missing receipt.
+        try:
+            with target.open("xb") as stream:
+                stream.write(data)
+        except FileExistsError:
+            if target.read_bytes() != data:
+                raise ModelStoreError(
+                    f"immutable vendor original {model_id!r} already exists"
+                ) from None
         text = _decode(data)
         record = ModelRecord(
             model_id=model_id,
@@ -184,10 +195,15 @@ class ModelStore:
         notes: list[str] | None = None,
     ) -> ModelRecord:
         """Store generated/adapted text with its provenance."""
+        if kind == "vendor_original":
+            raise ModelStoreError("vendor originals must use add_vendor_original with exact bytes")
+        existing = self._existing_immutable(model_id, kind, text.encode("utf-8"))
+        if existing is not None:
+            return existing
         digest = sha256_text(text)
         target_rel = self._relative(kind, model_id, f".{file_type}")
         target = resolve_within(self.root, target_rel)
-        target.write_text(text, encoding="utf-8")
+        target.write_bytes(text.encode("utf-8"))
         record = ModelRecord(
             model_id=model_id,
             kind=kind,
@@ -216,10 +232,16 @@ class ModelStore:
         ]
 
     def get(self, model_id: str) -> ModelRecord:
-        path = self.root / "models" / "records" / f"{safe_filename(model_id)}.json"
+        path = resolve_within(self.root, f"models/records/{safe_filename(model_id)}.json")
         if not path.is_file():
             raise ModelStoreError(f"no model record {model_id!r} in {self.root}")
-        return ModelRecord.model_validate_json(path.read_text(encoding="utf-8"))
+        try:
+            record = ModelRecord.model_validate_json(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ModelStoreError(f"invalid stored model record {model_id!r}") from exc
+        if record.model_id != model_id:
+            raise ModelStoreError(f"stored model ID collision for {model_id!r}")
+        return record
 
     def path_of(self, model_id: str) -> Path:
         return self.get(model_id).absolute(self.root)
@@ -235,24 +257,73 @@ class ModelStore:
             return False
         return sha256_file(path) == record.sha256
 
-    def export_copy(self, model_id: str, destination: str | Path) -> Path:
-        """Copy a stored artifact (used by export; vendor originals are not copied)."""
+    def export_copy(
+        self, model_id: str, destination: str | Path, *, allow_vendor_original: bool = False
+    ) -> Path:
+        """Copy verified bytes; a vendor original requires explicit personal-delivery opt-in.
+
+        The opt-in is not a redistribution-license claim. Historical board export
+        callers retain the default refusal and must reference the local original.
+        """
         record = self.get(model_id)
-        if record.kind == "vendor_original":
+        if record.kind == "vendor_original" and not allow_vendor_original:
             raise ModelStoreError(
                 f"{model_id!r} is a vendor original and is not redistributed; export references "
                 "it by the user's configured path instead"
             )
+        data = self._verified_bytes(record)
         target = Path(destination)
+        resolved_target = target.resolve()
+        source = resolve_within(self.root, record.path)
+        if resolved_target == source:
+            return target
+        if any(
+            resolved_target.is_relative_to((self.root / folder).resolve())
+            for folder in ("models/vendor", "models/records")
+        ):
+            raise ModelStoreError("export destination would overwrite protected model storage")
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(record.absolute(self.root), target)
+        target.write_bytes(data)
         return target
 
     # --------------------------------------------------------------- internal
 
+    def _verified_bytes(self, record: ModelRecord) -> bytes:
+        try:
+            data = resolve_within(self.root, record.path).read_bytes()
+        except (OSError, ValueError) as exc:
+            raise ModelStoreError(f"stored model {record.model_id!r} is unavailable") from exc
+        if len(data) != record.size or sha256_bytes(data) != record.sha256:
+            raise ModelStoreError(f"stored model {record.model_id!r} failed integrity verification")
+        return data
+
+    def _existing_immutable(
+        self, model_id: str, kind: ModelKindOnDisk, data: bytes
+    ) -> ModelRecord | None:
+        path = resolve_within(self.root, f"models/records/{safe_filename(model_id)}.json")
+        if not path.exists():
+            return None
+        record = self.get(model_id)
+        if record.immutable or record.kind == "vendor_original":
+            self._verified_bytes(record)
+            if not record.immutable or kind != record.kind or sha256_bytes(data) != record.sha256:
+                raise ModelStoreError(f"immutable vendor original {model_id!r} cannot be replaced")
+            return record
+        if kind == "vendor_original":
+            raise ModelStoreError(f"model ID {model_id!r} is already registered as {record.kind}")
+        return None
+
     def _write_record(self, record: ModelRecord) -> None:
-        path = self.root / "models" / "records" / f"{safe_filename(record.model_id)}.json"
+        path = resolve_within(self.root, f"models/records/{safe_filename(record.model_id)}.json")
         path.parent.mkdir(parents=True, exist_ok=True)
+        if record.kind == "vendor_original":
+            try:
+                with path.open("x", encoding="utf-8") as stream:
+                    stream.write(record.model_dump_json(indent=2))
+                return
+            except FileExistsError:
+                self._existing_immutable(record.model_id, record.kind, self._verified_bytes(record))
+                return
         path.write_text(record.model_dump_json(indent=2), encoding="utf-8")
 
 

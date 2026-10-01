@@ -1,0 +1,31 @@
+{
+  "author_turns": 0,
+  "part": "UCC28251PW",
+  "provider_calls": 0,
+  "provider_calls_complete": true,
+  "provider_calls_definition": "inference HTTP attempts handed to transport",
+  "provider_calls_observed": 0,
+  "qualification_simulation_seconds": null,
+  "qualification_status": null,
+  "record_kind": "run_timing",
+  "route": "pwm_controller_template_seed",
+  "schema_version": 1,
+  "simulation_seconds": 50.855,
+  "stage_seconds": {
+    "author": 51.09,
+    "bind": 0.04,
+    "extract": 5.344,
+    "gate": 0.005,
+    "official": 2.042,
+    "pinout": 0.016,
+    "preflight": 0.019,
+    "qualification": 0.0,
+    "qualification_plan": 0.0,
+    "read": 4.157,
+    "save": 0.12
+  },
+  "status": "UNKNOWN",
+  "template_compile_seconds": 0.003,
+  "template_seed_judge_seconds": 50.855,
+  "total_seconds": 62.842
+}

@@ -55,8 +55,9 @@ def test_the_model_window_can_be_resized(qtbot, window) -> None:
     _assert_room_to_move(window)
     starts_at = window.size()
     assert starts_at.height() < 600, "collapsed diagnostics should leave a compact page"
-    assert window.minimumSize().width() <= starts_at.width()
-    assert window.minimumSize().height() <= starts_at.height()
+    floor_before = window.minimumSize()
+    assert floor_before.width() <= starts_at.width()
+    assert floor_before.height() <= starts_at.height()
 
     window.resize(1180, 780)
     assert window.size() == QSize(1180, 780), "enlarging must take effect"
@@ -75,9 +76,6 @@ def test_the_model_window_keeps_every_control_when_shrunk_to_its_minimum(qtbot, 
     for name in (
         "part_edit",
         "datasheet_edit",
-        "out_edit",
-        "engine_combo",
-        "family_combo",
         "go_button",
         "cancel_button",
     ):
@@ -86,6 +84,11 @@ def test_the_model_window_keeps_every_control_when_shrunk_to_its_minimum(qtbot, 
         assert widget.width() > 0 and widget.height() > 0, f"{name} must have real room"
     assert window.elapsed_label.isVisible()
     assert window.hourglass.isVisible()
+    assert not window.advanced_panel.isVisible()
+    window.advanced_button.click()
+    window.resize(window.minimumSize())
+    assert window.out_edit.isVisible() and window.engine_combo.isVisible()
+    assert window.family_combo.isVisible()
     assert not window.details_panel.isVisible(), "diagnostics start collapsed"
     window.details_button.click()
     window.resize(window.minimumSize())

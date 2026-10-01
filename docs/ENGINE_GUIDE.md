@@ -7,6 +7,24 @@ and offline reading. The owner explicitly authorized the later PWM family, GUI a
 
 ## Default build
 
+The owner's 2026-09-30 clarification takes precedence over the historical page:
+the ordinary workflow asks for a datasheet and part number, resolves routing in
+code, and checks official manufacturer model downloads first. If an unchanged
+official model actually loads in LTspice, deliver that original rather than a
+generated approximation. Preserve its bytes, filenames, dependencies, entry
+point, license and declared scope; any adaptation must be a separate labelled
+artifact. Internet component verification is restricted to official manufacturer
+documentation. Provider sites, distributors and manufacturer community posts are
+not component specifications.
+
+Version 1.8.1 implements bounded product-page discovery for TI and Analog Devices,
+safe original acquisition and an observed compatibility check before the old
+generation gate. This is a first delivery milestone, not universal coverage.
+Official originals currently remain **UNKNOWN for datasheet electrical accuracy**:
+one unpowered operating-point check establishes loading only, and generated
+symbols describe model ports rather than verified physical package pin numbers.
+The following evidence/compiler/testing rules still govern generated models.
+
 1. Read the selected datasheet and record facts with exact page citations and document hashes.
    AI may extract evidence. Exact reviewed inputs or validated caches can avoid this AI step.
 2. Resolve the component family and physical package. Refuse unsupported classes, ambiguous
@@ -69,6 +87,14 @@ identity with the release source, and build a measured model through that instal
 Passing tests against an adjacent source checkout does not verify an old installer.
 
 ## Boundaries
+
+The destination architecture must cover ordinary PCB components through reusable
+electrical behavior blocks and source-derived design records, rather than a
+part-number/PDF-hash whitelist. Family and package choices are internal routing
+details. A genuinely ambiguous physical pin map requires one focused clarification.
+Broad source extraction, behavior composition and independent multi-manufacturer
+electrical qualification are still required; a vendor download or a pin shell
+must never be reported as completing that work.
 
 Build component models, not board-checking workflows. Add genuinely different families
 incrementally with their own evidence and tests; do not relabel a generic pin shell as a working

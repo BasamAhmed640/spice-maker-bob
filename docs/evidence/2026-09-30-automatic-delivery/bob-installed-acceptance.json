@@ -1,0 +1,962 @@
+{
+  "engine_contract": {
+    "default_engine": "behavioral",
+    "engines": [
+      "behavioral",
+      "pin_only",
+      "legacy_ai"
+    ],
+    "schema_version": 1,
+    "source_sha256": "e1452ef67d7165914c36bc51cd84a166f379c128b515eac63a18f54847eea73b"
+  },
+  "installed_root": "C:\\Users\\basam\\Documents\\Codex\\2026-09-28\\https-github-com-basamahmed640-spice-maker\\work\\spice-maker-bob\\build\\portable-check-9d4d242b\\copy-one",
+  "ltspice": "C:\\Users\\basam\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe",
+  "pdf": "C:\\Users\\basam\\Downloads\\UCC28251 Advanced PWM Controller With Prebias Operation datasheet (Rev. E) - ucc28251.pdf",
+  "receipts": [
+    {
+      "ai_backend_and_socket_calls": "forbidden by worker assertion",
+      "artifacts": {
+        "MODEL_CARD.md": {
+          "bytes": 15088,
+          "sha256": "8a082272f55175981525811a86c6ab1eee39972ce97da143ad5aaec068196d42"
+        },
+        "UCC28251PW.asy": {
+          "bytes": 2084,
+          "sha256": "8f0905d90ced9e4511c04cf10d6851d3e744de48f0aa4f4bc5f3485fa4853702"
+        },
+        "UCC28251PW.lib": {
+          "bytes": 4983,
+          "sha256": "c1f6947332b9ba311e3b81654def87cd43bfae3378c67b595d8801def302273b"
+        },
+        "example.cir": {
+          "bytes": 936,
+          "sha256": "b804c24c68a7a2d10240291f026f35fe4ca894c77909c281f5b0ca3e38c4a1d5"
+        },
+        "harness-report.json": {
+          "bytes": 32872,
+          "sha256": "96b10b956bcbe213daa7455625368130d69d023b8ab21ad8668e6b25f204e99e"
+        },
+        "model-design.json": {
+          "bytes": 14114,
+          "sha256": "67c6c70d1ee86e9f6948e49491ad922703b5c8725c60c5f05376270e3f99573b"
+        },
+        "pinout-report.json": {
+          "bytes": 16225,
+          "sha256": "8679580d4db68257db1d209d6431a1e9ef14ef9f6fe2ebe01068fcc07862d780"
+        },
+        "reviewed-extraction.json": {
+          "bytes": 4711,
+          "sha256": "9b4613a9ac4d6e85787c78489e62e53c89f63ddf147d5dc5b2e9cb9a93dfac44"
+        },
+        "run-timing.json": {
+          "bytes": 819,
+          "sha256": "44df5b9e47cd3c756e20e0031fc4deefe30842723bde66529fe1284a6d07ced1"
+        },
+        "spec/bindings.json": {
+          "bytes": 8580,
+          "sha256": "f46ac9bda5f7acc6d2ed33d96c7061e9068da53cc93ac3a9c267928d0587990e"
+        },
+        "spec/characteristics.json": {
+          "bytes": 45190,
+          "sha256": "103104dbee53812bc1739d01e147f41fb5064bf80f1396f0f75617bf07e0e273"
+        },
+        "spec/requirements.json": {
+          "bytes": 80128,
+          "sha256": "0bad605f0dec180d27fdb225ca7458670bcc6afcb66ad370f119b0ae3fa2fa1c"
+        }
+      },
+      "command_wall_seconds": 54.644,
+      "counts": {
+        "BLOCKED": 0,
+        "FAIL": 0,
+        "NOT_APPLICABLE": 8,
+        "PASS": 15,
+        "UNKNOWN": 21
+      },
+      "design_association": "exact",
+      "design_sha256": "303ef0b1cb2710e5e9e25ad0807abf43b88bf991a54315d5012b84bd4806fbdf",
+      "engine_contract": {
+        "default_engine": "behavioral",
+        "engines": [
+          "behavioral",
+          "pin_only",
+          "legacy_ai"
+        ],
+        "schema_version": 1,
+        "source_sha256": "e1452ef67d7165914c36bc51cd84a166f379c128b515eac63a18f54847eea73b"
+      },
+      "example": {
+        "artifacts": {
+          "example.cir": {
+            "bytes": 936,
+            "sha256": "b804c24c68a7a2d10240291f026f35fe4ca894c77909c281f5b0ca3e38c4a1d5"
+          },
+          "example.log": {
+            "bytes": 943,
+            "sha256": "576efbfb92c97e36f0c771bccad1efae1daaed4e06a6ae561107d86764b9dd55"
+          },
+          "example.raw": {
+            "bytes": 3971578,
+            "sha256": "c3d5009f3330201019bb191996bc04e2867818ee9fe894a0410c38d7ca468d47"
+          }
+        },
+        "frequency_hz": 99542.10507208787,
+        "interlock_violations": 0.0,
+        "model_sha256": "c1f6947332b9ba311e3b81654def87cd43bfae3378c67b595d8801def302273b",
+        "record_kind": "actual_installed_example_smoke",
+        "scope": "Exact generated Figure33 COMP-feedback/RAMP controller example; no complete converter qualification",
+        "seconds": 1.469253599876538,
+        "status": "PASS",
+        "steady_comp_v": 0.9999899991000191,
+        "steady_ramp_span_v": 2.039214015260946
+      },
+      "imported_package": "C:\\Users\\basam\\Documents\\Codex\\2026-09-28\\https-github-com-basamahmed640-spice-maker\\work\\spice-maker-bob\\build\\portable-check-9d4d242b\\copy-one\\.venv\\Lib\\site-packages\\boardmodeler\\__init__.py",
+      "installed_root": "C:\\Users\\basam\\Documents\\Codex\\2026-09-28\\https-github-com-basamahmed640-spice-maker\\work\\spice-maker-bob\\build\\portable-check-9d4d242b\\copy-one",
+      "interpreter": "C:\\Users\\basam\\Documents\\Codex\\2026-09-28\\https-github-com-basamahmed640-spice-maker\\work\\spice-maker-bob\\build\\portable-check-9d4d242b\\copy-one\\.venv\\Scripts\\python.exe",
+      "model_sha256": "c1f6947332b9ba311e3b81654def87cd43bfae3378c67b595d8801def302273b",
+      "out": "C:\\Users\\basam\\Documents\\Codex\\2026-09-28\\https-github-com-basamahmed640-spice-maker\\work\\spice-maker-bob\\build\\portable-check-9d4d242b\\copy-one\\models\\hour-acceptance\\wheel",
+      "pinout_contract_sha256": "a0e16a921febd2c77f968fe28594f5406a57197a57fa8b7435013a33d244d764",
+      "pinout_status": "CONFIRMED",
+      "probes": [
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 876,
+              "sha256": "b1a046be67bc50c7e33db21ff14605b134ccf4a4c2170b51c6028716e28065e7"
+            },
+            "deck.log": {
+              "bytes": 897,
+              "sha256": "a60f7aba2d4495299f1b825322a0535ce204c4f613d0863e9058c3d89892df18"
+            },
+            "deck.raw": {
+              "bytes": 3971520,
+              "sha256": "da0dab2ccc62fb40487eb9217f931c4717ff93245a91705b57939abb652ed482"
+            }
+          },
+          "measured": {
+            "pwm_value": 3.249786150389369
+          },
+          "probe": "pwm_vref",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 881,
+              "sha256": "40bd15f19e684d33bfbacc3be27acee71d44ad1c073f564817ee9a85fbe5a142"
+            },
+            "deck.log": {
+              "bytes": 897,
+              "sha256": "7bf585e36e59d78e10b2ac8306bf5865f694cb7e294e748be840568f67b83186"
+            },
+            "deck.raw": {
+              "bytes": 3971520,
+              "sha256": "9d5a3dcfb5b913e22cf547bddbc1b02d29102de7b2589ec69a6a849ca4257b38"
+            }
+          },
+          "measured": {
+            "pwm_value": 99542.10507208787
+          },
+          "probe": "pwm_frequency",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 1335,
+              "sha256": "8d601f2251610a6e03384099ba52ab84c93eee0955f5003f6add6d13658508b5"
+            },
+            "deck.log": {
+              "bytes": 823,
+              "sha256": "82cb169f1d21a66675e58044cac5f21ee32a1756ced77ccdd8a11aed0bcf30ee"
+            },
+            "deck.raw": {
+              "bytes": 2999584,
+              "sha256": "ddcf3429820a0d503df8fb633f4c0f7c2bdbc1875f45d0a1951ddfcc362610cd"
+            }
+          },
+          "measured": {
+            "observed_interval_high_v": 4.3,
+            "observed_interval_low_v": 4.25,
+            "pwm_value": 4.275
+          },
+          "probe": "pwm_uvlo_rise",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 1280,
+              "sha256": "9e5c393eed3d2592785c48cb6c0041a78626d65771ca9908df020d7ef6bebe0b"
+            },
+            "deck.log": {
+              "bytes": 897,
+              "sha256": "854b416ebf38540a2727b74ddde7f288c1ef3131e040b90044cb10cdec4a7836"
+            },
+            "deck.raw": {
+              "bytes": 2654528,
+              "sha256": "992751ca03f360ec8abc39f09295aceae72265352ff00342067e5e6110ce9c7c"
+            }
+          },
+          "measured": {
+            "observed_interval_high_v": 4.15,
+            "observed_interval_low_v": 4.1,
+            "pwm_value": 4.125
+          },
+          "probe": "pwm_uvlo_fall",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 1358,
+              "sha256": "53e4bb9d0b0cef8c77d2d8ff3f931258745a97d64888a44b2ccf52f84ede4b87"
+            },
+            "deck.log": {
+              "bytes": 897,
+              "sha256": "3fbc6fdda968ad0c1fc99081c8b2328af65b3560320141ac2334da19b6dd8161"
+            },
+            "deck.raw": {
+              "bytes": 3128862,
+              "sha256": "500a4cc68c7939a90db324751b3889b2a45a0fe752bed27003970a314e8f815f"
+            }
+          },
+          "measured": {
+            "observed_interval_high_v": 2.05,
+            "observed_interval_low_v": 2.0,
+            "pwm_value": 2.025
+          },
+          "probe": "pwm_enable",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 887,
+              "sha256": "5aea3a087b6cfb9e21df08bcdcf8988eb5ec3b8fa4e165d7bf09a17ecd3db834"
+            },
+            "deck.log": {
+              "bytes": 897,
+              "sha256": "2efd3da02478f8609dc5bd5e2e0fc370286609b8de84b7b8438b15802db58ee5"
+            },
+            "deck.raw": {
+              "bytes": 2796884,
+              "sha256": "be9e8f324feb9a007da29b095b1cdb525418d37fbd7bd91724cd7a64c760403d"
+            }
+          },
+          "measured": {
+            "pwm_value": 2.7999999999999996e-05
+          },
+          "probe": "pwm_ss_charge",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 1424,
+              "sha256": "373aca9c2b2f77e4c74c53f96965ba6d49b33f1ef841c9a73054ef721626ad9d"
+            },
+            "deck.log": {
+              "bytes": 897,
+              "sha256": "4c6dece0c5acd380792eb3007d948ad0f8391b9444b0c7b1fb355bb5dea1813d"
+            },
+            "deck.raw": {
+              "bytes": 3792578,
+              "sha256": "039eb9e17aed3b29ad3aa21d4c83043489022c545fcd4fa61385186f79fa3414"
+            }
+          },
+          "measured": {
+            "observed_interval_high_v": 0.505,
+            "observed_interval_low_v": 0.504,
+            "pwm_value": 0.5045
+          },
+          "probe": "pwm_ilim",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 801,
+              "sha256": "5423832cd86e8e46acbd9c9869d42d08b536429a919369bff40baf1fbcf958d6"
+            },
+            "deck.log": {
+              "bytes": 897,
+              "sha256": "998fe0398044666e92fe96e81c7c847d5c26fe8387857d05bf342d4101157cb9"
+            },
+            "deck.raw": {
+              "bytes": 12947970,
+              "sha256": "adbe35722cb7e57f2e4f4d3535d604346575a5195547254dcddd526d26f91b32"
+            }
+          },
+          "measured": {
+            "observed_interval_high_s": 3.0665343850008995e-08,
+            "observed_interval_low_s": 2.6665343850008995e-08,
+            "pwm_value": 2.8665343850008997e-08
+          },
+          "probe": "pwm_ilim_delay",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 1178,
+              "sha256": "36431e8db5d7db26063cada6e8291c40aabd771323012e2b93b0109886577d16"
+            },
+            "deck.log": {
+              "bytes": 895,
+              "sha256": "bd8767452526caa27a5274cb5a836cb69a2f628336e0059796fa282b0c888fe8"
+            },
+            "deck.raw": {
+              "bytes": 2191686,
+              "sha256": "8bf8eabe24dd109a9587a95ad82d72336959fc2fa7e912bbd8fb963af83b601b"
+            }
+          },
+          "measured": {
+            "observed_interval_high_v": 0.71,
+            "observed_interval_low_v": 0.7,
+            "pwm_value": 0.705
+          },
+          "probe": "pwm_ovp",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 906,
+              "sha256": "c0ba75508344798c0c23e21ae1e658d54678aebced332269c457dc32766b5c1b"
+            },
+            "deck.log": {
+              "bytes": 897,
+              "sha256": "955c43f2c9c679227c6b056824c71f9a0aefa85608cd5f899fc343fa5637b6b1"
+            },
+            "deck.raw": {
+              "bytes": 3924840,
+              "sha256": "576318dbadd1c4a181db111b7846f39741b679cf4d489b9a7d49043f8f530897"
+            }
+          },
+          "measured": {
+            "pwm_value": 20.000000011599983
+          },
+          "probe": "pwm_source_resistance",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 904,
+              "sha256": "0610313993cfc5156f4622daafcb45f8a1959bc70af8ed80c7507a40efa93415"
+            },
+            "deck.log": {
+              "bytes": 897,
+              "sha256": "1e7af90720960d54da78914c0947e5a33e947da1b7280a7240ff6111c0844252"
+            },
+            "deck.raw": {
+              "bytes": 3879120,
+              "sha256": "41d43d121ad7bb0d25767a5ffd6ae0d69ac939e6af251a915faf5869f66792e7"
+            }
+          },
+          "measured": {
+            "pwm_value": 11.999999999856001
+          },
+          "probe": "pwm_sink_resistance",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 880,
+              "sha256": "37b7432f2706398a8ef598147c6ca036193b718173bbf626c30fcf2cf1d07ae5"
+            },
+            "deck.log": {
+              "bytes": 897,
+              "sha256": "731e2b1b96f4da2a23f0b282a991271fb45e2607592eadaf32a89b733fac86e4"
+            },
+            "deck.raw": {
+              "bytes": 48773880,
+              "sha256": "9136ebc9e424da825e24ff9aa1defc7b0cba2b3354f720dc408a295a0af35d96"
+            }
+          },
+          "measured": {
+            "pwm_value": 4.3001713508403596e-08
+          },
+          "probe": "pwm_sp_delay",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 880,
+              "sha256": "5fcee2ed24e05da7cd44a5632ecf27ec4aa29ac6a9f612b5bbd522d21ce71ed1"
+            },
+            "deck.log": {
+              "bytes": 897,
+              "sha256": "c4520e56024778310447141aefcabb6a0e75de27fef23c645dd12fc0d6fc56ab"
+            },
+            "deck.raw": {
+              "bytes": 48773880,
+              "sha256": "b886da418ef65a5c2941b8f15002f70adfd12dd2def1360d2454604fc953b55a"
+            }
+          },
+          "measured": {
+            "pwm_value": 3.798654878516927e-08
+          },
+          "probe": "pwm_ps_delay",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 883,
+              "sha256": "9a9b09cbed5c2511682db872f2053ce6e2a045a8f0e57daf8733c5995fbf45d9"
+            },
+            "deck.log": {
+              "bytes": 897,
+              "sha256": "19749fd02bc5a894e5e5aaf803a89b37198a0f0c0f0decded3f8a1a9a1cff9d3"
+            },
+            "deck.raw": {
+              "bytes": 3971520,
+              "sha256": "b89546fe3682a6c7ee6e16bc406f6cf62878078c24db6737034227dd599fa804"
+            }
+          },
+          "measured": {
+            "pwm_value": 0.0
+          },
+          "probe": "pwm_alternating",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 919,
+              "sha256": "cb2b0059ce5f2b68c067691790e1c8507eaa9c09fa0d305705933f32b7f16509"
+            },
+            "deck.log": {
+              "bytes": 897,
+              "sha256": "f4ab26e32c15f57f7ca981568855cdd346824af920fb42ffd271800f20dfc585"
+            },
+            "deck.raw": {
+              "bytes": 3960720,
+              "sha256": "2bfbacd2f787bb6a569c8254b8c4151bcb6b901811a379834ab4ab6d0d999d09"
+            }
+          },
+          "measured": {
+            "pwm_value": 0.0
+          },
+          "probe": "pwm_duty_response",
+          "status": "PASS"
+        }
+      ],
+      "record_kind": "installed_default_pwm_acceptance",
+      "source_sha256": "81a4414e6f2d7de81398bba5f7ceffb2f4f117dbc005a8c9e157b372646dc602",
+      "spec_digest": "f6f5795e57272747c63f6a9dd6a5e356e0be8712fd5f9b35acad5dd445e68441",
+      "status": "UNKNOWN",
+      "surface": "installed_wheel",
+      "symbol_sha256": "8f0905d90ced9e4511c04cf10d6851d3e744de48f0aa4f4bc5f3485fa4853702",
+      "timing": {
+        "author_turns": 0,
+        "part": "UCC28251PW",
+        "provider_calls": 0,
+        "provider_calls_complete": true,
+        "provider_calls_definition": "inference HTTP attempts handed to transport",
+        "provider_calls_observed": 0,
+        "qualification_simulation_seconds": null,
+        "qualification_status": null,
+        "record_kind": "run_timing",
+        "route": "pwm_controller_template_seed",
+        "schema_version": 1,
+        "simulation_seconds": 43.509,
+        "stage_seconds": {
+          "author": 43.766,
+          "bind": 0.033,
+          "extract": 4.314,
+          "gate": 0.005,
+          "official": 0.067,
+          "pinout": 0.017,
+          "preflight": 0.023,
+          "qualification": 0.0,
+          "qualification_plan": 0.0,
+          "read": 4.175,
+          "save": 0.099
+        },
+        "status": "UNKNOWN",
+        "template_compile_seconds": 0.002,
+        "template_seed_judge_seconds": 43.509,
+        "total_seconds": 52.506
+      },
+      "worker_wall_seconds": 52.783
+    },
+    {
+      "artifacts": {
+        "MODEL_CARD.md": {
+          "bytes": 15088,
+          "sha256": "8a082272f55175981525811a86c6ab1eee39972ce97da143ad5aaec068196d42"
+        },
+        "UCC28251PW.asy": {
+          "bytes": 2084,
+          "sha256": "8f0905d90ced9e4511c04cf10d6851d3e744de48f0aa4f4bc5f3485fa4853702"
+        },
+        "UCC28251PW.lib": {
+          "bytes": 4983,
+          "sha256": "c1f6947332b9ba311e3b81654def87cd43bfae3378c67b595d8801def302273b"
+        },
+        "example.cir": {
+          "bytes": 936,
+          "sha256": "b804c24c68a7a2d10240291f026f35fe4ca894c77909c281f5b0ca3e38c4a1d5"
+        },
+        "harness-report.json": {
+          "bytes": 32917,
+          "sha256": "2fac65a9523442900837074219a214b12e4a4588c689b84b55869d41aaaf2378"
+        },
+        "model-design.json": {
+          "bytes": 14114,
+          "sha256": "67c6c70d1ee86e9f6948e49491ad922703b5c8725c60c5f05376270e3f99573b"
+        },
+        "pinout-report.json": {
+          "bytes": 16225,
+          "sha256": "8679580d4db68257db1d209d6431a1e9ef14ef9f6fe2ebe01068fcc07862d780"
+        },
+        "reviewed-extraction.json": {
+          "bytes": 4711,
+          "sha256": "9b4613a9ac4d6e85787c78489e62e53c89f63ddf147d5dc5b2e9cb9a93dfac44"
+        },
+        "run-timing.json": {
+          "bytes": 819,
+          "sha256": "374e77aa956bf4bfe3335b851c0c160a3ab47970cf391dbc591e8ec225e89288"
+        },
+        "spec/bindings.json": {
+          "bytes": 8580,
+          "sha256": "f46ac9bda5f7acc6d2ed33d96c7061e9068da53cc93ac3a9c267928d0587990e"
+        },
+        "spec/characteristics.json": {
+          "bytes": 45190,
+          "sha256": "103104dbee53812bc1739d01e147f41fb5064bf80f1396f0f75617bf07e0e273"
+        },
+        "spec/requirements.json": {
+          "bytes": 80128,
+          "sha256": "0bad605f0dec180d27fdb225ca7458670bcc6afcb66ad370f119b0ae3fa2fa1c"
+        }
+      },
+      "command_wall_seconds": 51.095,
+      "counts": {
+        "BLOCKED": 0,
+        "FAIL": 0,
+        "NOT_APPLICABLE": 8,
+        "PASS": 15,
+        "UNKNOWN": 21
+      },
+      "design_association": "exact",
+      "design_sha256": "303ef0b1cb2710e5e9e25ad0807abf43b88bf991a54315d5012b84bd4806fbdf",
+      "engine_contract": {
+        "default_engine": "behavioral",
+        "engines": [
+          "behavioral",
+          "pin_only",
+          "legacy_ai"
+        ],
+        "schema_version": 1,
+        "source_sha256": "e1452ef67d7165914c36bc51cd84a166f379c128b515eac63a18f54847eea73b"
+      },
+      "example": {
+        "artifacts": {
+          "example.cir": {
+            "bytes": 936,
+            "sha256": "b804c24c68a7a2d10240291f026f35fe4ca894c77909c281f5b0ca3e38c4a1d5"
+          },
+          "example.log": {
+            "bytes": 946,
+            "sha256": "b52a547c0c6b750e4d34bcb9824c879c4b352e3139f51be275626991eb939a1c"
+          },
+          "example.raw": {
+            "bytes": 3971580,
+            "sha256": "f495a7caf33b2f69ea5d200cd77cf8e4c9880a40f7da36a314f725886a2980a9"
+          }
+        },
+        "frequency_hz": 99542.10507208787,
+        "interlock_violations": 0.0,
+        "model_sha256": "c1f6947332b9ba311e3b81654def87cd43bfae3378c67b595d8801def302273b",
+        "record_kind": "actual_installed_example_smoke",
+        "scope": "Exact generated Figure33 COMP-feedback/RAMP controller example; no complete converter qualification",
+        "seconds": 1.4108072000090033,
+        "status": "PASS",
+        "steady_comp_v": 0.9999899991000191,
+        "steady_ramp_span_v": 2.039214015260946
+      },
+      "installed_root": "C:\\Users\\basam\\Documents\\Codex\\2026-09-28\\https-github-com-basamahmed640-spice-maker\\work\\spice-maker-bob\\build\\portable-check-9d4d242b\\copy-one",
+      "model_sha256": "c1f6947332b9ba311e3b81654def87cd43bfae3378c67b595d8801def302273b",
+      "network_policy": "BOARDMODELER_NO_NETWORK=1; internet_access=false",
+      "out": "C:\\Users\\basam\\Documents\\Codex\\2026-09-28\\https-github-com-basamahmed640-spice-maker\\work\\spice-maker-bob\\build\\portable-check-9d4d242b\\copy-one\\models\\hour-acceptance\\frozen",
+      "pinout_contract_sha256": "a0e16a921febd2c77f968fe28594f5406a57197a57fa8b7435013a33d244d764",
+      "pinout_status": "CONFIRMED",
+      "probes": [
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 877,
+              "sha256": "ac4f230692f190b272a19a9242a6651b74b091f5e52a0d0aa89264e17d30ab46"
+            },
+            "deck.log": {
+              "bytes": 900,
+              "sha256": "63b3782f2b31e5124282e2e2103a70c77806a9c9edad613ae5372d2c2f7215e4"
+            },
+            "deck.raw": {
+              "bytes": 3971522,
+              "sha256": "91a9fcb78e9cb6231fc4004fd6e362820048c978387b3c8f94fb5e7fd22486b6"
+            }
+          },
+          "measured": {
+            "pwm_value": 3.249786150389369
+          },
+          "probe": "pwm_vref",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 882,
+              "sha256": "307886e58b32821e634dabcdf5099e7ccdb920cd7d08312610b8b1ecb1b40052"
+            },
+            "deck.log": {
+              "bytes": 900,
+              "sha256": "0485947b7437cdff1b7dba5637e9c59179c025cc5784966402e27fb94e478112"
+            },
+            "deck.raw": {
+              "bytes": 3971522,
+              "sha256": "fc30dc117a8e8b62e38b887d5cfaae03b72f6e39162dbc533ef4a0ab1e43420e"
+            }
+          },
+          "measured": {
+            "pwm_value": 99542.10507208787
+          },
+          "probe": "pwm_frequency",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 1336,
+              "sha256": "95c5582a38b94b229c777e462756daebd4ea082e4a99fb11f91fa741f95a514c"
+            },
+            "deck.log": {
+              "bytes": 826,
+              "sha256": "20f417be00ae461a2fa2afd374c11b22bdcdb6d6defd9692f4cae1a175ba59e2"
+            },
+            "deck.raw": {
+              "bytes": 2999586,
+              "sha256": "0df005ea6d72a92111122767e18d7b63386d8b24d17ccca4fc0682ae75127756"
+            }
+          },
+          "measured": {
+            "observed_interval_high_v": 4.3,
+            "observed_interval_low_v": 4.25,
+            "pwm_value": 4.275
+          },
+          "probe": "pwm_uvlo_rise",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 1281,
+              "sha256": "81033242c105069ab500f879c80c9cb8a33c7e01bf92b6d5a86b3e64b5e368d9"
+            },
+            "deck.log": {
+              "bytes": 900,
+              "sha256": "902fd2a8d1bcb877f9dc589cc195c28018f2a8fef69c64f34da1ac7747c31fc6"
+            },
+            "deck.raw": {
+              "bytes": 2654530,
+              "sha256": "34bdc719fa177e9b4c0d315a1cb9c485e7e8805346d53f18535c5d67c685db8d"
+            }
+          },
+          "measured": {
+            "observed_interval_high_v": 4.15,
+            "observed_interval_low_v": 4.1,
+            "pwm_value": 4.125
+          },
+          "probe": "pwm_uvlo_fall",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 1359,
+              "sha256": "8e4bcd2a2b192798803b421574755478048ed231f54335f3afe167652fbee7db"
+            },
+            "deck.log": {
+              "bytes": 900,
+              "sha256": "629fb71afa11f354139430f9e92267be19671effb10a496f1a2e817a2e3cd7f3"
+            },
+            "deck.raw": {
+              "bytes": 3128864,
+              "sha256": "a08b7a583e2a60fd4f76d92be24e55098871eb34a54b9b40a832a269b3e35561"
+            }
+          },
+          "measured": {
+            "observed_interval_high_v": 2.05,
+            "observed_interval_low_v": 2.0,
+            "pwm_value": 2.025
+          },
+          "probe": "pwm_enable",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 888,
+              "sha256": "7d65e852299ea496f223809c0e92d9fd7b4c16ea0e1795d3f9c62b959ad91329"
+            },
+            "deck.log": {
+              "bytes": 900,
+              "sha256": "b6e947be7b8e0d9bd661638ca11d04d8b79a101c6f40368b90085a7626cfb59b"
+            },
+            "deck.raw": {
+              "bytes": 2796886,
+              "sha256": "3c0cf4adcf17c745ecffaac0af3855a596444e96de8afc715a9d85c2d08db7f7"
+            }
+          },
+          "measured": {
+            "pwm_value": 2.7999999999999996e-05
+          },
+          "probe": "pwm_ss_charge",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 1425,
+              "sha256": "9f21ae110bb409410419292378e2142959b89bfa0842b220c3dea2a15adf1c71"
+            },
+            "deck.log": {
+              "bytes": 900,
+              "sha256": "153cf8e1222e5267edff8bf382ed16e2a3b67a4654bff5ce2ebfc0f78b95c206"
+            },
+            "deck.raw": {
+              "bytes": 3792580,
+              "sha256": "cfef3622563c0a08b672b93524cace52e211db179de171c8ea8945fd5195ad40"
+            }
+          },
+          "measured": {
+            "observed_interval_high_v": 0.505,
+            "observed_interval_low_v": 0.504,
+            "pwm_value": 0.5045
+          },
+          "probe": "pwm_ilim",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 802,
+              "sha256": "3b467367b5703db4fa88b1642401243fc24f1372fa5518cf07cc01776640b072"
+            },
+            "deck.log": {
+              "bytes": 900,
+              "sha256": "5d8bf5feb54c10a0be47c5b302f7400f2abb29fb1070f577a934a3a3cce82ba6"
+            },
+            "deck.raw": {
+              "bytes": 12947972,
+              "sha256": "f2a0a1be141fbb1966a65307aef48c58163fcd389ccedd70491c7367f6f49491"
+            }
+          },
+          "measured": {
+            "observed_interval_high_s": 3.0665343850008995e-08,
+            "observed_interval_low_s": 2.6665343850008995e-08,
+            "pwm_value": 2.8665343850008997e-08
+          },
+          "probe": "pwm_ilim_delay",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 1179,
+              "sha256": "a0d86f445abf48782f950ebf530440a053e0ec8146c3e620cd3e122bf9ac8730"
+            },
+            "deck.log": {
+              "bytes": 898,
+              "sha256": "d6f686bd469474e9fdfe1b87c932da5c5b3e384308753f9b1fa9f4d143489117"
+            },
+            "deck.raw": {
+              "bytes": 2191688,
+              "sha256": "53614c80048768a57e26bbcc37b9827b85ed68a8f6285bb505a9c3a0601ffa7c"
+            }
+          },
+          "measured": {
+            "observed_interval_high_v": 0.71,
+            "observed_interval_low_v": 0.7,
+            "pwm_value": 0.705
+          },
+          "probe": "pwm_ovp",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 907,
+              "sha256": "afff5ea94e0bcdba893e7931f09dd8296dd4c605bea917bf2b8e64cdf0ce9415"
+            },
+            "deck.log": {
+              "bytes": 900,
+              "sha256": "e756f04aafe2073b8efd14ae74aa14f8bbc536b9996a2f03bba1ae6831a49e94"
+            },
+            "deck.raw": {
+              "bytes": 3924842,
+              "sha256": "ee2767539fecdb1037823bbe47875c10313ad5f2c8c83c17591d56d9b2337121"
+            }
+          },
+          "measured": {
+            "pwm_value": 20.000000011599983
+          },
+          "probe": "pwm_source_resistance",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 905,
+              "sha256": "a6d9f06eee809f8c680607009959c50971164d6fbc8d6c21d3b09b5e5b24fb2e"
+            },
+            "deck.log": {
+              "bytes": 900,
+              "sha256": "0866c3cf667eba8e4e7211888e06893094e1243e3d0b7024f1111275342bafd5"
+            },
+            "deck.raw": {
+              "bytes": 3879122,
+              "sha256": "002749de47bf40283e25a4a78097ff4a73f0156fb417f0ccaa256bb644c339be"
+            }
+          },
+          "measured": {
+            "pwm_value": 11.999999999856001
+          },
+          "probe": "pwm_sink_resistance",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 881,
+              "sha256": "4ab34402d38ddc22e99a0296b1050c12919b6b018a776aa607bfaf7c556c1dee"
+            },
+            "deck.log": {
+              "bytes": 900,
+              "sha256": "147a44931525e5e3d9d8a5f11881b03019b4cbc0e9e80e2d16fca9334895b83d"
+            },
+            "deck.raw": {
+              "bytes": 48773882,
+              "sha256": "2e30699b47f5d9d0e538354e61baab63b715a248d5b620fc52d9be3c829b3993"
+            }
+          },
+          "measured": {
+            "pwm_value": 4.3001713508403596e-08
+          },
+          "probe": "pwm_sp_delay",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 881,
+              "sha256": "676d58f1c0b2d858050d6c5e6d41b7ad7f67201a1877d0cc64100c31e1916f10"
+            },
+            "deck.log": {
+              "bytes": 900,
+              "sha256": "94b417f04cc1ae865a7af02e078851a030d5474105d71f406ecd3fe1c600bdab"
+            },
+            "deck.raw": {
+              "bytes": 48773882,
+              "sha256": "dd76d00e91d1f0ad7780d485206d1089c125aaaa01f21241114a22ea26422de7"
+            }
+          },
+          "measured": {
+            "pwm_value": 3.798654878516927e-08
+          },
+          "probe": "pwm_ps_delay",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 884,
+              "sha256": "6a0883928f783025fad79d661ba2aa533fc3fd7426803fbb212d4dbe8c4bd28c"
+            },
+            "deck.log": {
+              "bytes": 900,
+              "sha256": "68c801ac1560963d185ca9719a72cc1bd929467f29cf18070fb6e2d5edbdfe25"
+            },
+            "deck.raw": {
+              "bytes": 3971522,
+              "sha256": "20de53ae1b107163965ddde265ddab91893ce5d9dcc314553674f1fc1f5a2448"
+            }
+          },
+          "measured": {
+            "pwm_value": 0.0
+          },
+          "probe": "pwm_alternating",
+          "status": "PASS"
+        },
+        {
+          "artifacts": {
+            "deck.cir": {
+              "bytes": 920,
+              "sha256": "b35267b4c6ac818caa5ec4961fa632430c443c06d694283bce2a32677da5c5d7"
+            },
+            "deck.log": {
+              "bytes": 900,
+              "sha256": "418d6b1a372d885840e0a34809e35cdeae0672f389abf6b4441dc563988097fe"
+            },
+            "deck.raw": {
+              "bytes": 3960722,
+              "sha256": "e3f449a5e382e1388dae3e84cc442abdbd29c619c37d162bafee1a8320ef24fb"
+            }
+          },
+          "measured": {
+            "pwm_value": 0.0
+          },
+          "probe": "pwm_duty_response",
+          "status": "PASS"
+        }
+      ],
+      "record_kind": "installed_default_pwm_acceptance",
+      "source_sha256": "81a4414e6f2d7de81398bba5f7ceffb2f4f117dbc005a8c9e157b372646dc602",
+      "spec_digest": "f6f5795e57272747c63f6a9dd6a5e356e0be8712fd5f9b35acad5dd445e68441",
+      "status": "UNKNOWN",
+      "surface": "frozen_cli",
+      "symbol_sha256": "8f0905d90ced9e4511c04cf10d6851d3e744de48f0aa4f4bc5f3485fa4853702",
+      "timing": {
+        "author_turns": 0,
+        "part": "UCC28251PW",
+        "provider_calls": 0,
+        "provider_calls_complete": true,
+        "provider_calls_definition": "inference HTTP attempts handed to transport",
+        "provider_calls_observed": 0,
+        "qualification_simulation_seconds": null,
+        "qualification_status": null,
+        "record_kind": "run_timing",
+        "route": "pwm_controller_template_seed",
+        "schema_version": 1,
+        "simulation_seconds": 42.596,
+        "stage_seconds": {
+          "author": 42.741,
+          "bind": 0.026,
+          "extract": 3.777,
+          "gate": 0.002,
+          "official": 0.019,
+          "pinout": 0.019,
+          "preflight": 0.026,
+          "qualification": 0.0,
+          "qualification_plan": 0.0,
+          "read": 3.166,
+          "save": 0.091
+        },
+        "status": "UNKNOWN",
+        "template_compile_seconds": 0.002,
+        "template_seed_judge_seconds": 42.596,
+        "total_seconds": 49.873
+      }
+    }
+  ],
+  "record_kind": "installed_ucc28251_acceptance_suite",
+  "source_sha256": "81a4414e6f2d7de81398bba5f7ceffb2f4f117dbc005a8c9e157b372646dc602",
+  "surface": "both",
+  "version": "1.8.1"
+}

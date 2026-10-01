@@ -65,6 +65,12 @@ QLineEdit, QComboBox, QPlainTextEdit {{
     padding: 5px; font-family: "Segoe UI"; font-size: 10pt;
 }}
 QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus {{ border-color: {DESKTOP["blue"]}; }}
+QComboBox QAbstractItemView {{ background: white; color: {DESKTOP["text"]};
+    selection-background-color: {DESKTOP["navy"]}; selection-color: white;
+    border: 1px solid {DESKTOP["dark_shadow"]}; outline: 0;
+    font-family: "Segoe UI"; font-size: 10pt; }}
+QComboBox QAbstractItemView::item {{ min-height: 24px; color: {DESKTOP["text"]}; }}
+QComboBox QAbstractItemView::item:selected {{ background: {DESKTOP["navy"]}; color: white; }}
 QCheckBox {{ color: {DESKTOP["text"]}; font-family: "Segoe UI"; font-size: 10pt; spacing: 7px; }}
 QCheckBox:disabled {{ color: {DESKTOP["muted"]}; }}
 QProgressBar {{ background: white; color: {DESKTOP["text"]};

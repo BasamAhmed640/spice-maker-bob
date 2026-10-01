@@ -130,6 +130,12 @@ def test_the_datasheet_chooser_hands_qt_an_existing_folder(
     for case, value, expected in _field_cases(tmp_path):
         window.datasheet_edit.setText(value)
         window._choose_datasheet()
+        if expected == str(Path.home()):
+            expected = (
+                str(Path(window._datasheet_folder))
+                if Path(window._datasheet_folder).is_dir()
+                else str(Path.home())
+            )
         _assert_usable(seen, f"datasheet, {case}", expected)
 
 
