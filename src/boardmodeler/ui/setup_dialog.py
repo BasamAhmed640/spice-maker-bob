@@ -26,7 +26,7 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 
-from PySide6.QtCore import QSize, QTimer
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -147,6 +148,7 @@ class SetupDialog(QDialog):
         self._key_timer.timeout.connect(self._poll_key_check)
         self.finished.connect(self._cancel_key_check)
         self.setWindowTitle("Spice Maker setup")
+        self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, True)
         self.setStyleSheet(
             RETRO_STYLESHEET
             + f"""
@@ -182,6 +184,7 @@ QScrollArea, #setupPage {{ background: {DESKTOP["face"]}; border: 0; }}
         layout.setSpacing(10)
         banner = QLabel("Spice Maker · Setup")
         banner.setObjectName("windowBanner")
+        banner.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(banner)
         grid = QGridLayout()
         grid.setHorizontalSpacing(8)

@@ -1,3 +1,7 @@
+# Current hand-off — resize and two-datasheet checks / desktop 1.8.2
+
+Read D-067 and [resize/new-part evidence](evidence/2026-09-30-resize-and-new-parts/REPORT.md). Native selection and retro timer remain. No new electrical families were implemented: CDCLVC1104/LTC2452 fail fast and publish no SPICE model. Continue source-derived pin contracts, reusable fanout/ADC/serial behavior and independent fixed tests. Earlier notes below are historical.
+
 # Current hand-off — automatic manufacturer priority / desktop 1.8.1, 2026-09-30
 
 The owner clarified the contract after the original engine page: datasheet + part number,

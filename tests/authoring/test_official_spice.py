@@ -256,6 +256,31 @@ def test_private_manufacturer_dns_is_controlled_refusal(monkeypatch) -> None:
         module.fetch_official_bytes("https://www.ti.com/page", allowed_hosts=("ti.com",))
 
 
+@pytest.mark.parametrize("status", [403, 404, 429, 503])
+def test_http_status_is_retained_without_server_details(monkeypatch, status) -> None:
+    from urllib.error import HTTPError
+
+    response = BytesIO(b"private server body")
+
+    class Opener:
+        def open(self, request, timeout):
+            raise HTTPError(
+                "https://www.ti.com/page?token=private-token",
+                status,
+                "private server message",
+                {"Set-Cookie": "private-cookie"},
+                response,
+            )
+
+    monkeypatch.setattr(module, "require_network", lambda stage: None)
+    monkeypatch.setattr(module, "_require_public_host", lambda url: None)
+    monkeypatch.setattr(module, "build_opener", lambda handler: Opener())
+    with pytest.raises(OfficialSpiceError) as error:
+        module.fetch_official_bytes("https://www.ti.com/page", allowed_hosts=("ti.com",))
+    assert str(error.value) == f"official_download_failed: HTTP {status}"
+    assert response.closed
+
+
 def test_archive_caps_are_checked_before_saving(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(module, "_MAX_FILES", 1)
     with pytest.raises(OfficialSpiceError, match="archive_limit"):

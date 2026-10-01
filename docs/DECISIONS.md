@@ -937,3 +937,22 @@ physical package pin numbers. Failed native candidates are withheld after other 
 are considered. Failed non-native candidates are explicitly recorded before code generation.
 Broad generated behavior composition and independent electrical tests for imported models
 remain unfinished. Do not call this milestone universal or publish a compatibility-only PASS.
+
+## D-067 — Preserve resize state and publish honest new-part checks (2026-09-30)
+
+Opening or collapsing build panels must preserve maximized state and the compact
+restore geometry. Keep the top-level minimum within the available screen; scroll
+expanded content instead of stretching the timer/buttons or forcing a giant window.
+Exercise repeated maximize/restore and panel sequences in build/setup tests, plus
+actual frozen Windows maximize/restore cycles. Preserve the native chooser's functionality.
+
+Use the owner's GUI_INSPO gray bevel/navy style and a deterministic square-pixel pepper
+dissolve. Embed the animation in the real folder-local installer, keep progress/timer,
+and dispose the animation timer, image and backing stream when setup closes.
+
+Actual CDCLVC1104 and LTC2452 default runs are BLOCKED in both editions with zero
+provider calls and no model. These ordinary component classes lack source-derived
+pin contracts, behavior implementations and independent tests. Do not weaken the
+engine or add a pin-only/AI-authoring fallback to relabel them successful. Preserve
+bounded manufacturer HTTP status without server-body/header/query disclosure.
+See [scoped evidence](evidence/2026-09-30-resize-and-new-parts/REPORT.md).

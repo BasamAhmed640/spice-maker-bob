@@ -2056,7 +2056,7 @@ class _Run:
             note = f"binding file supplied by the caller ({supplied.name})"
         elif self.reference_bindings is not None:
             entries = self.reference_bindings
-            note = "reviewed LM358 operating points and dual-amplifier probes"
+            note = f"reviewed {request.part} operating points and fixed datasheet probes"
         elif (
             self.pin_map
             and self.request.backend_name not in ("fixture", "scripted")

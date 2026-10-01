@@ -1,0 +1,104 @@
+{
+  "record_kind": "installed_new_parts_audit",
+  "version": "1.8.2",
+  "engine_contract": {
+    "default_engine": "behavioral",
+    "engines": [
+      "behavioral",
+      "pin_only",
+      "legacy_ai"
+    ],
+    "schema_version": 1,
+    "source_sha256": "cd8d85bb93bae6d5344135c1d0721b4d6e63320e6c2866adb464493293b4e852"
+  },
+  "surface": "frozen_cli",
+  "receipts": [
+    {
+      "part": "CDCLVC1104",
+      "datasheet_sha256": "ec6603c06f973d3f696d5610187df0737c5bdb5c2fab6de5bdb5b4c03952a2d0",
+      "status": "BLOCKED",
+      "detail": "unsupported_part: source-backed package pinout is not reviewed for this part and datasheet revision; extraction was not sent to AI because the current engine could not publish its result (pinout_confirmation_missing: no separately confirmed package pinout for this part)",
+      "wall_seconds": 3.461,
+      "model_written": false,
+      "timing": {
+        "author_turns": null,
+        "part": "CDCLVC1104",
+        "provider_calls": 0,
+        "provider_calls_complete": true,
+        "provider_calls_definition": "inference HTTP attempts handed to transport",
+        "provider_calls_observed": 0,
+        "qualification_simulation_seconds": null,
+        "qualification_status": null,
+        "record_kind": "run_timing",
+        "route": "refused_before_authoring",
+        "schema_version": 1,
+        "simulation_seconds": null,
+        "stage_seconds": {
+          "official": 0.886,
+          "preflight": 0.011,
+          "read": 1.698,
+          "save": 0.002
+        },
+        "status": "BLOCKED",
+        "template_compile_seconds": null,
+        "template_seed_judge_seconds": null,
+        "total_seconds": 2.601
+      },
+      "official_discovery": {
+        "attempts": [],
+        "datasheet_sha256": "ec6603c06f973d3f696d5610187df0737c5bdb5c2fab6de5bdb5b4c03952a2d0",
+        "electrical_accuracy_verified": false,
+        "part": "CDCLVC1104",
+        "product_url": "https://www.ti.com/product/CDCLVC1104",
+        "record_kind": "official_model_discovery",
+        "schema_version": 1,
+        "status": "no_compatible_candidate",
+        "wall_seconds": 0.868
+      }
+    },
+    {
+      "part": "LTC2452",
+      "datasheet_sha256": "88ef44d64caeed86f9bc8aa719a82c40bf3a4aff2af8ffd4a0cf657159fe6631",
+      "status": "BLOCKED",
+      "detail": "unsupported_part: source-backed package pinout is not reviewed for this part and datasheet revision; extraction was not sent to AI because the current engine could not publish its result (pinout_confirmation_missing: no separately confirmed package pinout for this part)",
+      "wall_seconds": 3.652,
+      "model_written": false,
+      "timing": {
+        "author_turns": null,
+        "part": "LTC2452",
+        "provider_calls": 0,
+        "provider_calls_complete": true,
+        "provider_calls_definition": "inference HTTP attempts handed to transport",
+        "provider_calls_observed": 0,
+        "qualification_simulation_seconds": null,
+        "qualification_status": null,
+        "record_kind": "run_timing",
+        "route": "refused_before_authoring",
+        "schema_version": 1,
+        "simulation_seconds": null,
+        "stage_seconds": {
+          "official": 0.443,
+          "preflight": 0.021,
+          "read": 2.061,
+          "save": 0.004
+        },
+        "status": "BLOCKED",
+        "template_compile_seconds": null,
+        "template_seed_judge_seconds": null,
+        "total_seconds": 2.539
+      },
+      "official_discovery": {
+        "attempts": [],
+        "datasheet_sha256": "88ef44d64caeed86f9bc8aa719a82c40bf3a4aff2af8ffd4a0cf657159fe6631",
+        "electrical_accuracy_verified": false,
+        "part": "LTC2452",
+        "product_url": "https://www.analog.com/en/products/ltc2452.html",
+        "reason": "official_download_failed: HTTP 403",
+        "record_kind": "official_model_discovery",
+        "schema_version": 1,
+        "status": "unavailable",
+        "wall_seconds": 0.421
+      }
+    }
+  ]
+}

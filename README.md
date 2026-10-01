@@ -7,12 +7,12 @@ facts into a typed design, renders SPICE in code and tests against fixed source 
 It produces a library, symbol,
 model card and reproducible test records. Missing support or evidence stops the build.
 
-Version **1.8.1**. The Bob edition uses IBM Bob Shell when an AI stage is needed.
+Version **1.8.2**. The Bob edition uses IBM Bob Shell when an AI stage is needed.
 
 ## Install on Windows
 
 <!-- install-steps:start -->
-Download the curated [Windows 1.8.1 release](https://github.com/BasamAhmed640/spice-maker-bob/releases/tag/v1.8.1).
+Download the curated [Windows 1.8.2 release](https://github.com/BasamAhmed640/spice-maker-bob/releases/tag/v1.8.2).
 It contains the installer and its checksum, without the source history and development files.
 Python is bundled; LTspice is a separate prerequisite. IBM Bob Shell is required for AI stages.
 
@@ -23,21 +23,21 @@ If that versioned folder already exists, open its `Start.cmd` or choose a fresh 
 ```powershell
 & {
     $ErrorActionPreference = 'Stop'
-    $spiceFolder = Join-Path $env:USERPROFILE 'Downloads\SpiceMakerBob-1.8.1'
+    $spiceFolder = Join-Path $env:USERPROFILE 'Downloads\SpiceMakerBob-1.8.2'
     if (Test-Path -LiteralPath $spiceFolder) { throw 'This version folder already exists; use its Start.cmd or choose a fresh folder name.' }
     New-Item -ItemType Directory -Path $spiceFolder | Out-Null
-    $spiceZip = Join-Path $spiceFolder 'SpiceMakerBob-1.8.1-Windows-x64.zip'
-    curl.exe --fail --location --proto =https --proto-redir =https -o $spiceZip https://github.com/BasamAhmed640/spice-maker-bob/releases/download/v1.8.1/SpiceMakerBob-1.8.1-Windows-x64.zip
+    $spiceZip = Join-Path $spiceFolder 'SpiceMakerBob-1.8.2-Windows-x64.zip'
+    curl.exe --fail --location --proto =https --proto-redir =https -o $spiceZip https://github.com/BasamAhmed640/spice-maker-bob/releases/download/v1.8.2/SpiceMakerBob-1.8.2-Windows-x64.zip
     if ($LASTEXITCODE -ne 0) { throw 'Download failed; setup was not started.' }
     Expand-Archive -LiteralPath $spiceZip -DestinationPath $spiceFolder
     $spiceInstaller = Join-Path $spiceFolder 'Install.exe'
-    if ((Get-FileHash -LiteralPath $spiceInstaller -Algorithm SHA256).Hash -ne '919de05c38ce122c4a4d6f10fcdacf70f4374f858360461f8879abaf73880ad4') { throw 'Installer checksum mismatch; setup was not started.' }
+    if ((Get-FileHash -LiteralPath $spiceInstaller -Algorithm SHA256).Hash -ne 'f43f277380403280d6ad86b1e14145c4e52aad3adc2322954dca6078051ca839') { throw 'Installer checksum mismatch; setup was not started.' }
     & $spiceInstaller
 }
 ```
 
-Installer version **1.8.1**. SHA-256 of `Install.exe`:
-`919de05c38ce122c4a4d6f10fcdacf70f4374f858360461f8879abaf73880ad4`, also published in `SHA256SUMS.txt`.
+Installer version **1.8.2**. SHA-256 of `Install.exe`:
+`f43f277380403280d6ad86b1e14145c4e52aad3adc2322954dca6078051ca839`, also published in `SHA256SUMS.txt`.
 This unsigned application may trigger a Windows security prompt. The checksum checks the
 published bytes; it does not establish a signed publisher identity. These steps do not
 change Windows security settings or PowerShell policy.
@@ -126,3 +126,5 @@ See [installer details](installer/README.md), [portable storage](docs/PORTABLE_S
 [source-backed pinout publication](docs/evidence/2026-09-29-m6-pinout/REPORT.md).
 The previous long README is retained as [historical notes](docs/archive/README-before-1.8.0.md);
 its old install commands and product claims are not current instructions.
+
+Version 1.8.2 fixes repeated maximize/restore and expanded-panel layout, adds the pixel pepper to setup, and preserves clearer manufacturer HTTP failures. CDCLVC1104 and LTC2452 remain unsupported; [actual checks and required engine work](docs/evidence/2026-09-30-resize-and-new-parts/REPORT.md).

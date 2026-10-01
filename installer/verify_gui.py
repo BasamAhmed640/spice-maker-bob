@@ -30,6 +30,8 @@ def verify(executable: Path, screenshot: Path, timeout: float = 30) -> dict[str,
     user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
     user32.SetForegroundWindow.argtypes = [wintypes.HWND]
     user32.RedrawWindow.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT]
+    user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    user32.IsZoomed.argtypes = [wintypes.HWND]
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     user32.SendMessageTimeoutW.argtypes = [
         wintypes.HWND,
@@ -91,6 +93,33 @@ def verify(executable: Path, screenshot: Path, timeout: float = 30) -> dict[str,
                             hwnd, 0, 0, 0, 2, 3000, ctypes.byref(reply)
                         ):
                             raise RuntimeError("The application window is not responding")
+                        before = wintypes.RECT()
+                        if not user32.GetWindowRect(hwnd, ctypes.byref(before)):
+                            raise RuntimeError("Cannot read the test-owned window geometry")
+                        restore_size = (before.right - before.left, before.bottom - before.top)
+                        for cycle in range(3):
+                            user32.ShowWindow(hwnd, 3)  # Maximize only this check's process.
+                            time.sleep(0.2)
+                            if not user32.IsZoomed(hwnd):
+                                raise RuntimeError("The application could not maximize")
+                            user32.ShowWindow(hwnd, 9)
+                            time.sleep(0.2)
+                            restored = wintypes.RECT()
+                            if not user32.GetWindowRect(hwnd, ctypes.byref(restored)):
+                                raise RuntimeError("Cannot read restored window geometry")
+                            size = (
+                                restored.right - restored.left,
+                                restored.bottom - restored.top,
+                            )
+                            if size != restore_size or user32.IsZoomed(hwnd):
+                                raise RuntimeError(
+                                    f"Maximize/restore cycle {cycle + 1} changed geometry: "
+                                    f"{restore_size} -> {size}"
+                                )
+                            if not user32.SendMessageTimeoutW(
+                                hwnd, 0, 0, 0, 2, 3000, ctypes.byref(reply)
+                            ):
+                                raise RuntimeError("The restored application is not responding")
                         ImageGrab.grab(window=hwnd).save(screenshot)
                         user32.PostMessageW(hwnd, 0x0010, 0, 0)
                         code = process.wait(timeout=5)
@@ -103,6 +132,8 @@ def verify(executable: Path, screenshot: Path, timeout: float = 30) -> dict[str,
                             "seconds": round(time.monotonic() - started, 3),
                             "screenshot": str(screenshot),
                             "executable": str(executable),
+                            "maximize_restore_cycles": 3,
+                            "restored_window_size": list(restore_size),
                         }
                 time.sleep(0.1)
             raise TimeoutError("No visible Spice Maker Qt window appeared")

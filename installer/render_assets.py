@@ -3,7 +3,7 @@
 Render the pepper brand assets for the installer from a single geometry.
 
 Outputs, written to --out:
-  pepper-splash.gif   460x300 looping splash for Velopack's --splashImage
+  pepper-splash.gif   440x120 looping pixel-dissolve header for folder-local setup
   pepper-mark.svg     vector mark (docs, About box, a future custom installer)
   pepper.ico          Windows icon, 16-256 px; small sizes use a simplified mark
 
@@ -11,40 +11,32 @@ Only dependency is Pillow. Fonts: fonts/BarlowSemiCondensed-*.ttf (SIL OFL 1.1).
 
     python render_assets.py --name "Spice Maker" --version 1.0.0 --out assets
 
-Velopack draws its own progress bar over the bottom 12 px of the splash, full
-width, in --splashProgressColor. The splash keeps that strip as a plain track,
-so pass the chili red (#B52A1F) as the progress colour.
+The installer embeds the GIF directly. Its progress bar and elapsed timer are
+separate live controls; this animation never claims installation progress.
 """
 
 import argparse
 import io
-import itertools
 import math
 import struct
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 HERE = Path(__file__).resolve().parent
 FONT_DIR = HERE / "fonts"
 
 # ---------------------------------------------------------------- palette ---
 PAPER = (235, 239, 236)  # drafting film
-GRID = (176, 187, 180)  # schematic dot grid
-EDGE = (140, 150, 144)  # window outline
 INK = (29, 43, 58)  # technical-pen navy: outlines, lettering
 INK_SOFT = (86, 99, 112)  # secondary lettering
 CHILI = (181, 42, 31)  # body fill, progress bar
-CHILI_HOT = (206, 58, 36)  # body at the "powered" peak of the loop
 TRACE = (226, 142, 126)  # copper traces under red solder mask
 STEM = (79, 122, 58)  # calyx and stem
-TRACK = (214, 220, 215)  # strip Velopack paints its progress bar over
-HOT = (255, 244, 222)  # signal pulse head
-SIGNAL = (242, 104, 52)  # signal pulse body
-GLOW = (247, 166, 96)  # signal pulse halo
 
-SPLASH_W, SPLASH_H = 460, 300
-TRACK_H = 12  # Velopack: 12 px * DPI scale, flush with the bottom
+SPLASH_W, SPLASH_H = 440, 120
+SETUP_PAPER = (212, 208, 200)
+PIXEL_SIZE = 4
 SS = 4  # supersampling factor for anti-aliasing
 
 
@@ -178,49 +170,6 @@ P = Pepper()
 
 
 # ------------------------------------------------------- polyline helpers ---
-def cumlen(pts):
-    out = [0.0]
-    for a, b in itertools.pairwise(pts):
-        out.append(out[-1] + math.dist(a, b))
-    return out
-
-
-def point_at(pts, cum, s):
-    s = max(0.0, min(s, cum[-1]))
-    for i in range(1, len(cum)):
-        if cum[i] >= s:
-            seg = cum[i] - cum[i - 1] or 1.0
-            k = (s - cum[i - 1]) / seg
-            a, b = pts[i - 1], pts[i]
-            return (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k)
-    return pts[-1]
-
-
-def sub(pts, cum, s0, s1):
-    s0, s1 = max(0.0, s0), min(cum[-1], s1)
-    if s1 <= s0:
-        return []
-    out = [point_at(pts, cum, s0)]
-    out += [p for p, c in zip(pts, cum, strict=False) if s0 < c < s1]
-    out.append(point_at(pts, cum, s1))
-    return out
-
-
-class Route:
-    """A polyline with arc-length lookup."""
-
-    def __init__(self, pts):
-        self.pts = pts
-        self.cum = cumlen(pts)
-        self.length = self.cum[-1]
-
-    def sub(self, s0, s1):
-        return sub(self.pts, self.cum, s0, s1)
-
-    def at(self, s):
-        return point_at(self.pts, self.cum, s)
-
-
 # --------------------------------------------------------------- drawing ----
 class Canvas:
     """Supersampled drawing surface; coordinates are given in output pixels."""
@@ -314,178 +263,97 @@ def draw_mark(cv, detail="splash", body=CHILI, fill_body=True, boost=1.0, **kw):
 
 # ------------------------------------------------------------------ splash ---
 def fonts():
-    def f(w, s):
-        return ImageFont.truetype(str(FONT_DIR / f"BarlowSemiCondensed-{w}.ttf"), s * SS)
+    def f(weight, size):
+        return ImageFont.truetype(str(FONT_DIR / f"BarlowSemiCondensed-{weight}.ttf"), size * SS)
 
-    return {"name": f("SemiBold", 29), "row": f("Medium", 13), "rev": f("Regular", 13)}
-
-
-FRAME = (8, 8, 452, 280)  # drawing border, inclusive-exclusive pixel box
-TITLE = (262, 206, 452, 280)  # title block in the frame's lower-right corner
-ROW = 245  # rule between name and status rows
-COL = 372  # rule between status and revision cells
+    return {"name": f("SemiBold", 28), "row": f("Medium", 14), "rev": f("Regular", 12)}
 
 
 def splash_base(name, version):
-    cv = Canvas(SPLASH_W, SPLASH_H)
-    x0, y0, x1, y1 = FRAME
-    tx0, ty0, tx1, ty1 = TITLE
-    # dot grid inside the frame, clear of the title block
-    for gx in range(x0 + 12, x1, 12):
-        for gy in range(y0 + 12, y1, 12):
-            if tx0 - 4 <= gx and ty0 - 4 <= gy:
-                continue
-            cv.dot((gx + 0.5, gy + 0.5), 0.8, fill=GRID)
-    # window edge, drawing frame, title block rules
-    cv.rect_px(0, 0, SPLASH_W, 1, EDGE)
-    cv.rect_px(0, 0, 1, SPLASH_H, EDGE)
-    cv.rect_px(SPLASH_W - 1, 0, SPLASH_W, SPLASH_H, EDGE)
-    cv.rect_px(0, SPLASH_H - TRACK_H, SPLASH_W, SPLASH_H, TRACK)
-    cv.rect_px(0, SPLASH_H - TRACK_H - 1, SPLASH_W, SPLASH_H - TRACK_H, EDGE)
-    for a, b, c, d in (
-        (x0, y0, x1, y0 + 1),
-        (x0, y1 - 1, x1, y1),
-        (x0, y0, x0 + 1, y1),
-        (x1 - 1, y0, x1, y1),
-        (tx0, ty0, tx1, ty0 + 1),
-        (tx0, ty0, tx0 + 1, ty1),
-        (tx0, ROW, tx1, ROW + 1),
-        (COL, ROW, COL + 1, ty1),
-    ):
-        cv.rect_px(a, b, c, d, INK)
-    cv.rect_px(tx0 + 1, ty0 + 1, tx1 - 1, ROW, PAPER)
-    cv.rect_px(tx0 + 1, ROW + 1, tx1 - 1, ty1 - 1, PAPER)
+    """Compact gray header; setup stage, progress and timer are real controls."""
+    cv = Canvas(SPLASH_W, SPLASH_H, bg=SETUP_PAPER)
+    cv.rect_px(0, 0, SPLASH_W, 1, (255, 255, 255))
+    cv.rect_px(0, 0, 1, SPLASH_H, (255, 255, 255))
+    cv.rect_px(0, SPLASH_H - 1, SPLASH_W, SPLASH_H, (128, 128, 128))
+    cv.rect_px(SPLASH_W - 1, 0, SPLASH_W, SPLASH_H, (128, 128, 128))
     f = fonts()
-    cv.text((tx0 + 11, ROW - 10), name, f["name"], INK)
-    cv.text((tx0 + 11, ty1 - 12), "Installing", f["row"], INK)
+    cv.text((148, 52), name, f["name"], INK)
+    cv.text((149, 76), "Setup", f["row"], (0, 0, 128))
     if version:
-        cv.text((tx1 - 10, ty1 - 12), f"Rev {version}", f["rev"], INK_SOFT, anchor="rs")
-    return cv
+        cv.text((SPLASH_W - 12, SPLASH_H - 12), version, f["rev"], INK_SOFT, anchor="rs")
+    return cv.im.resize((SPLASH_W, SPLASH_H), Image.Resampling.LANCZOS)
 
 
-def ease(x):
-    x = max(0.0, min(1.0, x))
-    return x * x * (3 - 2 * x)
+def pixel_mark():
+    """Existing brand geometry sampled onto square pixels, without changing the icon."""
+    cv = Canvas(SPLASH_W, SPLASH_H, bg=(0, 0, 0, 0), mode="RGBA")
+    draw_mark(cv, "large", off=(8, -7), sc=0.47)
+    small = cv.im.resize((SPLASH_W // PIXEL_SIZE, SPLASH_H // PIXEL_SIZE), Image.Resampling.BOX)
+    # A binary mask avoids translucent squares and leaves no ghost pepper behind.
+    alpha = small.getchannel("A").point(lambda value: 255 if value >= 96 else 0)
+    small.putalpha(alpha)
+    return small.resize((SPLASH_W, SPLASH_H), Image.Resampling.NEAREST)
 
 
-def window(u, a, b):
-    """0 before a, ramps to 1 at b."""
-    return ease((u - a) / (b - a)) if b > a else float(u >= a)
-
-
-class Signal:
-    def __init__(self):
-        lead, _pin, _r = P.lead()
-        stem = P.stem()
-        self.a = Route([lead[2], *lead[1::-1], *stem[::-1][1:]])  # pin -> stem top
-        self.left = Route(P.side(+1, P.TC, 1.0))
-        self.right = Route(P.side(-1, P.TC, 1.0))
-        self.runs = [Route(r) for r in P.traces()]
-
-
-def pulse(glow_cv, core_cv, path, head, length=34.0, strength=1.0):
-    """A travelling pulse: tapered signal-orange tail, hot head, tight halo."""
-    if strength <= 0:
-        return
-    n = 12
-    for i in range(n):
-        s0 = head - length * (1 - i / n)
-        s1 = head - length * (1 - (i + 1) / n)
-        seg = path.sub(s0, s1)
-        if len(seg) < 2:
-            continue
-        k = (i + 1) / n
-        a = round(255 * strength * k**1.2)
-        core_cv.stroke(seg, (*SIGNAL, a), 1.8 + 1.8 * k, caps=False)
-        glow_cv.stroke(seg, (*GLOW, round(a * 0.5)), 6.0, caps=False)
-    if 0 < head <= path.length + 2:
-        core_cv.dot(path.at(head), 1.9, fill=(*HOT, round(255 * strength)))
-
-
-def splash_frame(base, sig, u):
-    """u in [0, 1): one loop. Rest state at both ends so the loop is seamless."""
-    out = base.im.copy()
-    glow = Canvas(SPLASH_W, SPLASH_H, bg=(0, 0, 0, 0), mode="RGBA")
-    core = Canvas(SPLASH_W, SPLASH_H, bg=(0, 0, 0, 0), mode="RGBA")
-
-    # 1) pin -> lead -> stem: 0.00-0.20, disappears under the calyx
-    if u < 0.215:
-        head = sig.a.length * ease(u / 0.20) + 6
-        fade = window(u, 0.0, 0.03) * (1 - window(u, 0.19, 0.215))
-        pulse(glow, core, sig.a, head, strength=fade)
-    # junction dot catches the signal as it arrives
-    j = window(u, 0.17, 0.21) * (1 - window(u, 0.23, 0.33))
-    if j > 0:
-        glow.dot(P.stem_top(), 5.5, fill=(*GLOW, round(150 * j)))
-        core.dot(P.stem_top(), 2.2, fill=(*HOT, round(255 * j)))
-
-    # 2) both sides of the body, calyx -> tip: 0.24-0.60
-    prog = ease((u - 0.24) / 0.36) if u >= 0.24 else 0.0
-    if 0.24 <= u < 0.64:
-        fade = window(u, 0.24, 0.27) * (1 - window(u, 0.59, 0.64))
-        for side in (sig.left, sig.right):
-            pulse(glow, core, side, side.length * prog + 4, strength=fade)
-
-    # 3) copper runs light up behind the left pulse, then cool off: 0.30-0.84
-    cool = 1 - window(u, 0.64, 0.84)
-    if u >= 0.24 and cool > 0:
-        lit_t = P.TC + (1 - P.TC) * prog
-        for (t0, t1), run in zip(((0.13, 0.55), (0.61, 0.73)), sig.runs, strict=False):
-            f = max(0.0, min(1.0, (lit_t - t0) / (t1 - t0)))
-            if f <= 0:
+def pixel_cells(mark):
+    """Stable release order creates the leftward square trail in the reference logo."""
+    cells = []
+    for y in range(0, SPLASH_H, PIXEL_SIZE):
+        for x in range(0, 144, PIXEL_SIZE):
+            tile = mark.crop((x, y, x + PIXEL_SIZE, y + PIXEL_SIZE))
+            if tile.getchannel("A").getbbox() is None:
                 continue
-            seg = run.sub(0, run.length * f)
-            core.stroke(seg, (*HOT, round(210 * cool)), 2.1)
-            glow.stroke(seg, (*GLOW, round(110 * cool)), 5.0)
-            if f >= 1:
-                core.dot(run.pts[-1], 2.9, fill=(*HOT, round(235 * cool)))
+            # Deterministic coordinate hashing: no random seed or flickering masks.
+            order = ((x // PIXEL_SIZE * 37 + y // PIXEL_SIZE * 71) % 101) / 100
+            release = 0.18 + 0.27 * order
+            drift = PIXEL_SIZE * (2 + (x // PIXEL_SIZE + y // PIXEL_SIZE) % 6)
+            cells.append((x, y, tile, release, drift))
+    return cells
 
-    # 4) tip flash when the two pulses meet, body warms briefly: 0.57-0.86
-    flash = window(u, 0.56, 0.60) * (1 - window(u, 0.61, 0.72))
-    if flash > 0:
-        glow.dot(P.tip(), 9, fill=(*GLOW, round(170 * flash)))
-        core.dot(P.tip(), 2.6, fill=(*HOT, round(255 * flash)))
-    warm = window(u, 0.57, 0.62) * (1 - window(u, 0.64, 0.88))
 
-    if warm > 0:
-        over = Canvas(SPLASH_W, SPLASH_H, bg=(0, 0, 0, 0), mode="RGBA")
-        draw_mark(over, "splash", body=mix(CHILI, CHILI_HOT, 0.9 * warm))
-        out = out.convert("RGBA")
-        out.alpha_composite(over.im)
-    g = glow.im.filter(ImageFilter.GaussianBlur(1.4 * SS))
-    out = out.convert("RGBA")
-    out.alpha_composite(g)
-    out.alpha_composite(core.im)
-    return out.convert("RGB").resize((SPLASH_W, SPLASH_H), Image.LANCZOS)
+def splash_frame(base, cells, u):
+    """Hold, dissolve in square tiles, hold empty, and assemble the next loop."""
+    out = base.copy().convert("RGBA")
+    for x, y, tile, release, drift in cells:
+        if u < release:
+            out.alpha_composite(tile, (x, y))
+        elif u < release + 0.12:
+            age = (u - release) / 0.12
+            # Quantize movement as well as geometry; no smooth blur or alpha fade.
+            dx = PIXEL_SIZE * round(drift * age / PIXEL_SIZE)
+            out.alpha_composite(tile, (max(4, x - dx), y))
+        elif u >= 0.72 + (release - 0.18) * 0.74:
+            out.alpha_composite(tile, (x, y))
+    return out.convert("RGB")
 
 
 def render_splash(name, version, frames=90):
+    if frames < 20:
+        raise ValueError("At least 20 frames are needed for the dissolve and empty hold.")
     base = splash_base(name, version)
-    draw_mark(base, "splash")
-    sig = Signal()
-    return [splash_frame(base, sig, i / frames) for i in range(frames)]
+    cells = pixel_cells(pixel_mark())
+    return [splash_frame(base, cells, i / frames) for i in range(frames)]
 
 
 def save_gif(frames, path, ms=40):
-    # One palette for every frame: no colour shimmer between frames.
+    # A fixed palette and no dithering keep square pixels and lettering stable.
     sample = Image.new("RGB", (SPLASH_W, SPLASH_H * 4))
-    for i, k in enumerate((0, 20, 45, 55)):
-        sample.paste(frames[k * len(frames) // 90], (0, SPLASH_H * i))
+    for i, fraction in enumerate((0.0, 0.30, 0.45, 0.64)):
+        sample.paste(frames[int(fraction * len(frames))], (0, SPLASH_H * i))
     pal = sample.quantize(colors=255, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     q = [f.quantize(palette=pal, dither=Image.Dither.NONE) for f in frames]
-    # Velopack plays every frame on one fixed timer (the average delay), but
-    # Pillow merges identical consecutive frames into one longer frame, which
-    # would collapse the quiet part of the loop. Keep them distinct: entry 255
-    # duplicates the paper colour, and one margin pixel alternates between the
-    # two indices, which is invisible.
-    x, y = 203, 123  # plain paper inside the animated area: keeps deltas small
+    # Identical hold frames must retain their 40 ms slots. A duplicate palette
+    # entry toggles one visually identical background pixel, keeping all 90 frames.
+    x, y = 140, 100
     paper_idx = q[0].getpixel((x, y))
-    assert frames[0].getpixel((x, y)) == PAPER, "toggle pixel must sit on plain paper"
+    assert all(frame.getpixel((x, y)) == SETUP_PAPER for frame in frames)
     entries = pal.getpalette()[:765]
     entries += entries[paper_idx * 3 : paper_idx * 3 + 3]
-    for i, f in enumerate(q):
-        f.putpalette(entries)
-        f.putpixel((x, y), 255 if i % 2 else paper_idx)
+    for i, frame in enumerate(q):
+        frame.putpalette(entries)
+        frame.putpixel((x, y), 255 if i % 2 else paper_idx)
+    # Opaque background is deliberate: disposal 1 can safely replace old tiles
+    # without losing the title or drawing transparency fringes in Windows GDI+.
     q[0].save(
         path, save_all=True, append_images=q[1:], duration=ms, loop=0, optimize=False, disposal=1
     )

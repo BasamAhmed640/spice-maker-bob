@@ -89,12 +89,8 @@ internal static class PortableInstaller {
             AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 1,
             Margin = Padding.Empty, Padding = Padding.Empty
         };
-        layout.Controls.Add(new Label {
-            Text = "Spice Maker · Setup", AutoSize = false,
-            Width = 440, Height = 36, Dock = DockStyle.Fill,
-            BackColor = Color.Navy, ForeColor = Color.White,
-            Font = new Font("Segoe UI", 11f, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(9, 0, 0, 0),
+        layout.Controls.Add(new SetupPepper {
+            Width = 440, Height = 120, Dock = DockStyle.Fill,
             Margin = new Padding(0, 0, 0, 12)
         });
         var stage = new Label {
@@ -127,6 +123,58 @@ internal static class PortableInstaller {
         form.Shown += (s,e) => timer.Start();
         form.Disposed += (s,e) => timer.Dispose();
         return form;
+    }
+
+    /// <summary>Square-pixel brand animation, independent of installation progress.</summary>
+    private sealed class SetupPepper : Control {
+        private readonly MemoryStream imageData = new MemoryStream();
+        private readonly Image image;
+        private readonly System.Windows.Forms.Timer timer;
+        private readonly int frames;
+        private int frame;
+
+        public SetupPepper() {
+            DoubleBuffered = true;
+            AccessibleName = "Spice Maker setup";
+            using (var input = Assembly.GetExecutingAssembly().GetManifestResourceStream("pepper-splash.gif")) {
+                if (input == null) throw new InvalidDataException("The setup animation is missing.");
+                input.CopyTo(imageData);
+            }
+            imageData.Position = 0;
+            image = Image.FromStream(imageData);
+            frames = image.GetFrameCount(System.Drawing.Imaging.FrameDimension.Time);
+            timer = new System.Windows.Forms.Timer { Interval = 40 };
+            timer.Tick += (s,e) => {
+                frame = (frame + 1) % frames;
+                image.SelectActiveFrame(System.Drawing.Imaging.FrameDimension.Time, frame);
+                Invalidate();
+            };
+        }
+
+        protected override void OnHandleCreated(EventArgs e) {
+            base.OnHandleCreated(e);
+            timer.Start();
+        }
+
+        protected override void OnHandleDestroyed(EventArgs e) {
+            timer.Stop();
+            base.OnHandleDestroyed(e);
+        }
+
+        protected override void OnPaint(PaintEventArgs e) {
+            e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+            e.Graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+            e.Graphics.DrawImage(image, ClientRectangle, 0, 0, image.Width, image.Height, GraphicsUnit.Pixel);
+        }
+
+        protected override void Dispose(bool disposing) {
+            if (disposing) {
+                timer.Dispose();
+                image.Dispose();
+                imageData.Dispose();
+            }
+            base.Dispose(disposing);
+        }
     }
 
     /// <summary>Navy moving blocks show activity, without claiming percent complete.</summary>

@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFileDialog,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
@@ -41,6 +42,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
@@ -414,7 +416,17 @@ class ModelMakerWindow(QMainWindow):
         central = QWidget(self)
         central.setObjectName("root")
         self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
+        outer = QVBoxLayout(central)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setObjectName("modelScroll")
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        outer.addWidget(self.scroll_area)
+        self.page = QWidget()
+        self.page.setObjectName("modelPage")
+        self.scroll_area.setWidget(self.page)
+        layout = QVBoxLayout(self.page)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(10)
         self._content_layout = layout
@@ -455,20 +467,23 @@ class ModelMakerWindow(QMainWindow):
         details.addWidget(self._build_rows())
         self.details_panel.hide()
         layout.addWidget(self.details_panel, 1)
+        # Spare height belongs below the compact form. Diagnostics use it when open.
+        layout.addStretch(1)
+        self._bottom_space_index = layout.count() - 1
         self.engine_combo.currentIndexChanged.connect(self._engine_changed)
         self.part_edit.textChanged.connect(self._part_changed)
         self.out_edit.textChanged.connect(self._output_changed)
         self._engine_changed()
         self._part_changed()
         layout.activate()
-        self.setMinimumSize(_smallest_useful(layout.minimumSize()))
-        self.adjustSize()
+        self.resize(self.minimumSize())
 
     # ------------------------------------------------------------------ widgets
     def _build_top_row(self) -> QHBoxLayout:
         row = QHBoxLayout()
         banner = QLabel("Spice Maker")
         banner.setObjectName("windowBanner")
+        banner.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         row.addWidget(banner, 1)
         setup = QPushButton("SETUP")
         setup.setToolTip("LTspice path, agent key, model folder, INTERNET ACCESS")
@@ -502,6 +517,7 @@ class ModelMakerWindow(QMainWindow):
         grid.addWidget(self.part_edit, 0, 1, 1, 2)
 
         self.datasheet_edit = PdfPathEdit()
+        self.datasheet_edit.setMinimumWidth(220)
         self.datasheet_edit.setPlaceholderText("Drop a PDF here, or choose a file")
         self.datasheet_edit.pdf_dropped.connect(self._select_datasheet)
         browse_pdf = QPushButton("Choose PDF…")
@@ -672,8 +688,7 @@ class ModelMakerWindow(QMainWindow):
                 )
             finally:
                 self._setting_output = False
-        self._content_layout.activate()
-        self.setMinimumSize(_smallest_useful(self._content_layout.minimumSize()))
+        self._sync_content_size()
 
     def _output_changed(self) -> None:
         if not self._setting_output:
@@ -682,21 +697,28 @@ class ModelMakerWindow(QMainWindow):
     def _toggle_details(self, visible: bool) -> None:
         self.details_panel.setVisible(visible)
         self.details_button.setText("Hide details" if visible else "Show details")
-        self._content_layout.activate()
-        self.setMinimumSize(_smallest_useful(self._content_layout.minimumSize()))
-        if visible:
-            self.resize(
-                max(self.width(), self.minimumWidth()), max(self.height(), self.sizeHint().height())
-            )
+        self._content_layout.setStretch(self._bottom_space_index, 0 if visible else 1)
+        self._sync_content_size(grow=visible)
 
     def _toggle_advanced(self, visible: bool) -> None:
         self.advanced_panel.setVisible(visible)
         self.advanced_button.setText("Hide advanced" if visible else "Advanced")
+        self._sync_content_size(grow=visible)
+
+    def _sync_content_size(self, *, grow: bool = False) -> None:
+        """Keep the compact restore floor; scroll expanded content on a small screen."""
         self._content_layout.activate()
-        self.setMinimumSize(_smallest_useful(self._content_layout.minimumSize()))
-        if visible:
+        if not hasattr(self, "_compact_minimum"):
+            self._compact_minimum = _smallest_useful(self._content_layout.minimumSize())
+        self.setMinimumSize(self._compact_minimum)
+        if grow and not self.isMaximized() and not self.isFullScreen():
+            preferred = self.page.sizeHint()
+            available = self.screen().availableGeometry().size()
+            frame = self.frameGeometry().size() - self.size()
+            available -= QSize(max(0, frame.width()), max(0, frame.height()))
             self.resize(
-                max(self.width(), self.minimumWidth()), max(self.height(), self.sizeHint().height())
+                max(self.width(), min(available.width(), preferred.width())),
+                max(self.height(), min(available.height(), preferred.height())),
             )
 
     def _engine_changed(self) -> None:
@@ -1252,7 +1274,7 @@ def _window_stylesheet() -> str:
     return (
         RETRO_STYLESHEET
         + f"""
-QMainWindow, #root {{ background: {DESKTOP["face"]}; }}
+QMainWindow, #root, #modelPage, QScrollArea#modelScroll {{ background: {DESKTOP["face"]}; border: 0; }}
 QTableWidget {{ background: white; color: {DESKTOP["text"]};
     gridline-color: #dedede; font-family: "Segoe UI"; font-size: 10pt;
     border: 2px inset {DESKTOP["shadow"]}; }}

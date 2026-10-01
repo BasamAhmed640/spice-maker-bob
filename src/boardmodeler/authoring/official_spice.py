@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from io import BytesIO
 from pathlib import Path, PurePosixPath
+from urllib.error import HTTPError
 from urllib.request import Request, build_opener
 
 from boardmodeler.authoring.deck_policy import _logical_lines, _tokens
@@ -212,6 +213,11 @@ def _download(
             data = b"".join(chunks)
     except OfficialSpiceError:
         raise
+    except HTTPError as exc:
+        # Status is useful evidence; server text, headers and URL queries are not.
+        code = exc.code
+        exc.close()
+        raise OfficialSpiceError(f"official_download_failed: HTTP {code}") from exc
     except Exception as exc:
         # Do not echo arbitrary server exception text or secret-bearing URLs.
         raise OfficialSpiceError(f"official_download_failed: {type(exc).__name__}") from exc

@@ -53,6 +53,10 @@ QPushButton {{
 }}
 QPushButton:hover {{ background: #e6e3dc; }}
 QPushButton:default {{ font-weight: 600; }}
+QPushButton:focus {{ border-top-color: {DESKTOP["blue"]}; border-left-color: {DESKTOP["blue"]}; }}
+QPushButton:checked {{ background: #cac6be; color: {DESKTOP["navy"]};
+    border-top-color: {DESKTOP["shadow"]}; border-left-color: {DESKTOP["shadow"]};
+    border-bottom-color: white; border-right-color: white; }}
 QPushButton:pressed {{ border-top-color: {DESKTOP["dark_shadow"]};
     border-left-color: {DESKTOP["dark_shadow"]}; border-bottom-color: white;
     border-right-color: white; padding-top: 7px; padding-bottom: 5px; }}
@@ -63,6 +67,7 @@ QLineEdit, QComboBox, QPlainTextEdit {{
     border-left: 2px solid {DESKTOP["shadow"]};
     border-bottom: 2px solid white; border-right: 2px solid white;
     padding: 5px; font-family: "Segoe UI"; font-size: 10pt;
+    selection-background-color: {DESKTOP["navy"]}; selection-color: white;
 }}
 QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus {{ border-color: {DESKTOP["blue"]}; }}
 QComboBox QAbstractItemView {{ background: white; color: {DESKTOP["text"]};

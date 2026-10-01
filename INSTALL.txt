@@ -1,4 +1,4 @@
-﻿Spice Maker Bob 1.8.1 for Windows x64
+Spice Maker Bob 1.8.2 for Windows x64
 
 Extract this zip into its own folder, check SHA256SUMS.txt, then start Install.exe.
 Setup shows a simple progress bar and elapsed timer.

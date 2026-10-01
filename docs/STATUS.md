@@ -1,3 +1,25 @@
+## 2026-09-30 — verified resize/pixel setup 1.8.2 and new-PDF checks (D-067)
+
+Both installers pass real fresh/update/isolation and frozen Windows responsiveness,
+three maximize/restore cycles and matching source/wheel/desktop fingerprints. Advanced/
+Details preserve compact restore geometry; expanded content scrolls and the timer stays
+aligned. Native file selection stays functional. The actual folder-local setup embeds
+the square-pixel pepper dissolve and retains elapsed/activity controls.
+
+Final command `python -m pytest -q -m "not ltspice and not network"`:
+General **2497 passed, 24 skipped, 193 deselected in 197.92s (0:03:17)**; Bob **2262 passed, 30 skipped, 190 deselected, 4 warnings in 182.21s (0:03:02)**.
+Ruff/format/diff pass; 72 shared files identical. Source lifecycle checks reproduce three
+old-code failures and now pass; independent Luna visual/test review passes. GIF and real
+C# form rendering controls pass. Actual installed UCC replays preserve identical bytes,
+exact provenance, zero AI calls and 15 PASS / 0 FAIL / 21 UNKNOWN / 8 N/A.
+
+Both supplied new PDFs were tested through actual default source and installed frozen
+routes. CDCLVC1104 and LTC2452 remain BLOCKED, zero AI calls, no delivered model. Ordinary
+clock/data-converter classes lack behavior implementations and runtime pin contracts;
+these are not MCU/FPGA exclusions. TI lists IBIS; LTC lookup reports actual HTTP 403.
+No model physics or fixed test criteria were changed. See [complete scoped evidence and
+remaining engine work](evidence/2026-09-30-resize-and-new-parts/REPORT.md).
+
 ## 2026-09-30 — automatic workflow / official-original 1.8.1 (D-066)
 
 Both current 1.8.1 installers pass actual fresh/update/two-copy isolation, frozen GUI

@@ -1,0 +1,336 @@
+{
+  "schema_version": 1,
+  "record_kind": "two_datasheet_default_generation_audit",
+  "observed_utc": "2026-10-01T03:10:57.495846+00:00",
+  "scope": "Read-only audit plus real default-generation diagnostic runs; no production source edits, provider calls, model authoring or simulated electrical PASS.",
+  "parts": {
+    "CDCLVC1104": {
+      "selection": "Representative four-output clock-buffer variant chosen for this diagnostic; the supplied PDF also describes six other variants, so CDCLVC11 alone is not an orderable device.",
+      "family": "clock_timing",
+      "excluded_class": false,
+      "implementation_registered": false,
+      "pin_map_source": {
+        "document": "CDCLVC11.pdf",
+        "page": 3,
+        "package": "8-lead TSSOP PW",
+        "physical_pins": {
+          "1": "CLKIN",
+          "2": "1G",
+          "3": "Y0",
+          "4": "GND",
+          "5": "Y2",
+          "6": "VDD",
+          "7": "Y3",
+          "8": "Y1"
+        },
+        "independent_confirmation": "SCAU041 Figure 1 page 3 matches all eight terminals"
+      },
+      "current_route": "No compatible SPICE link found by bounded TI product-page discovery; only supplier IBIS listed on inspected page. Default generated route then refuses missing reviewed pinout profile. Even with a new profile there is no clock-buffer behavioral compiler/test implementation.",
+      "required_behavior": "Supply-dependent fanout buffer: asynchronous 1G disable forces every output LOW, input/output voltage thresholds, supply/load-dependent output impedance and timing. Tests need all outputs, wrong-state and wrong-delay controls, datasheet load Figure 3 (50 ohm to VDD/2 with 2 pF), page 7 switching bands, page 6 voltage/current bounds. Jitter/temperature/statistical claims remain UNKNOWN until explicitly modeled."
+    },
+    "LTC2452": {
+      "family": "data_converter",
+      "excluded_class": false,
+      "implementation_registered": false,
+      "pin_map_source": {
+        "document": "LTC2452 PDF",
+        "page": 2,
+        "signal_pins": {
+          "1": "SCK",
+          "2": "GND",
+          "3": "REF",
+          "4": "VCC",
+          "5": "IN-",
+          "6": "IN+",
+          "7": "CS",
+          "8": "SDO"
+        },
+        "package_ambiguity": "DFN DDB has exposed pad pin 9 grounded; TS8 has no exposed pad. Full ordering code selects physical map and grade.",
+        "variant_examples_from_ordering_table": [
+          "LTC2452CDDB#TRPBF",
+          "LTC2452CTS8#TRPBF"
+        ]
+      },
+      "current_route": "Default ADI page fetch recorded HTTPError and continued to generated route, which refuses missing reviewed pinout profile. ADI inspected product page lists documentation/evaluation resources but no SPICE/LTspice download. One same-security-path bounded follow-up fetched HTTP 200 (163073 bytes), a second fetched HTTP 403 Forbidden. No security bypass attempted. Local shipped LTspice lib.zip filename lookup had no LTC2452/CDCLVC match; filename search alone is not proof of global absence.",
+      "required_behavior": "Reusable ADC sample/conversion/quantization plus serial state-machine blocks: POR ~2.1 V and ~0.5 ms, 13-23 ms conversion window, CONVERT/SLEEP/DATA OUTPUT transitions, binary 16-bit MSB-first code (32768*VIN/VREF+32768) with endpoint saturation, CS/SCK edge behavior/abort/restart/status polling, genuine SDO high impedance, REF/common-mode limits and current modes. Independent benches need page 8 Table 1 code vectors and pages 4/9-12 timing/protocol bands; static pin shell cannot represent conversion."
+    }
+  },
+  "sources": [
+    {
+      "kind": "supplied_pdf",
+      "file_name": "CDCLVC11.pdf",
+      "sha256": "ec6603c06f973d3f696d5610187df0737c5bdb5c2fab6de5bdb5b4c03952a2d0",
+      "page_count": 31,
+      "visually_reviewed_pages": [
+        3,
+        7,
+        8
+      ],
+      "relevant_additional_text_pages": [
+        4,
+        5,
+        6,
+        10
+      ]
+    },
+    {
+      "kind": "supplied_pdf",
+      "file_name": "LTC2452 - Ultra-Tiny, Differential, 16-Bit \u0394\u03a3 ADC with SPI Interface - 2452fd.pdf",
+      "sha256": "88ef44d64caeed86f9bc8aa719a82c40bf3a4aff2af8ffd4a0cf657159fe6631",
+      "page_count": 22,
+      "visually_reviewed_pages": [
+        2,
+        4,
+        6,
+        9
+      ],
+      "relevant_additional_text_pages": [
+        1,
+        3,
+        7,
+        8,
+        10,
+        11,
+        12
+      ]
+    },
+    {
+      "kind": "official_manufacturer_pdf",
+      "url": "https://www.ti.com/lit/pdf/SCAU041",
+      "sha256": "aaeae96037803e0bb601193ad1653f0d70fc4d5796e521077c90afd4dad642a4",
+      "visually_reviewed_pages": [
+        3
+      ]
+    },
+    {
+      "kind": "official_manufacturer_product_page",
+      "url": "https://www.ti.com/product/CDCLVC1104"
+    },
+    {
+      "kind": "official_manufacturer_model_download_link",
+      "url": "https://www.ti.com/lit/zip/SLLM088",
+      "label": "CDCLVC1102/03/04/06/08/10/12 IBIS Model (Rev. B)",
+      "format": "IBIS; not a SPICE .SUBCKT/.MODEL",
+      "original_downloaded": false
+    },
+    {
+      "kind": "official_manufacturer_product_page",
+      "url": "https://www.analog.com/en/products/ltc2452.html"
+    }
+  ],
+  "runs": [
+    {
+      "edition": "general",
+      "part": "CDCLVC1104",
+      "status": "BLOCKED",
+      "detail": "unsupported_part: source-backed package pinout is not reviewed for this part and datasheet revision; extraction was not sent to AI because the current engine could not publish its result (pinout_confirmation_missing: no separately confirmed package pinout for this part)",
+      "wall_seconds": 3.76,
+      "model_written": false,
+      "counts": {
+        "BLOCKED": 0,
+        "FAIL": 0,
+        "NOT_APPLICABLE": 0,
+        "PASS": 0,
+        "UNKNOWN": 0
+      },
+      "provider_factory_calls": 0,
+      "timing": {
+        "author_turns": null,
+        "part": "CDCLVC1104",
+        "provider_calls": 0,
+        "provider_calls_complete": true,
+        "provider_calls_definition": "inference HTTP attempts handed to transport",
+        "provider_calls_observed": 0,
+        "qualification_simulation_seconds": null,
+        "qualification_status": null,
+        "record_kind": "run_timing",
+        "route": "refused_before_authoring",
+        "schema_version": 1,
+        "simulation_seconds": null,
+        "stage_seconds": {
+          "official": 1.139,
+          "preflight": 0.018,
+          "read": 2.584,
+          "save": 0.003
+        },
+        "status": "BLOCKED",
+        "template_compile_seconds": null,
+        "template_seed_judge_seconds": null,
+        "total_seconds": 3.753
+      },
+      "official_discovery": {
+        "attempts": [],
+        "datasheet_sha256": "ec6603c06f973d3f696d5610187df0737c5bdb5c2fab6de5bdb5b4c03952a2d0",
+        "electrical_accuracy_verified": false,
+        "part": "CDCLVC1104",
+        "product_url": "https://www.ti.com/product/CDCLVC1104",
+        "record_kind": "official_model_discovery",
+        "schema_version": 1,
+        "status": "no_compatible_candidate",
+        "wall_seconds": 1.098
+      }
+    },
+    {
+      "edition": "general",
+      "part": "LTC2452",
+      "status": "BLOCKED",
+      "detail": "unsupported_part: source-backed package pinout is not reviewed for this part and datasheet revision; extraction was not sent to AI because the current engine could not publish its result (pinout_confirmation_missing: no separately confirmed package pinout for this part)",
+      "wall_seconds": 3.178,
+      "model_written": false,
+      "counts": {
+        "BLOCKED": 0,
+        "FAIL": 0,
+        "NOT_APPLICABLE": 0,
+        "PASS": 0,
+        "UNKNOWN": 0
+      },
+      "provider_factory_calls": 0,
+      "timing": {
+        "author_turns": null,
+        "part": "LTC2452",
+        "provider_calls": 0,
+        "provider_calls_complete": true,
+        "provider_calls_definition": "inference HTTP attempts handed to transport",
+        "provider_calls_observed": 0,
+        "qualification_simulation_seconds": null,
+        "qualification_status": null,
+        "record_kind": "run_timing",
+        "route": "refused_before_authoring",
+        "schema_version": 1,
+        "simulation_seconds": null,
+        "stage_seconds": {
+          "official": 0.43,
+          "preflight": 0.009,
+          "read": 2.733,
+          "save": 0.002
+        },
+        "status": "BLOCKED",
+        "template_compile_seconds": null,
+        "template_seed_judge_seconds": null,
+        "total_seconds": 3.175
+      },
+      "official_discovery": {
+        "attempts": [],
+        "datasheet_sha256": "88ef44d64caeed86f9bc8aa719a82c40bf3a4aff2af8ffd4a0cf657159fe6631",
+        "electrical_accuracy_verified": false,
+        "part": "LTC2452",
+        "product_url": "https://www.analog.com/en/products/ltc2452.html",
+        "reason": "official_download_failed: HTTPError",
+        "record_kind": "official_model_discovery",
+        "schema_version": 1,
+        "status": "unavailable",
+        "wall_seconds": 0.419
+      }
+    },
+    {
+      "edition": "bob",
+      "part": "CDCLVC1104",
+      "status": "BLOCKED",
+      "detail": "unsupported_part: source-backed package pinout is not reviewed for this part and datasheet revision; extraction was not sent to AI because the current engine could not publish its result (pinout_confirmation_missing: no separately confirmed package pinout for this part)",
+      "wall_seconds": 3.481,
+      "model_written": false,
+      "counts": {
+        "BLOCKED": 0,
+        "FAIL": 0,
+        "NOT_APPLICABLE": 0,
+        "PASS": 0,
+        "UNKNOWN": 0
+      },
+      "provider_factory_calls": 0,
+      "timing": {
+        "author_turns": null,
+        "part": "CDCLVC1104",
+        "provider_calls": 0,
+        "provider_calls_complete": true,
+        "provider_calls_definition": "inference HTTP attempts handed to transport",
+        "provider_calls_observed": 0,
+        "qualification_simulation_seconds": null,
+        "qualification_status": null,
+        "record_kind": "run_timing",
+        "route": "refused_before_authoring",
+        "schema_version": 1,
+        "simulation_seconds": null,
+        "stage_seconds": {
+          "official": 0.837,
+          "preflight": 0.019,
+          "read": 2.606,
+          "save": 0.002
+        },
+        "status": "BLOCKED",
+        "template_compile_seconds": null,
+        "template_seed_judge_seconds": null,
+        "total_seconds": 3.472
+      },
+      "official_discovery": {
+        "attempts": [],
+        "datasheet_sha256": "ec6603c06f973d3f696d5610187df0737c5bdb5c2fab6de5bdb5b4c03952a2d0",
+        "electrical_accuracy_verified": false,
+        "part": "CDCLVC1104",
+        "product_url": "https://www.ti.com/product/CDCLVC1104",
+        "record_kind": "official_model_discovery",
+        "schema_version": 1,
+        "status": "no_compatible_candidate",
+        "wall_seconds": 0.803
+      }
+    },
+    {
+      "edition": "bob",
+      "part": "LTC2452",
+      "status": "BLOCKED",
+      "detail": "unsupported_part: source-backed package pinout is not reviewed for this part and datasheet revision; extraction was not sent to AI because the current engine could not publish its result (pinout_confirmation_missing: no separately confirmed package pinout for this part)",
+      "wall_seconds": 3.174,
+      "model_written": false,
+      "counts": {
+        "BLOCKED": 0,
+        "FAIL": 0,
+        "NOT_APPLICABLE": 0,
+        "PASS": 0,
+        "UNKNOWN": 0
+      },
+      "provider_factory_calls": 0,
+      "timing": {
+        "author_turns": null,
+        "part": "LTC2452",
+        "provider_calls": 0,
+        "provider_calls_complete": true,
+        "provider_calls_definition": "inference HTTP attempts handed to transport",
+        "provider_calls_observed": 0,
+        "qualification_simulation_seconds": null,
+        "qualification_status": null,
+        "record_kind": "run_timing",
+        "route": "refused_before_authoring",
+        "schema_version": 1,
+        "simulation_seconds": null,
+        "stage_seconds": {
+          "official": 0.531,
+          "preflight": 0.014,
+          "read": 2.616,
+          "save": 0.003
+        },
+        "status": "BLOCKED",
+        "template_compile_seconds": null,
+        "template_seed_judge_seconds": null,
+        "total_seconds": 3.168
+      },
+      "official_discovery": {
+        "attempts": [],
+        "datasheet_sha256": "88ef44d64caeed86f9bc8aa719a82c40bf3a4aff2af8ffd4a0cf657159fe6631",
+        "electrical_accuracy_verified": false,
+        "part": "LTC2452",
+        "product_url": "https://www.analog.com/en/products/ltc2452.html",
+        "reason": "official_download_failed: HTTPError",
+        "record_kind": "official_model_discovery",
+        "schema_version": 1,
+        "status": "unavailable",
+        "wall_seconds": 0.516
+      }
+    }
+  ],
+  "suggested_engine_changes": [
+    "Derive and cite a package pin contract from arbitrary selected datasheet plus official independent connection documentation instead of requiring a part/PDF-hash whitelist. Preserve focused ambiguity resolution and citation verification.",
+    "Add reusable supply-dependent fanout digital buffer behavior and independent datasheet-derived tests; classify IBIS as an evidence source/unsupported format, never relabel it as a delivered SPICE model.",
+    "Add generic sampled ADC and bounded serial-interface state-machine behavior plus independent transfer/timing/current qualification before allowing functional ADC publication.",
+    "Preserve HTTP status and source URL in bounded official-discovery failures; transient 403 must not be described as no manufacturer model exists."
+  ],
+  "no_mutation_note": "User PDFs and LTspice installation/library unchanged. Generated audit outputs only under task-owned outputs/new-part-audit. Vendor PDF stays local and should not be committed."
+}

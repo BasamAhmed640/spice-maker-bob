@@ -68,6 +68,8 @@ def main(argv=None):
             "tests/pipeline/test_make_model.py",
             "tests/test_cli_model.py",
             "tests/ui/test_setup_dialog.py",
+            "tests/test_installer_package_guard.py",
+            "installer/package_portable.py",
             "installer/assets/pepper-splash.gif",
         ):
             continue
